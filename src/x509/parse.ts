@@ -16,11 +16,17 @@ import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
+	decodeVisibleString,
 	extractBitStringValue,
 	parseTime,
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeFailureResult,
+	decodeRefusalOf,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -45,7 +51,13 @@ import type {
 	MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
 import { decodeAndApplyKnownExtension } from '#micro509/internal/x509/extension-registry';
-import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
+import {
+	decodeSrvName,
+	otherNameValueDer,
+	parseGeneralName,
+	parseGeneralNames,
+	readOtherName,
+} from '#micro509/internal/x509/general-name';
 import type { ImportKeyResult, PublicKeyImportInput } from '#micro509/keys/keys';
 import {
 	derivePublicKey,
@@ -54,7 +66,12 @@ import {
 	importSpkiDerOrThrow,
 } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
+	ErrorResult,
+	Micro509Error,
+} from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 import type {
 	AuthorityInformationAccess,
@@ -68,6 +85,7 @@ import type {
 	InhibitAnyPolicy,
 	KeyUsage,
 	NameConstraints,
+	OversizedDisplayText,
 	ParsedNameConstraintForm,
 	PolicyConstraints,
 	PolicyMappings,
@@ -99,8 +117,17 @@ export type {
 } from '#micro509/x509/extensions';
 export type { NameFieldKey } from '#micro509/x509/name';
 
-/** Machine-readable failure reason for {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}. */
-export type ParseCertificateErrorCode = 'malformed';
+/**
+ * Machine-readable failure reason for {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}.
+ *
+ * `malformed` is input that breaks DER, ASN.1 or the RFC 5280 profile.
+ * `unsupported` is input the profile may allow but micro509 does not decode: a
+ * TeletexString octet outside the X.690 §8.23.5.2 initial state.
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
+ * or DER nested deeper than 64 levels.
+ */
+export type ParseCertificateErrorCode = DecodeFailureCode;
 
 /** Structured failure payload for certificate parsing. */
 export interface ParseCertificateFailure extends Micro509Error<ParseCertificateErrorCode> {
@@ -118,8 +145,8 @@ export type ParseCertificateChainResult<TMap extends ExtensionDecoderMap = Recor
 	| { readonly ok: true; readonly value: readonly ParsedCertificate<TMap>[] }
 	| ErrorResult<ParseCertificateErrorCode, Record<never, never>, ParseCertificateFailure>;
 
-/** Machine-readable failure reason for the CSR parsers. */
-export type ParseCertificateSigningRequestErrorCode = 'malformed';
+/** Machine-readable failure reason for the CSR parsers, with the codes of {@linkcode ParseCertificateErrorCode}. */
+export type ParseCertificateSigningRequestErrorCode = ParseCertificateErrorCode;
 
 /** Structured failure payload for CSR parsing. */
 export interface ParseCertificateSigningRequestFailure
@@ -141,9 +168,6 @@ export type ParseCertificateSigningRequestResult<
 			Record<never, never>,
 			ParseCertificateSigningRequestFailure
 	  >;
-
-/** Shared UTF-8 decoder for IA5String / UTF8String values. */
-const textDecoder = new TextDecoder();
 
 /**
  * A single decoded name attribute from an X.501 RelativeDistinguishedName.
@@ -784,10 +808,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 		return successResult(parseCertificateDerOrThrow(der, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed certificate');
 	}
 }
 
@@ -836,10 +857,7 @@ export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<ne
 		return successResult(parseCertificatePemOrThrow(pem, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed certificate');
 	}
 }
 
@@ -898,10 +916,7 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
 		return successResult(parseCertificateChainPemOrThrow(pemBundle, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate chain',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed certificate chain');
 	}
 }
 
@@ -1032,9 +1047,10 @@ export function parseCertificateSigningRequestDer<
 		return successResult(parseCertificateSigningRequestDerOrThrow(der, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate signing request',
+		return decodeFailureResult(
+			error,
+			DECODE_REFUSAL_CODES,
+			'Malformed certificate signing request',
 		);
 	}
 }
@@ -1082,9 +1098,10 @@ export function parseCertificateSigningRequestPem<
 		return successResult(parseCertificateSigningRequestPemOrThrow(pem, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate signing request',
+		return decodeFailureResult(
+			error,
+			DECODE_REFUSAL_CODES,
+			'Malformed certificate signing request',
 		);
 	}
 }
@@ -1233,7 +1250,8 @@ export type MatchCertificatePrivateKeyErrorCode =
 	| 'malformed_certificate'
 	| 'unsupported_private_key'
 	| 'key_type_mismatch'
-	| 'key_mismatch';
+	| 'key_mismatch'
+	| DecodeRefusalCode;
 
 /** Structured failure payload for {@linkcode matchCertificatePrivateKey}. */
 export interface MatchCertificatePrivateKeyFailure
@@ -1275,6 +1293,9 @@ export type MatchCertificatePrivateKeyResult =
  * one of:
  *
  * - `malformed_certificate` — `certificate` could not be parsed.
+ * - `unsupported` or `limit_exceeded` — `certificate` holds a construct
+ *   micro509 does not decode or exceeds a decoding limit (see
+ *   {@linkcode ParseCertificateErrorCode}).
  * - `unsupported_private_key` — `privateKey` is not an extractable private key
  *   of a supported type (from {@linkcode derivePublicKey}).
  * - `key_type_mismatch` — the key is a different algorithm than the
@@ -1295,6 +1316,7 @@ export type MatchCertificatePrivateKeyResult =
  * if (!result.ok) {
  *   // result.code is 'malformed_certificate' | 'unsupported_private_key'
  *   //              | 'key_type_mismatch' | 'key_mismatch'
+ *   //              | 'unsupported' | 'limit_exceeded'
  *   throw new Error(`key does not match certificate: ${result.code}`);
  * }
  * ```
@@ -1312,10 +1334,13 @@ export async function matchCertificatePrivateKey<
 		parsed = parseCertificateFromSource(certificate);
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed_certificate',
-			error instanceof Error ? error.message : 'Malformed certificate',
-		);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? failureResult<MatchCertificatePrivateKeyErrorCode>(
+					'malformed_certificate',
+					error instanceof Error ? error.message : 'Malformed certificate',
+				)
+			: failureResult<MatchCertificatePrivateKeyErrorCode>(refusal.code, refusal.message);
 	}
 	let comparison: CertificatePrivateKeyComparison;
 	try {
@@ -1854,21 +1879,14 @@ function parseUserNoticePolicyQualifierInfo(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	readonly noticeRef?: {
-		readonly organization: string;
-		readonly noticeNumbers: readonly number[];
-	};
+	readonly noticeRef?: ParsedNoticeReference;
 	readonly explicitText?: string;
 	readonly explicitTextType?: DisplayTextType;
+	readonly oversizedExplicitText?: OversizedDisplayText;
 } {
 	const children = childrenOf(source, element);
-	let noticeRef:
-		| {
-				readonly organization: string;
-				readonly noticeNumbers: readonly number[];
-		  }
-		| undefined;
-	let explicitText: { readonly text: string; readonly type: DisplayTextType } | undefined;
+	let noticeRef: ParsedNoticeReference | undefined;
+	let explicitText: ParsedExplicitText | undefined;
 	for (const child of children) {
 		if (child.tag === 0x30) {
 			if (noticeRef !== undefined) {
@@ -1880,24 +1898,40 @@ function parseUserNoticePolicyQualifierInfo(
 		if (explicitText !== undefined) {
 			throw new Error('userNotice must not contain multiple explicitText values');
 		}
-		explicitText = { text: parseDisplayText(child), type: displayTextType(child.tag) };
+		explicitText = parseExplicitText(child);
 	}
 	return {
 		...(noticeRef === undefined ? {} : { noticeRef }),
-		...(explicitText === undefined
-			? {}
-			: { explicitText: explicitText.text, explicitTextType: explicitText.type }),
+		...explicitText,
 	};
+}
+
+interface ParsedExplicitText {
+	readonly explicitText: string;
+	readonly explicitTextType: DisplayTextType;
+	readonly oversizedExplicitText?: OversizedDisplayText;
+}
+
+function parseExplicitText(element: DerElement): ParsedExplicitText {
+	const { text, oversized } = parseDisplayText(element);
+	return {
+		explicitText: text,
+		explicitTextType: displayTextType(element.tag),
+		...(oversized === undefined ? {} : { oversizedExplicitText: oversized }),
+	};
+}
+
+interface ParsedNoticeReference {
+	readonly organization: string;
+	readonly noticeNumbers: readonly number[];
+	readonly oversizedOrganization?: OversizedDisplayText;
 }
 
 /** Decode a NoticeReference (organization name + notice number list). */
 function parsePolicyNoticeReference(
 	source: Uint8Array,
 	element: DerElement,
-): {
-	readonly organization: string;
-	readonly noticeNumbers: readonly number[];
-} {
+): ParsedNoticeReference {
 	if (element.tag !== 0x30) {
 		throw new Error('noticeRef must use SEQUENCE');
 	}
@@ -1908,8 +1942,11 @@ function parsePolicyNoticeReference(
 		throw new Error('noticeRef has unexpected trailing fields');
 	}
 	return {
-		organization,
+		organization: organization.text,
 		noticeNumbers: parsePolicyNoticeNumbers(source, noticeNumbersElement),
+		...(organization.oversized === undefined
+			? {}
+			: { oversizedOrganization: organization.oversized }),
 	};
 }
 
@@ -2240,7 +2277,7 @@ function parseGeneralSubtree(
 		throw new Error('GeneralSubtree base is required');
 	}
 	validateGeneralSubtreeBounds(children.slice(1));
-	return parseNameConstraintGeneralName(baseElement);
+	return parseNameConstraintGeneralName(source, baseElement);
 }
 
 function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
@@ -2263,10 +2300,17 @@ function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
 }
 
 /** Decode a GeneralName for use in name constraints (IP carries address+mask). */
-function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstraintForm | undefined {
+function parseNameConstraintGeneralName(
+	source: Uint8Array,
+	element: DerElement,
+): ParsedNameConstraintForm | undefined {
 	switch (element.tag) {
-		case 0xa0:
-			return { type: 'otherName', value: new Uint8Array(element.value) };
+		case 0xa0: {
+			const { typeId, value } = readOtherName(source, element);
+			return typeId === OIDS.idOnDnsSrv
+				? { type: 'srv', value: decodeSrvName(value) }
+				: { type: 'otherName', typeId, value: otherNameValueDer(source, value) };
+		}
 		case 0x81:
 			return { type: 'email', value: decodeString(0x16, element.value) };
 		case 0x82:
@@ -2307,7 +2351,7 @@ function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstrai
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
 }
 
-/** The DisplayText alternative a tag names. Call only after `parseDisplayText` accepted the tag. */
+/** The DisplayText alternative a tag names. Call only after `decodeDisplayText` accepted the tag. */
 function displayTextType(tag: number): DisplayTextType {
 	switch (tag) {
 		case 0x16:
@@ -2321,35 +2365,32 @@ function displayTextType(tag: number): DisplayTextType {
 	}
 }
 
-/** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */
-function parseDisplayText(element: DerElement): string {
+interface ParsedDisplayText {
+	readonly text: string;
+	readonly oversized?: OversizedDisplayText;
+}
+
+/** RFC 5280 §4.2.1.4: `DisplayText` is an IA5String, VisibleString, BMPString or UTF8String of SIZE (1..200). */
+function parseDisplayText(element: DerElement): ParsedDisplayText {
+	const text = decodeDisplayText(element);
+	const characters = [...text].length;
+	if (characters < 1) {
+		throw new Error('DisplayText must hold at least one character');
+	}
+	return { text, ...(characters > 200 ? { oversized: { characters, limit: 200 } } : {}) };
+}
+
+function decodeDisplayText(element: DerElement): string {
 	switch (element.tag) {
 		case 0x0c:
 		case 0x16:
-		case 0x1a:
-			return textDecoder.decode(element.value);
 		case 0x1e:
-			return decodeBmpString(element.value);
+			return decodeString(element.tag, element.value);
+		case 0x1a:
+			return decodeVisibleString(element.value);
 		default:
 			throw new Error(`Unsupported DisplayText tag: ${element.tag}`);
 	}
-}
-
-/** Decode a BMPString (UCS-2 big-endian) to a JS string. */
-function decodeBmpString(bytes: Uint8Array): string {
-	if (bytes.length % 2 !== 0) {
-		throw new Error('Invalid BMPString length');
-	}
-	let value = '';
-	for (let index = 0; index < bytes.length; index += 2) {
-		const left = bytes[index];
-		const right = bytes[index + 1];
-		if (left === undefined || right === undefined) {
-			throw new Error('Invalid BMPString content');
-		}
-		value += String.fromCharCode((left << 8) | right);
-	}
-	return value;
 }
 
 interface MutableAuthorityKeyIdentifierState {

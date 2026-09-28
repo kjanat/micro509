@@ -35,7 +35,10 @@
 			"performance": { "recommended": true },
 			"nursery": { "recommended": true },
 			"security": { "recommended": true },
-			"style": { "recommended": true },
+			"style": {
+				"recommended": true,
+				"useImportType": { "level": "error", "options": { "style": "separatedType" } }
+			},
 			"suspicious": { "recommended": true }
 		}
 	},

@@ -1,8 +1,18 @@
-import { concatBytes, DEFAULT_MAX_DER_DEPTH, tlv } from '#micro509/internal/asn1/der';
+import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
+import type { Identifier } from '#micro509/internal/asn1/der';
+import {
+	concatBytes,
+	DEFAULT_MAX_DER_DEPTH,
+	encodeLength,
+	readIdentifier,
+	tlv,
+} from '#micro509/internal/asn1/der';
 
 export interface BerElement {
 	readonly tag: number;
+	readonly tagNumber: number;
 	readonly headerStart: number;
+	readonly identifierLength: number;
 	readonly start: number;
 	readonly contentEnd: number;
 	readonly end: number;
@@ -68,9 +78,17 @@ export function berStringContent(
 	);
 }
 
+function definiteElement(bytes: Uint8Array, element: BerElement, content: Uint8Array): Uint8Array {
+	return concatBytes([
+		bytes.subarray(element.headerStart, element.headerStart + element.identifierLength),
+		encodeLength(content.length),
+		content,
+	]);
+}
+
 export function berToDefiniteLength(bytes: Uint8Array, element: BerElement): Uint8Array {
 	if ((element.tag & CONSTRUCTED) === 0) {
-		return tlv(element.tag, bytes.slice(element.start, element.contentEnd));
+		return definiteElement(bytes, element, bytes.slice(element.start, element.contentEnd));
 	}
 	const primitiveTag = element.tag & ~CONSTRUCTED;
 	if (primitiveTag === BIT_STRING) {
@@ -79,8 +97,9 @@ export function berToDefiniteLength(bytes: Uint8Array, element: BerElement): Uin
 	if (FLATTENED_STRING_TAGS.has(primitiveTag)) {
 		return tlv(primitiveTag, berStringContent(bytes, element, primitiveTag));
 	}
-	return tlv(
-		element.tag,
+	return definiteElement(
+		bytes,
+		element,
 		concatBytes(element.children.map((child) => berToDefiniteLength(bytes, child))),
 	);
 }
@@ -126,32 +145,33 @@ function readBerElement(
 	maxDepth: number,
 ): BerElement {
 	if (depth > maxDepth) {
-		throw new Error(`BER exceeds max depth of ${maxDepth}`);
+		throwDecodeRefusal('limit_exceeded', `BER exceeds max depth of ${maxDepth}`);
 	}
 	const tag = byteAt(bytes, offset);
 	if (tag === 0x00) {
 		throw new Error('Unexpected end-of-contents octets');
 	}
-	if ((tag & 0x1f) === 0x1f) {
-		throw new Error('High-tag-number BER form is not supported');
-	}
-	const lengthByte = byteAt(bytes, offset + 1);
+	const identifier = readIdentifier(bytes, offset);
+	const lengthOffset = offset + identifier.length;
+	const lengthByte = byteAt(bytes, lengthOffset);
 	const constructed = (tag & CONSTRUCTED) !== 0;
 	if (lengthByte === 0x80) {
 		if (!constructed) {
 			throw new Error('Indefinite length requires a constructed encoding');
 		}
-		return readIndefiniteElement(bytes, offset, tag, limit, depth, maxDepth);
+		return readIndefiniteElement(bytes, offset, identifier, limit, depth, maxDepth);
 	}
-	const { headerLength, length } = readDefiniteLength(bytes, offset, lengthByte);
-	const start = offset + headerLength;
+	const { lengthOctets, length } = readDefiniteLength(bytes, lengthOffset, lengthByte);
+	const start = lengthOffset + lengthOctets;
 	const end = start + length;
 	if (end > limit) {
 		throw new Error('BER element exceeds its container');
 	}
 	return {
 		tag,
+		tagNumber: identifier.tagNumber,
 		headerStart: offset,
+		identifierLength: identifier.length,
 		start,
 		contentEnd: end,
 		end,
@@ -162,12 +182,12 @@ function readBerElement(
 function readIndefiniteElement(
 	bytes: Uint8Array,
 	offset: number,
-	tag: number,
+	identifier: Identifier,
 	limit: number,
 	depth: number,
 	maxDepth: number,
 ): BerElement {
-	const start = offset + 2;
+	const start = offset + identifier.length + 1;
 	const children: BerElement[] = [];
 	let position = start;
 	while (position < limit && bytes[position] !== 0x00) {
@@ -178,7 +198,16 @@ function readIndefiniteElement(
 	if (position + 1 >= limit || bytes[position + 1] !== 0x00) {
 		throw new Error('Missing end-of-contents octets');
 	}
-	return { tag, headerStart: offset, start, contentEnd: position, end: position + 2, children };
+	return {
+		tag: identifier.tag,
+		tagNumber: identifier.tagNumber,
+		headerStart: offset,
+		identifierLength: identifier.length,
+		start,
+		contentEnd: position,
+		end: position + 2,
+		children,
+	};
 }
 
 function readDefiniteChildren(
@@ -200,11 +229,11 @@ function readDefiniteChildren(
 
 function readDefiniteLength(
 	bytes: Uint8Array,
-	offset: number,
+	lengthOffset: number,
 	lengthByte: number,
-): { readonly headerLength: number; readonly length: number } {
+): { readonly lengthOctets: number; readonly length: number } {
 	if ((lengthByte & 0x80) === 0) {
-		return { headerLength: 2, length: lengthByte };
+		return { lengthOctets: 1, length: lengthByte };
 	}
 	const octets = lengthByte & 0x7f;
 	if (octets === 0x7f) {
@@ -212,13 +241,13 @@ function readDefiniteLength(
 	}
 	let length = 0;
 	for (let index = 0; index < octets; index += 1) {
-		const next = byteAt(bytes, offset + 2 + index);
+		const next = byteAt(bytes, lengthOffset + 1 + index);
 		if (length > Math.floor((Number.MAX_SAFE_INTEGER - next) / 256)) {
 			throw new Error('BER length exceeds safe integer range');
 		}
 		length = length * 256 + next;
 	}
-	return { headerLength: 2 + octets, length };
+	return { lengthOctets: 1 + octets, length };
 }
 
 function byteAt(bytes: Uint8Array, index: number): number {

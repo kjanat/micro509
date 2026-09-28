@@ -7,7 +7,12 @@
  * @module
  */
 
-import { decodeIntegerNumber, decodeObjectIdentifier, toHex } from '#micro509/internal/asn1/asn1';
+import {
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	decodeString,
+	toHex,
+} from '#micro509/internal/asn1/asn1';
 import type { BerElement } from '#micro509/internal/asn1/ber';
 import {
 	berEncoding,
@@ -18,6 +23,12 @@ import {
 	readBerRoot,
 } from '#micro509/internal/asn1/ber';
 import {
+	DECODE_LIMIT_CODES,
+	DECODE_REFUSAL_CODES,
+	decodeRefusalOf,
+} from '#micro509/internal/asn1/decode-refusal';
+import {
+	bmpString,
 	explicitContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -29,14 +40,13 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import type { KdfBudget, KdfLimitOptions } from '#micro509/internal/crypto/pbes2';
 import {
 	createKdfBudget,
 	decryptPbes2,
 	encryptPbes2,
 	isKdfIterationLimitError,
 	isWrongPasswordError,
-	type KdfBudget,
-	type KdfLimitOptions,
 } from '#micro509/internal/crypto/pbes2';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import type { EncryptedPkcs8Options } from '#micro509/keys/keys';
@@ -44,8 +54,8 @@ import { exportPkcs8Der } from '#micro509/keys/keys';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import type { ParsedPkcs12MacData, Pkcs12MacOptions } from '#micro509/pkcs/pkcs12-mac';
 import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, throwMicro509Error } from '#micro509/result/result';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
 
@@ -58,7 +68,10 @@ export type PfxPrivateKeySource = CryptoKey | Uint8Array;
 
 /** Optional metadata attached to a certificate or key bag inside a PFX. */
 export interface PfxBagAttributesInput {
-	/** Human-readable label stored as a BMPString attribute. */
+	/**
+	 * Human-readable label stored as a BMPString attribute of 1 to 255 characters
+	 * (RFC 2985 §5.5.1), none of them a surrogate, U+FFFE or U+FFFF.
+	 */
 	readonly friendlyName?: string;
 	/** Opaque identifier linking a certificate bag to its corresponding key bag. */
 	readonly localKeyId?: Uint8Array;
@@ -194,7 +207,7 @@ export interface ParsedPfx {
 
 /** Error codes returned by {@linkcode parsePfxDer} and {@linkcode parsePfxPem}. */
 export type ParsePfxErrorCode =
-	| 'malformed'
+	| DecodeFailureCode
 	| 'invalid_password'
 	| 'password_required'
 	| 'kdf_iterations_exceeded'
@@ -231,6 +244,9 @@ export type ParsePfxResult =
  */
 export type CreatePfxErrorCode = 'invalid_certificate';
 
+/** Bag attribute input that {@linkcode createPfx} refuses by throwing a `ResultError`. */
+export type PfxEncoderErrorCode = 'invalid_friendly_name';
+
 /** Error payload for a failed PFX creation. */
 export interface CreatePfxFailure extends Micro509Error<CreatePfxErrorCode> {
 	/** Always `false` for failures. */
@@ -263,7 +279,9 @@ export type CreatePfxResult =
  * RFC 9879 PBMAC1.
  *
  * @throws {ResultError} with a {@linkcode CreatePkcs12MacDataErrorCode} when `mac.iterations`
- * is out of range or `mac.password` cannot be encoded for the selected MAC.
+ * is out of range or `mac.password` cannot be encoded for the selected MAC, and with
+ * {@linkcode PfxEncoderErrorCode} `invalid_friendly_name` when a bag `friendlyName` is not a
+ * BMPString of 1 to 255 characters.
  *
  * @example
  * ```ts
@@ -431,7 +449,10 @@ async function parsePfxDerWithBudget(
 		};
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return pfxFailure('malformed', 'Malformed PFX structure');
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? pfxFailure('malformed', 'Malformed PFX structure')
+			: pfxFailure(refusal.code, refusal.message);
 	}
 }
 
@@ -525,7 +546,13 @@ async function extractSafeContents(
 		({ oid, content } = readContentInfo(source, contentInfo));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return { error: pfxFailure('malformed', 'Malformed ContentInfo') };
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		return {
+			error:
+				refusal === undefined
+					? pfxFailure('malformed', 'Malformed ContentInfo')
+					: pfxFailure(refusal.code, refusal.message),
+		};
 	}
 	if (oid === OIDS.pkcs7Data) {
 		const data = extractContextOctetString(source, content);
@@ -555,15 +582,24 @@ async function extractSafeContents(
 		if (isKdfIterationLimitError(error)) {
 			return { error: pfxFailure('kdf_iterations_exceeded', error.message) };
 		}
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
 		return {
-			error: pfxFailure('malformed', 'Malformed PFX encrypted content'),
+			error:
+				refusal === undefined
+					? pfxFailure('malformed', 'Malformed PFX encrypted content')
+					: pfxFailure(refusal.code, refusal.message),
 		};
 	}
 	try {
 		const root = readBerRoot(decrypted);
 		berSequenceChildren(root);
 		return { data: decrypted, root };
-	} catch {
+	} catch (error) {
+		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		if (refusal !== undefined) {
+			return { error: pfxFailure(refusal.code, refusal.message) };
+		}
 		// AES-CBC padding is unauthenticated: a wrong key passes the padding
 		// check ~1/256 of the time and "decrypts" to random bytes that are not
 		// a SafeContents SEQUENCE — a wrong password, not malformed input.
@@ -631,7 +667,10 @@ function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): rea
 	const out: Uint8Array[] = [];
 	if (attributes.friendlyName !== undefined) {
 		out.push(
-			sequence([objectIdentifier(OIDS.friendlyName), setOf([bmpString(attributes.friendlyName)])]),
+			sequence([
+				objectIdentifier(OIDS.friendlyName),
+				setOf([encodeFriendlyName(attributes.friendlyName)]),
+			]),
 		);
 	}
 	if (attributes.localKeyId !== undefined) {
@@ -640,6 +679,25 @@ function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): rea
 		);
 	}
 	return out.length === 0 ? [] : [setOf(out)];
+}
+
+/** RFC 2985 §5.5.1: `pkcs-9-ub-friendlyName`. */
+const MAX_FRIENDLY_NAME_LENGTH = 255;
+
+function encodeFriendlyName(friendlyName: string): Uint8Array {
+	const refuse = (): never =>
+		throwMicro509Error<PfxEncoderErrorCode>(
+			'invalid_friendly_name',
+			'friendlyName must be a BMPString of 1 to 255 characters, none of them a surrogate, U+FFFE or U+FFFF',
+		);
+	if (friendlyName.length === 0 || friendlyName.length > MAX_FRIENDLY_NAME_LENGTH) {
+		return refuse();
+	}
+	try {
+		return bmpString(friendlyName);
+	} catch {
+		return refuse();
+	}
 }
 
 /** Decodes a single SafeBag into a {@linkcode ParsedPfxBag} discriminated union. */
@@ -724,7 +782,7 @@ function parseBagAttributes(
 			if (friendlyName !== undefined || rawValues.length !== 1 || firstValue === undefined) {
 				throw new Error('Malformed friendlyName attribute');
 			}
-			friendlyName = decodeBmpString(firstValue);
+			friendlyName = decodeFriendlyName(firstValue);
 			continue;
 		}
 		if (attrOid === OIDS.localKeyId) {
@@ -845,15 +903,15 @@ function decryptEncryptedData(
 	);
 }
 
-/** Reads the OCTET STRING inside a context-specific constructed wrapper. */
+/** Reads the OCTET STRING inside a `[0] EXPLICIT` wrapper. */
 function extractContextOctetString(source: Uint8Array, element: BerElement): Uint8Array {
 	return berStringContent(source, extractContextChild(element), 0x04);
 }
 
-/** Reads the single child element inside a context-specific constructed wrapper. */
+/** Reads the single child element inside a `[0] EXPLICIT` wrapper. */
 function extractContextChild(element: BerElement): BerElement {
-	if ((element.tag & 0xe0) !== 0xa0) {
-		throw new Error('Expected context-specific constructed value');
+	if (element.tag !== 0xa0) {
+		throw new Error('Expected [0] EXPLICIT value');
 	}
 	const child = element.children[0];
 	if (element.children.length !== 1 || child === undefined) {
@@ -862,31 +920,15 @@ function extractContextChild(element: BerElement): BerElement {
 	return child;
 }
 
-/** Encodes a JS string as an ASN.1 BMPString (UCS-2 big-endian, tag 0x1e). */
-function bmpString(value: string): Uint8Array {
-	const bytes = new Uint8Array(value.length * 2);
-	for (let index = 0; index < value.length; index += 1) {
-		const codePoint = value.charCodeAt(index);
-		bytes[index * 2] = codePoint >> 8;
-		bytes[index * 2 + 1] = codePoint & 0xff;
-	}
-	return tlv(0x1e, bytes);
-}
-
-/** Decodes a DER-encoded BMPString (tag 0x1e) back to a JS string. */
-function decodeBmpString(der: Uint8Array): string {
+/** RFC 2985 §5.5.1: a friendlyName value is a BMPString of SIZE (1..255). */
+function decodeFriendlyName(der: Uint8Array): string {
 	const element = readElement(der);
 	if (element.tag !== 0x1e) {
-		throw new Error('Expected BMPString');
+		throw new Error('friendlyName must be a BMPString');
 	}
-	if (element.value.length % 2 !== 0) {
-		throw new Error('BMPString must use an even number of bytes');
+	const friendlyName = decodeString(0x1e, element.value);
+	if (friendlyName.length < 1 || friendlyName.length > MAX_FRIENDLY_NAME_LENGTH) {
+		throw new Error('friendlyName must hold 1 to 255 characters');
 	}
-	let value = '';
-	for (let index = 0; index < element.value.length; index += 2) {
-		const left = element.value[index] ?? 0;
-		const right = element.value[index + 1] ?? 0;
-		value += String.fromCharCode((left << 8) | right);
-	}
-	return value;
+	return friendlyName;
 }

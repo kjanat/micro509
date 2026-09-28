@@ -100,8 +100,9 @@ then defaults to `mode: 'hard-fail'` — indeterminate status denies. Set
 
 - DNS-ID with single-level wildcard matching
 - IP-ID with IPv6 normalization
-- URI-ID scheme + host matching
-- SRV-ID via otherName SAN
+- URI-ID scheme + host matching, the host read by RFC 3986; an IP host by its
+  octets, a DNS host with single-level wildcard matching except for SIP
+- SRV-ID via otherName SAN, with single-level wildcard matching
 - IDNA2008 reference conversion (RFC 5891 lookup, RFC 5895 mapping)
 - Opt-in CN compatibility (disabled by default)
 

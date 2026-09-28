@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
+import type { ParsedPkcs7SignedData } from '#micro509';
 import {
 	createCertificate,
 	createPkcs7CertBag,
 	createSelfSignedCertificate,
 	generateKeyPair,
-	type ParsedPkcs7SignedData,
 	parseCertificatePem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
@@ -14,6 +14,7 @@ import {
 	unwrap,
 	verifyPkcs7SignedData,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
 import {
 	concatBytes,
 	explicitContext,
@@ -138,6 +139,42 @@ describe('pkcs7', () => {
 				serialNumberHex: parsedSigner.serialNumberHex,
 			},
 		});
+	});
+
+	it('keeps a leading U+FEFF in a UTF8String signer issuer value', async () => {
+		const parsed = parsePkcs7SignedDataDer(
+			await signedDataWithSignerIssuerCommonName(tlv(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const identifier = parsed.value.signerInfos[0]?.signerIdentifier;
+		if (identifier?.type !== 'issuerAndSerialNumber') throw new Error('unreachable');
+		expect(identifier.issuer.values.commonName).toBe('\u{FEFF}A');
+	});
+
+	it('decodes a TeletexString signer issuer value in its X.690 §8.23.5.2 initial state', async () => {
+		const parsed = parsePkcs7SignedDataDer(
+			await signedDataWithSignerIssuerCommonName(tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24))),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const identifier = parsed.value.signerInfos[0]?.signerIdentifier;
+		if (identifier?.type !== 'issuerAndSerialNumber') throw new Error('unreachable');
+		expect(identifier.issuer.values.commonName).toBe('US\u{a4}');
+	});
+
+	it.each([
+		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff)), 'malformed'],
+		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00)), 'malformed'],
+		[
+			'a TeletexString octet from the right half',
+			tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
+			'unsupported',
+		],
+	] as const)('rejects a signer issuer value holding %s as %s', async (_label, value, code) => {
+		expect(
+			parsePkcs7SignedDataDer(await signedDataWithSignerIssuerCommonName(value)),
+		).toMatchObject({ ok: false, code });
 	});
 
 	it.each([
@@ -1561,6 +1598,49 @@ describe('pkcs7: coverage — error paths', () => {
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
+	it('returns limit_exceeded for a signedAttrs attribute type with an OID arc over 64 octets', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'PKCS7 Long Attr OID CA' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
+		const content = new Uint8Array([0x01]);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const overLongOid = tlv(0x06, Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f));
+		const signedAttrsContent = concatBytes([
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([objectIdentifier(OIDS.cmsMessageDigest), setOf([octetString(new Uint8Array(32))])]),
+			sequence([overLongOid, setOf([nullValue()])]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		expect(await verifyPkcs7SignedData(der)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+	});
+
 	it('rejects contentType signedAttrs values that are not OIDs', async () => {
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const ca = await createSelfSignedCertificate({
@@ -1615,3 +1695,15 @@ describe('pkcs7: coverage — error paths', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 });
+
+async function signedDataWithSignerIssuerCommonName(value: Uint8Array): Promise<Uint8Array> {
+	const signer = await createSelfSignedCertificate({
+		subject: { commonName: 'CMS Signer' },
+	});
+	const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+	const issuer = sequence([setOf([sequence([objectIdentifier(OIDS.commonName), value])])]);
+	return createSyntheticPkcs7SignedData({
+		...parsedSigner,
+		issuer: { ...parsedSigner.issuer, derHex: toHex(issuer) },
+	});
+}

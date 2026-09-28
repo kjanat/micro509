@@ -57,6 +57,15 @@ type ListedDocument =
 			readonly path: string;
 			readonly status: string | undefined;
 			readonly date: string | undefined;
+	  }
+	| {
+			readonly id: string;
+			readonly kind: 'ms';
+			readonly title: string;
+			readonly path: string;
+			readonly document: string;
+			readonly version: string | undefined;
+			readonly date: string | undefined;
 	  };
 
 type ListRow = {
@@ -126,6 +135,14 @@ function describe(
 			};
 		case 'w3c':
 			return { ...common, kind: 'w3c', status: meta.status, date: meta.date };
+		case 'ms':
+			return {
+				...common,
+				kind: 'ms',
+				document: meta.document,
+				version: meta.version,
+				date: meta.date,
+			};
 		default: {
 			const _exhaustive: never = meta;
 			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
@@ -154,6 +171,9 @@ function noteOf(entry: ListedDocument): string {
 		case 'w3c':
 			if (entry.status !== undefined) notes.push(entry.status);
 			break;
+		case 'ms':
+			if (entry.version !== undefined) notes.push(entry.version);
+			break;
 		default: {
 			const _exhaustive: never = entry;
 			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
@@ -167,6 +187,7 @@ function dateOf(entry: ListedDocument): string {
 		case 'rfc':
 		case 'pkits':
 		case 'w3c':
+		case 'ms':
 			return entry.date ?? '';
 		case 'itu':
 			return entry.edition ?? '';
@@ -244,14 +265,10 @@ export const readCommand = command('read')
 	.description('Print one whole section body, free of page headers and footers')
 	.example('spec read rfc5280 5.1.2.5', 'Read the nextUpdate section of RFC 5280')
 	.example('spec read 9608 4', 'Read section 4 of RFC 9608 by bare number')
-	.example('spec read rfc5280 5.1.2.5 --lines', 'Attach original source ranges to paragraphs')
 	.arg('doc', arg.string().describe('Document id from `spec list`, or a bare RFC number'))
 	.arg('section', arg.string().describe('Section number such as 5.1.2.5, or heading text'))
 	.flag('raw', flag.boolean().describe('Keep the original line breaks and indentation'))
-	.flag(
-		'lines',
-		flag.boolean().describe('Label paragraphs, or raw lines, with original file line numbers'),
-	)
+	.flag('lines', flag.boolean().describe('Label paragraphs or raw lines with original source ranges'))
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
 		const heading = findHeading(document, args.section);
@@ -284,8 +301,9 @@ export const readCommand = command('read')
 			if (flags.raw) {
 				for (const line of body) out.log(`[L${line.line}] ${line.text}`);
 			} else {
-				for (const block of blocks)
+				for (const block of blocks) {
 					out.log(`[L${block.startLine}-L${block.endLine}] ${block.text}\n`);
+				}
 			}
 			return;
 		}
@@ -490,8 +508,7 @@ export const searchCommand = command('search')
 			return;
 		}
 		renderHits(out, hits);
-		if (truncated)
-			out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
+		if (truncated) out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
 	});
 
 export const specCli = cli('spec')

@@ -113,6 +113,19 @@ describe('DirectoryString encoding comparison', () => {
 		expect(compareNameAttributeValue(attr(0x1c, 'Example'), attr(0x13, 'Example'))).toBe(true);
 		expect(compareNameAttributeValue(attr(0x1e, 'Example'), attr(0x0c, 'example'))).toBe(true);
 	});
+
+	// RFC 5280 §7.1: "Two naming attributes match if the attribute types are the
+	// same and the values of the attributes are an exact match after processing
+	// with the string preparation algorithm." RFC 4518 §2.1 transcodes a
+	// TeletexString before the remaining steps.
+	it('compares a decoded TeletexString like the other DirectoryString alternatives', () => {
+		expect(compareNameAttributeValue(attr(0x14, 'Example'), attr(0x0c, 'Example'))).toBe(true);
+		expect(compareNameAttributeValue(attr(0x14, 'Example'), attr(0x13, 'example'))).toBe(true);
+		expect(compareNameAttributeValue(attr(0x14, 'EXAMPLE  ORG'), attr(0x14, 'example org'))).toBe(
+			true,
+		);
+		expect(compareNameAttributeValue(attr(0x14, 'Example'), attr(0x0c, 'Other'))).toBe(false);
+	});
 });
 
 describe('domainComponent comparison', () => {

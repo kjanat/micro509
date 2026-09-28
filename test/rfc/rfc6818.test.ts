@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import {
-	type CertificatePolicies,
-	createSelfSignedCertificate,
-	isResultError,
-	parseCertificateDerOrThrow,
-} from '#micro509';
+import type { CertificatePolicies } from '#micro509';
+import { createSelfSignedCertificate, isResultError, parseCertificateDerOrThrow } from '#micro509';
 import { ia5String, objectIdentifier, sequence, utf8String } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { flattenedText, rfcDir } from '#test/helpers';
@@ -142,10 +138,10 @@ describe('RFC 6818 §3: explicitText encodings (replacing the RFC 5280 §4.2.1.4
 				issue({ certificatePolicies: notice(`caf${COMPOSED_E_ACUTE}`, 'visibleString') }),
 			),
 		).toBe('invalid_visible_string');
-		expect(
-			await builderErrorCode(() =>
-				issue({ certificatePolicies: notice('\u{1F600}', 'bmpString') }),
-			),
-		).toBe('invalid_bmp_string');
+		for (const text of ['\u{1F600}', '\u{FFFE}', '\u{FFFF}']) {
+			expect(
+				await builderErrorCode(() => issue({ certificatePolicies: notice(text, 'bmpString') })),
+			).toBe('invalid_bmp_string');
+		}
 	});
 });

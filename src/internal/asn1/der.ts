@@ -6,6 +6,8 @@
  * @module
  */
 
+import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
+
 /**
  * Maximum nesting depth allowed when recursively walking a DER structure.
  *
@@ -202,8 +204,33 @@ export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
 	return tlv(0x03, concatBytes([Uint8Array.of(unusedBits), value]));
 }
 
-/** Encodes a DER UTF8String (tag `0x0c`). */
+export function hasLoneSurrogate(value: string): boolean {
+	for (let index = 0; index < value.length; index += 1) {
+		const unit = value.charCodeAt(index);
+		if (unit >= 0xd800 && unit <= 0xdbff) {
+			const next = value.charCodeAt(index + 1);
+			if (next >= 0xdc00 && next <= 0xdfff) {
+				index += 1;
+				continue;
+			}
+			return true;
+		}
+		if (unit >= 0xdc00 && unit <= 0xdfff) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Encodes a DER UTF8String (tag `0x0c`).
+ *
+ * @throws on a lone surrogate, which has no UTF-8 encoding.
+ */
 export function utf8String(value: string): Uint8Array {
+	if (hasLoneSurrogate(value)) {
+		throw new Error('Invalid UTF8String: lone surrogate');
+	}
 	return tlv(0x0c, new TextEncoder().encode(value));
 }
 
@@ -253,7 +280,8 @@ export function ia5String(value: string): Uint8Array {
 /**
  * Encodes a DER BMPString (tag `0x1e`) as big-endian UTF-16.
  *
- * @throws on lone surrogates and on code points above the Basic Multilingual Plane.
+ * @throws on lone surrogates, on U+FFFE and U+FFFF, which X.680 §41.15 leaves
+ * out of BMPString, and on code points above the Basic Multilingual Plane.
  */
 export function bmpString(value: string): Uint8Array {
 	const units: number[] = [];
@@ -264,6 +292,9 @@ export function bmpString(value: string): Uint8Array {
 		}
 		if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
 			throw new Error('Invalid BMPString: lone surrogate');
+		}
+		if (codePoint >= 0xfffe) {
+			throw new Error('Invalid BMPString: U+FFFE and U+FFFF are not BMPString characters');
 		}
 		units.push((codePoint >> 8) & 0xff, codePoint & 0xff);
 	}
@@ -292,15 +323,41 @@ export function universalString(value: string): Uint8Array {
 	return tlv(0x1c, Uint8Array.from(bytes));
 }
 
+/** micro509's bound on one OBJECT IDENTIFIER sub-identifier's base-128 encoding; X.660 §7.6 leaves arc values unbounded. */
+export const MAX_OID_SUBIDENTIFIER_OCTETS = 64;
+
+const OID_SUBIDENTIFIER_LIMIT = 1n << BigInt(7 * MAX_OID_SUBIDENTIFIER_OCTETS);
+
+const OID_SUBIDENTIFIER_MAX_DIGITS = OID_SUBIDENTIFIER_LIMIT.toString().length;
+
+function parseOidArc(segment: string): bigint {
+	if (!/^\d+$/.test(segment)) {
+		throw new Error(`Invalid OID segment: ${segment}`);
+	}
+	const significant = segment.replace(/^0+/, '');
+	if (significant.length > OID_SUBIDENTIFIER_MAX_DIGITS) {
+		throwOidLimit();
+	}
+	return BigInt(significant.length === 0 ? '0' : significant);
+}
+
+function throwOidLimit(): never {
+	return throwDecodeRefusal(
+		'limit_exceeded',
+		`OID sub-identifier exceeds ${MAX_OID_SUBIDENTIFIER_OCTETS} octets`,
+	);
+}
+
 /** Encode a non-negative integer as a base-128 sub-identifier ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §8.19.2}). */
 function encodeBase128(value: bigint): number[] {
-	const encoded: number[] = [Number(value & 0x7fn)];
-	let current = value >> 7n;
-	while (current > 0n) {
-		encoded.unshift(0x80 | Number(current & 0x7fn));
-		current >>= 7n;
+	if (value >= OID_SUBIDENTIFIER_LIMIT) {
+		throwOidLimit();
 	}
-	return encoded;
+	const reversed: number[] = [Number(value & 0x7fn)];
+	for (let current = value >> 7n; current > 0n; current >>= 7n) {
+		reversed.push(0x80 | Number(current & 0x7fn));
+	}
+	return reversed.reverse();
 }
 
 /**
@@ -312,13 +369,7 @@ function encodeBase128(value: bigint): number[] {
  * Sub-identifiers are encoded with base-128 continuation.
  */
 export function objectIdentifier(oid: string): Uint8Array {
-	const digitPattern = /^\d+$/;
-	const segments = oid.split('.').map((segment) => {
-		if (!digitPattern.test(segment)) {
-			throw new Error(`Invalid OID segment: ${segment}`);
-		}
-		return BigInt(segment);
-	});
+	const segments = oid.split('.').map(parseOidArc);
 	if (segments.length < 2) {
 		throw new Error(`Invalid OID: ${oid}`);
 	}
@@ -417,9 +468,11 @@ function encodeBase256(value: number): readonly number[] {
 
 /** A single parsed ASN.1 TLV element with byte-range metadata. */
 export interface DerElement {
-	/** ASN.1 tag byte (e.g. `0x30` for SEQUENCE, `0x02` for INTEGER). */
+	/** Leading identifier octet (e.g. `0x30` for SEQUENCE, `0x02` for INTEGER, `0x9f` for any context-specific primitive tag from 31 up). */
 	readonly tag: number;
-	/** Number of bytes occupied by the tag + length octets. */
+	/** Tag number within the class, from the leading octet below 31 and from the subsequent identifier octets from 31 up. */
+	readonly tagNumber: number;
+	/** Number of bytes occupied by the identifier and length octets. */
 	readonly headerLength: number;
 	/** Byte length of the value portion (excluding tag and length octets). */
 	readonly length: number;
@@ -447,29 +500,78 @@ export interface ReadRootElementOptions {
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
+/** The identifier octets of a BER or DER element. */
+export interface Identifier {
+	/** Leading identifier octet. */
+	readonly tag: number;
+	/** Tag number within the class. */
+	readonly tagNumber: number;
+	/** Number of identifier octets. */
+	readonly length: number;
+}
+
+/**
+ * Reads the identifier octets at {@linkcode offset} by X.690 §8.1.2, which BER
+ * and DER share.
+ *
+ * @throws on truncated identifier octets, a high-tag-number form with a leading
+ * zero group or a tag number below 31, and `limit_exceeded` on a tag number
+ * above {@linkcode Number.MAX_SAFE_INTEGER}.
+ */
+export function readIdentifier(bytes: Uint8Array, offset: number): Identifier {
+	const tag = bytes[offset];
+	if (tag === undefined) {
+		throw new Error('Unexpected end of identifier octets');
+	}
+	if ((tag & 0x1f) !== 0x1f) {
+		return { tag, tagNumber: tag & 0x1f, length: 1 };
+	}
+	if (bytes[offset + 1] === 0x80) {
+		throw new Error('High-tag-number form must not open with a zero group');
+	}
+	let end = offset + 1;
+	while (((bytes[end] ?? 0) & 0x80) !== 0) {
+		end += 1;
+	}
+	if (bytes[end] === undefined) {
+		throw new Error('Unexpected end of identifier octets');
+	}
+	let tagNumber = 0;
+	for (let index = offset + 1; index <= end; index += 1) {
+		const group = (bytes[index] ?? 0) & 0x7f;
+		if (tagNumber > (Number.MAX_SAFE_INTEGER - group) / 128) {
+			throwDecodeRefusal('limit_exceeded', 'Tag number exceeds Number.MAX_SAFE_INTEGER');
+		}
+		tagNumber = tagNumber * 128 + group;
+	}
+	if (tagNumber < 31) {
+		throw new Error('Tag numbers below 31 must use the low-tag-number form');
+	}
+	return { tag, tagNumber, length: end - offset + 1 };
+}
+
 /**
  * Reads one TLV element from {@linkcode bytes} starting at {@linkcode offset}.
  *
- * Parses the tag byte, decodes the DER length octets, and slices out the value bytes.
+ * Parses the identifier octets, decodes the DER length octets, and slices out the value bytes.
  *
- * @throws on truncated input, indefinite lengths, and non-minimal length encodings.
- * @param offset Byte position of the tag octet. Defaults to 0.
+ * @throws on truncated input, malformed identifier octets, indefinite lengths, and non-minimal length encodings.
+ * @param offset Byte position of the leading identifier octet. Defaults to 0.
  */
 export function readElement(bytes: Uint8Array, offset = 0): DerElement {
-	const tag = bytes[offset];
-	if (tag === undefined) {
+	if (bytes[offset] === undefined) {
 		throw new Error('Unexpected end of DER input');
 	}
-	if ((tag & 0x1f) === 0x1f) {
-		throw new Error('High-tag-number DER form is not supported');
-	}
-	const lengthByte = bytes[offset + 1];
+	const identifier = readIdentifier(bytes, offset);
+	const lengthOffset = offset + identifier.length;
+	const lengthByte = bytes[lengthOffset];
 	if (lengthByte === undefined) {
 		throw new Error('Unexpected end of DER input');
 	}
 
-	const { headerLength, length } = readDerLength(bytes, offset, lengthByte);
+	const { lengthOctets, length } = readDerLength(bytes, lengthOffset, lengthByte);
 
+	const headerLength = identifier.length + lengthOctets;
 	const start = offset + headerLength;
 	const end = start + length;
 	if (end > bytes.length) {
@@ -477,7 +579,8 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	}
 
 	return {
-		tag,
+		tag: identifier.tag,
+		tagNumber: identifier.tagNumber,
 		headerLength,
 		length,
 		start,
@@ -489,34 +592,34 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 /** Decodes and validates the definite-length field of a DER element. */
 function readDerLength(
 	bytes: Uint8Array,
-	offset: number,
+	lengthOffset: number,
 	lengthByte: number,
-): { readonly headerLength: number; readonly length: number } {
+): { readonly lengthOctets: number; readonly length: number } {
 	if ((lengthByte & 0x80) === 0) {
-		return { headerLength: 2, length: lengthByte };
+		return { lengthOctets: 1, length: lengthByte };
 	}
 	const octets = lengthByte & 0x7f;
 	if (octets === 0) {
 		throw new Error('Indefinite lengths are not supported');
 	}
-	const firstLengthOctet = bytes[offset + 2];
+	const firstLengthOctet = bytes[lengthOffset + 1];
 	if (firstLengthOctet === undefined) {
 		throw new Error('Unexpected end of DER input');
 	}
 	if (firstLengthOctet === 0) {
 		throw new Error('Non-minimal DER length encoding');
 	}
-	const length = readLongFormDerLength(bytes, offset, octets);
+	const length = readLongFormDerLength(bytes, lengthOffset, octets);
 	if (length < 128) {
 		throw new Error('Non-minimal DER length encoding');
 	}
-	return { headerLength: 2 + octets, length };
+	return { lengthOctets: 1 + octets, length };
 }
 
-function readLongFormDerLength(bytes: Uint8Array, offset: number, octets: number): number {
+function readLongFormDerLength(bytes: Uint8Array, lengthOffset: number, octets: number): number {
 	let length = 0;
 	for (let index = 0; index < octets; index += 1) {
-		const next = bytes[offset + 2 + index];
+		const next = bytes[lengthOffset + 1 + index];
 		if (next === undefined) {
 			throw new Error('Unexpected end of DER input');
 		}
@@ -543,6 +646,21 @@ export function assertDerMaxDepth(
 		readonly allowOpaqueConstructedTags?: readonly number[];
 	},
 ): void {
+	walkDerTree(bytes, maxDepth, options, () => undefined);
+}
+
+/**
+ * Walks the full DER tree rooted in {@linkcode bytes}, calling {@linkcode visit}
+ * on each element before reading its children.
+ *
+ * @throws if the tree is malformed or nests beyond {@linkcode maxDepth}.
+ */
+export function walkDerTree(
+	bytes: Uint8Array,
+	maxDepth: number,
+	options: { readonly allowOpaqueConstructedTags?: readonly number[] } | undefined,
+	visit: (element: DerElement) => void,
+): void {
 	if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
 		throw new Error('DER max depth must be a positive safe integer');
 	}
@@ -560,8 +678,9 @@ export function assertDerMaxDepth(
 			continue;
 		}
 		if (current.depth > maxDepth) {
-			throw new Error(`DER exceeds max depth of ${maxDepth}`);
+			throwDecodeRefusal('limit_exceeded', `DER exceeds max depth of ${maxDepth}`);
 		}
+		visit(current.element);
 		if ((current.element.tag & 0x20) === 0) {
 			continue;
 		}

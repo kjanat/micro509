@@ -5,7 +5,8 @@
  * @module
  */
 
-import { domainToAscii, type IdnaMode } from '#micro509/internal/shared/idna';
+import type { IdnaMode } from '#micro509/internal/shared/idna';
+import { asciiLowercase, domainToAscii } from '#micro509/internal/shared/idna';
 
 const MAX_DOMAIN_OCTETS = 253;
 
@@ -19,6 +20,24 @@ const SMTP_UTF8_QUOTED_STRING = /^"(?:[^"\\\p{Cc}\p{Cs}]|\\[ -~])*"$/u;
 /** An RFC 6531 §3.3 Local-part: a Dot-string or a Quoted-string. */
 export function isSmtpUtf8LocalPart(localPart: string): boolean {
 	return SMTP_UTF8_DOT_STRING.test(localPart) || SMTP_UTF8_QUOTED_STRING.test(localPart);
+}
+
+/**
+ * RFC 9598 §3 and §5: the lowercased domain of a presented SmtpUTF8Mailbox
+ * with no Byte Order Mark, whose Local-part is a non-ASCII RFC 6531 Local-part
+ * and whose domain is a mailbox domain, or `undefined` for any other value.
+ */
+export function presentedSmtpUtf8MailboxDomain(mailbox: string): string | undefined {
+	const at = mailbox.lastIndexOf('@');
+	const localPart = mailbox.slice(0, Math.max(at, 0));
+	const domain = asciiLowercase(mailbox.slice(at + 1));
+	return at > 0 &&
+		!mailbox.includes('﻿') &&
+		isSmtpUtf8LocalPart(localPart) &&
+		[...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) &&
+		isMailboxDomain(domain, 'lookup')
+		? domain
+		: undefined;
 }
 
 /**

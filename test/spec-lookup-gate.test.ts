@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
 import { projectRoot } from '#test/helpers';
+import type { Decision } from '../.claude/hooks/spec-lookup-gate.ts';
 import {
-	type Decision,
 	decide,
 	EXCLUDE_GLOB,
 	parsePayload,
@@ -42,6 +42,7 @@ describe('Read', () => {
 		['deny', rfc5280],
 		['deny', path.join(projectRoot, 'docs', '.', 'rfc', '..', 'rfc', 'rfc5280.txt')],
 		['deny', path.join(projectRoot, 'docs', 'itu')],
+		['deny', path.join(projectRoot, 'docs', 'ms', 'MS-WCCE', 'MS-WCCE-v20260824.txt')],
 		['pass', path.join(projectRoot, 'docs', 'PKIX-SCOPE.md')],
 		['pass', path.join(projectRoot, 'src', 'index.ts')],
 	] as const)('%s %s', (want, filePath) => {
@@ -59,6 +60,7 @@ describe('Grep', () => {
 		['deny', { path: 'docs', glob: '*.txt' }],
 		['deny', { path: 'docs/rfc' }],
 		['deny', { path: path.join(projectRoot, 'docs', 'itu', 'x.txt') }],
+		['deny', { path: 'docs/ms' }],
 		['pass', { path: 'src' }],
 		['pass', { path: path.join(projectRoot, 'test'), glob: '*.ts' }],
 	] as const)('%s %o', (want, input) => {
@@ -97,13 +99,18 @@ describe('Bash', () => {
 		['pass', 'rg -n "docs/rfc" src'],
 		['pass', 'bun spec list > /var/tmp/absent/list.txt; rg -n webidl /var/tmp/absent/list.txt'],
 		['deny', 'rg -n webidl ./absent/../docs/rfc'],
-		['pass', "rg -n foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' ."],
+		['pass', "rg -n foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' -g '!docs/ms/**' ."],
 		['pass', `rg foo -g '${EXCLUDE_GLOB}'`],
-		['pass', "rg foo --glob='!rfc' --glob='!itu' --glob='!w3c' docs"],
-		['pass', 'grep -rn foo --exclude-dir=rfc --exclude-dir=itu --exclude-dir=w3c .'],
-		['pass', "git grep -n foo -- . ':!docs/rfc' ':!docs/itu' ':!docs/w3c'"],
+		['pass', "rg foo --glob='!rfc' --glob='!itu' --glob='!w3c' --glob='!ms' docs"],
+		[
+			'pass',
+			'grep -rn foo --exclude-dir=rfc --exclude-dir=itu --exclude-dir=w3c --exclude-dir=ms .',
+		],
+		['pass', "git grep -n foo -- . ':!docs/rfc' ':!docs/itu' ':!docs/w3c' ':!docs/ms'"],
 		['deny', "rg foo -g '!docs/rfc/**' ."],
+		['deny', "rg -n foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' ."],
 		['deny', "rg foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' docs/rfc"],
+		['deny', 'cat docs/ms/MS-WCCE/MS-WCCE-v20260824.txt'],
 		['deny', "git grep -n foo -- . ':!docs/rfc'"],
 		['deny', 'find . -name x | xargs rg foo'],
 		['deny', 'ls | rg foo docs'],
@@ -140,17 +147,6 @@ describe('Bash', () => {
 		['deny', 'xargs -0 rg nextUpdate'],
 		['deny', 'bun spec read rfc5280 4.1'],
 		['deny', 'bun scripts/spec/main.ts search nextUpdate'],
-		['deny', 'bun spec --json read rfc5280 4.1'],
-		['deny', 'bun run spec --json census REAL NR3'],
-		['deny', 'bun --cwd . run spec census REAL NR3'],
-		['deny', 'node scripts/spec/main.ts --json headings rfc5280'],
-		['deny', 'bun spec census REAL NR3 # spec-intent: just a maintenance scan'],
-		['deny', 'echo "# spec-intent: vendoring check"; cat docs/rfc/rfc5280.txt'],
-		['pass', 'bun spec status 5280 --offline'],
-		['pass', 'bun spec --json status 5280'],
-		['pass', 'bun spec fetch rfc 5280'],
-		['pass', 'bun spec --help'],
-		['pass', 'echo "bun spec read rfc5280 4.1"'],
 	] as const)('%s %s', (want, command) => {
 		expect(verdictOf(bash(command))).toBe(want);
 	});
@@ -158,22 +154,6 @@ describe('Bash', () => {
 	test('lets the spec-lookup agent read the corpus', () => {
 		expect(verdictOf(bash('cat docs/rfc/rfc5280.txt', 'spec-lookup'))).toBe('pass');
 		expect(verdictOf(bash('rg nextUpdate', 'spec-lookup'))).toBe('pass');
-		expect(verdictOf(bash('bun spec --json census REAL NR3', 'spec-lookup'))).toBe('pass');
-	});
-
-	test('takes agent identity from the hook payload, never a shell comment', () => {
-		const payload = parsePayload(
-			JSON.stringify({
-				tool_name: 'Bash',
-				agent_type: 'spec-lookup',
-				cwd: projectRoot,
-				tool_input: { command: 'bun spec read rfc5280 4.1' },
-			}),
-		);
-		expect(payload).toBeDefined();
-		if (payload === undefined) return;
-		expect(decide(payload, projectRoot).kind).toBe('pass');
-		expect(decide({ ...payload, agent: 'other' }, projectRoot).kind).toBe('deny');
 	});
 });
 
@@ -224,19 +204,35 @@ describe('hook output', () => {
 		);
 		expect(payload).toBeDefined();
 		if (payload === undefined) return;
-		expect(render(decide(payload, projectRoot))).toContain('"permissionDecision":"deny"');
+		const output = render(decide(payload, projectRoot));
+		expect(output).toContain('"permissionDecision":"deny"');
 	});
+
 	test('renders nothing for a pass', () => {
 		expect(render({ kind: 'pass' })).toBeUndefined();
 	});
+
 	test('ignores input that is not a tool payload', () => {
 		expect(parsePayload('not json')).toBeUndefined();
 		expect(parsePayload('{"tool_name":"Read"}')).toBeUndefined();
 	});
 });
 
-describe('wrapped commands', () => {
+describe('research command routing', () => {
 	test.each([
+		['deny', 'bun spec --json read rfc5280 4.1'],
+		['deny', 'bun run spec --json census REAL NR3'],
+		['deny', 'bun --cwd . run spec census REAL NR3'],
+		['deny', 'node scripts/spec/main.ts --json headings rfc5280'],
+		['deny', 'bun spec census REAL NR3 # spec-intent: just a maintenance scan'],
+		['deny', 'echo "# spec-intent: vendoring check"; cat docs/rfc/rfc5280.txt'],
+		['pass', 'bun spec status 5280 --offline'],
+		['pass', 'bun spec --json status 5280'],
+		['pass', 'bun spec fetch rfc 5280'],
+		['pass', 'bun spec fetch ms MS-WCCE'],
+		['pass', 'bun ms MS-WCCE'],
+		['pass', 'bun spec --help'],
+		['pass', 'echo "bun spec read rfc5280 4.1"'],
 		['deny', 'nice -n 5 bun spec read rfc5280 4.1'],
 		['deny', 'nice --adjustment 5 bun spec read rfc5280 4.1'],
 		['deny', 'nice --adjustment=5 bun spec --json read rfc5280 4.1'],
@@ -252,20 +248,20 @@ describe('wrapped commands', () => {
 		['deny', 'env --unset=UNUSED bun spec read rfc5280 4.1'],
 		['deny', 'env --argv0 spec-helper bun spec read rfc5280 4.1'],
 		['deny', 'CI=1 env -u UNUSED MODE=test nice -n 5 bun --cwd . run spec --json census REAL NR3'],
-		[
-			'deny',
-			'/usr/bin/nice -n 5 /usr/bin/env --unset UNUSED node scripts/spec/main.ts --json read rfc5280 4.1',
-		],
+		['deny', '/usr/bin/nice -n 5 /usr/bin/env --unset UNUSED node scripts/spec/main.ts --json read rfc5280 4.1'],
 		['deny', 'sudo -u root nice -n 5 bun spec read rfc5280 4.1'],
 		['deny', 'time -f %E bun spec read rfc5280 4.1'],
 		['deny', 'exec -a spec-helper bun spec read rfc5280 4.1'],
 		['deny', 'xargs -n 1 bun spec read rfc5280 4.1'],
 		['deny', 'parallel --jobs 2 bun spec read rfc5280 4.1'],
 		['deny', 'nice -n 5 rg nextUpdate'],
+		['deny', 'nice -n 5 bun spec read ms-wcce-20260824 3.1'],
+		['deny', 'env --unset UNUSED bun spec --json census MS-WCCE UPN'],
 		['pass', 'nice -n 5 rg nextUpdate src'],
 		['pass', 'nice -n 5 bun spec list'],
 		['pass', 'env --unset UNUSED bun spec --json status 5280 --offline'],
 		['pass', 'nice -n 5 bun spec fetch rfc 5280'],
+		['pass', 'nice -n 5 bun spec fetch ms MS-WCCE'],
 		['pass', 'nice -n 5 echo bun spec read rfc5280 4.1'],
 		['pass', 'env --unset bun echo spec read rfc5280 4.1'],
 		['pass', 'env --chdir /tmp echo bun spec headings rfc5280'],
@@ -276,5 +272,16 @@ describe('wrapped commands', () => {
 	] as const)('%s %s', (want, command) => {
 		expect(verdictOf(bash(command))).toBe(want);
 		expect(verdictOf(bash(command, 'spec-lookup'))).toBe('pass');
+	});
+
+	test('takes agent identity from the hook payload, never a shell comment', () => {
+		const payload = parsePayload(JSON.stringify({
+			tool_name: 'Bash', agent_type: 'spec-lookup', cwd: projectRoot,
+			tool_input: { command: 'bun spec read ms-wcce-20260824 3.1' },
+		}));
+		expect(payload).toBeDefined();
+		if (payload === undefined) return;
+		expect(decide(payload, projectRoot).kind).toBe('pass');
+		expect(decide({ ...payload, agent: 'other' }, projectRoot).kind).toBe('deny');
 	});
 });

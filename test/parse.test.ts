@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ParseCertificateErrorCode } from '#micro509';
 import {
 	certificateMatchesPrivateKey,
+	compareDistinguishedNames,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
@@ -45,6 +46,7 @@ import {
 	parseSubjectAltNames,
 } from '#micro509/x509/parse';
 import {
+	appendCertificateExtensions,
 	childrenOf,
 	createCsrWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
@@ -52,6 +54,7 @@ import {
 	importRsaPrivateKeyWithScheme,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
+	rewriteCertificateSubject,
 	rewriteCsrSignatureAsRsaPss,
 	sliceElement,
 } from '#test/helpers';
@@ -1170,7 +1173,7 @@ describe('parse', () => {
 		}
 	});
 
-	it('parses certificate with unknown SAN type', async () => {
+	it('decodes raw registeredID builder input as a registeredID SAN', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Unknown SAN CA' },
 			extensions: {
@@ -1194,7 +1197,7 @@ describe('parse', () => {
 			},
 		});
 		const parsed = unwrap(parseCertificatePem(leaf.pem));
-		expect(parsed.subjectAltNames?.some((san) => san.type === 'unknown')).toBe(true);
+		expect(parsed.subjectAltNames).toContainEqual({ type: 'registeredID', value: '0.1.2' });
 	});
 
 	it('parses SRV-ID subjectAltName otherName values from certificates', async () => {
@@ -1224,10 +1227,8 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_imap.example.com' }]);
 	});
 
-	it('preserves a conformant unsupported otherName OID as an unknown entry', async () => {
-		// A structurally valid OtherName (type-id + [0] EXPLICIT value) carrying an
-		// OID the parser does not recognise is preserved, not rejected — a Microsoft
-		// UPN here.
+	it('decodes an otherName of an unrecognised type-id with its value element', async () => {
+		// A Microsoft UPN: type-id and a [0] EXPLICIT UTF8String value.
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'unknown-othername.example' },
 			extensions: {
@@ -1245,8 +1246,34 @@ describe('parse', () => {
 		});
 
 		const parsed = unwrap(parseCertificatePem(certificate.pem));
-		expect(parsed.subjectAltNames).toHaveLength(1);
-		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
+		expect(parsed.subjectAltNames).toEqual([
+			{
+				type: 'otherName',
+				typeId: '1.3.6.1.4.1.311.20.2.3',
+				value: tlv(0x0c, new TextEncoder().encode('user@example.com')),
+			},
+		]);
+	});
+
+	it('round-trips an otherName value carrying high-tag-number identifiers', async () => {
+		const values = [
+			Uint8Array.of(0x9f, 0x20, 0x01, 0x00),
+			Uint8Array.of(0xbf, 0x81, 0x00, 0x03, 0x02, 0x01, 0x05),
+			Uint8Array.of(0x30, 0x04, 0xdf, 0x82, 0x00, 0x00),
+		];
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'high-tag-othername.example' },
+			extensions: {
+				subjectAltNames: values.map((value) => ({
+					type: 'otherName' as const,
+					typeId: '1.2.3.4',
+					value,
+				})),
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.pem)).subjectAltNames).toEqual(
+			values.map((value) => ({ type: 'otherName', typeId: '1.2.3.4', value })),
+		);
 	});
 
 	it('parses a conformant SRV-ID otherName carrying no inner SEQUENCE', async () => {
@@ -1896,6 +1923,291 @@ describe('parse', () => {
 		}
 	});
 
+	it('round-trips certificate policy OIDs with arcs wider than 128 bits exactly', async () => {
+		const uuid = '2.25.329800735698586629295641978511506172918';
+		const wide = `2.25.${(1n << 200n) + 7n}`;
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'wide-arc-policy.example' },
+			extensions: {
+				certificatePolicies: [
+					{ policyIdentifier: uuid },
+					{ policyIdentifier: wide },
+					{ policyIdentifier: `1.2.00${1n << 130n}` },
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.certificate.pem)).certificatePolicies).toEqual([
+			{ policyIdentifier: uuid },
+			{ policyIdentifier: wide },
+			{ policyIdentifier: `1.2.${1n << 130n}` },
+		]);
+	});
+
+	it('round-trips registeredID SANs with arcs wider than 53 bits exactly', async () => {
+		const uuid = '2.25.329800735698586629295641978511506172918';
+		const wide = `2.25.${(1n << 200n) + 7n}`;
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'wide-arc-registered-id.example' },
+			extensions: {
+				subjectAltNames: [
+					{ type: 'registeredID', value: uuid },
+					{ type: 'registeredID', value: wide },
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.certificate.pem)).subjectAltNames).toEqual([
+			{ type: 'registeredID', value: uuid },
+			{ type: 'registeredID', value: wide },
+		]);
+	});
+
+	it('bounds an OID sub-identifier at 64 octets, refusing a longer one as limit_exceeded', async () => {
+		const arcOf = (octets: number): Uint8Array =>
+			Uint8Array.of(0x2a, ...new Array<number>(octets - 1).fill(0xff), 0x7f);
+		const extensionWithOid = (contents: Uint8Array): Uint8Array =>
+			sequence([tlv(0x06, contents), octetString(nullValue())]);
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'arc-bound.example' },
+		});
+		const accepted = await appendCertificateExtensions(certificate.der, keyPair.privateKey, [
+			extensionWithOid(arcOf(64)),
+		]);
+		expect(unwrap(parseCertificateDer(accepted)).extensions.at(-1)?.oid).toBe(
+			`1.2.${(1n << 448n) - 1n}`,
+		);
+		const refused = await appendCertificateExtensions(certificate.der, keyPair.privateKey, [
+			extensionWithOid(arcOf(65)),
+		]);
+		expect(parseCertificateDer(refused)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+		const truncatedAtBound = await appendCertificateExtensions(
+			certificate.der,
+			keyPair.privateKey,
+			[extensionWithOid(Uint8Array.of(0x2a, ...new Array<number>(64).fill(0x81)))],
+		);
+		expect(parseCertificateDer(truncatedAtBound)).toMatchObject({ ok: false, code: 'malformed' });
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'arc-bound.example' },
+				extensions: { certificatePolicies: [{ policyIdentifier: `1.2.${1n << 448n}` }] },
+			}),
+			'limit_exceeded',
+		);
+	});
+
+	describe('DisplayText (RFC 5280 §4.2.1.4)', () => {
+		const text = (value: string) => new TextEncoder().encode(value);
+		const bmp = (value: string) =>
+			Uint8Array.from(
+				[...value].flatMap((character) => {
+					const unit = character.charCodeAt(0);
+					return [unit >> 8, unit & 0xff];
+				}),
+			);
+
+		async function parseUserNotice(userNotice: Uint8Array) {
+			const certificate = await createSelfSignedCertificateWithRawExtensions({
+				subject: { commonName: 'display-text.example' },
+				extensions: {
+					customExtensions: [
+						{
+							oid: OIDS.certificatePolicies,
+							critical: true,
+							value: sequence([
+								sequence([
+									objectIdentifier('1.2.3.4.1'),
+									sequence([
+										sequence([objectIdentifier(OIDS.userNoticePolicyQualifier), userNotice]),
+									]),
+								]),
+							]),
+						},
+					],
+				},
+			});
+			return parseCertificatePem(certificate.certificate.pem);
+		}
+
+		it.each([
+			['a one-character UTF8String', tlv(0x0c, text('x')), 'x', 'utf8String'],
+			[
+				'a 200-character UTF8String of two-octet characters',
+				tlv(0x0c, text('é'.repeat(200))),
+				'é'.repeat(200),
+				'utf8String',
+			],
+			[
+				'a UTF8String with a control character and a decomposed accent',
+				tlv(0x0c, text('line\ne\u{0301}')),
+				'line\ne\u{0301}',
+				'utf8String',
+			],
+			['an IA5String', tlv(0x16, text('notice')), 'notice', 'ia5String'],
+			[
+				'a 200-character VisibleString',
+				tlv(0x1a, text('~'.repeat(200))),
+				'~'.repeat(200),
+				'visibleString',
+			],
+			['a BMPString', tlv(0x1e, bmp('Ωk')), 'Ωk', 'bmpString'],
+		] as const)(
+			'keeps %s unchanged',
+			async (_label, displayText, explicitText, explicitTextType) => {
+				const parsed = unwrap(await parseUserNotice(sequence([displayText])));
+				expect(parsed.certificatePolicies).toEqual([
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'userNotice', explicitText, explicitTextType }],
+					},
+				]);
+			},
+		);
+
+		it.each([
+			['a UTF8String that is not UTF-8', tlv(0x0c, Uint8Array.of(0x6f, 0xc3, 0x28))],
+			['an empty UTF8String', tlv(0x0c, new Uint8Array())],
+			['an IA5String above 0x7F', tlv(0x16, Uint8Array.of(0x6f, 0x80))],
+			['a VisibleString with DELETE', tlv(0x1a, Uint8Array.of(0x6f, 0x7f))],
+			['a VisibleString with a line feed', tlv(0x1a, Uint8Array.of(0x6f, 0x0a))],
+			['a BMPString with an unpaired surrogate', tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0xd8, 0x00))],
+			['a BMPString with a surrogate pair', tlv(0x1e, Uint8Array.of(0xd8, 0x3d, 0xde, 0x00))],
+			['a BMPString holding U+FFFF', tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0xff, 0xff))],
+		] as const)('fails on %s as explicitText or organization', async (_label, displayText) => {
+			for (const userNotice of [
+				sequence([displayText]),
+				sequence([sequence([displayText, sequence([integerFromNumber(1)])])]),
+			]) {
+				const result = await parseUserNotice(userNotice);
+				expect(result.ok ? 'ok' : result.code).toBe('malformed');
+			}
+		});
+
+		it.each([
+			[
+				'a 201-character UTF8String',
+				tlv(0x0c, text('é'.repeat(201))),
+				'é'.repeat(201),
+				'utf8String',
+			],
+			['a 201-character BMPString', tlv(0x1e, bmp('k'.repeat(201))), 'k'.repeat(201), 'bmpString'],
+		] as const)(
+			'keeps %s whole as explicitText or organization and reports its size',
+			async (_label, displayText, value, explicitTextType) => {
+				const explicitText = unwrap(await parseUserNotice(sequence([displayText])));
+				expect(explicitText.certificatePolicies).toEqual([
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [
+							{
+								type: 'userNotice',
+								explicitText: value,
+								explicitTextType,
+								oversizedExplicitText: { characters: 201, limit: 200 },
+							},
+						],
+					},
+				]);
+				const organization = unwrap(
+					await parseUserNotice(
+						sequence([sequence([displayText, sequence([integerFromNumber(1)])])]),
+					),
+				);
+				expect(organization.certificatePolicies).toEqual([
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [
+							{
+								type: 'userNotice',
+								noticeRef: {
+									organization: value,
+									noticeNumbers: [1],
+									oversizedOrganization: { characters: 201, limit: 200 },
+								},
+							},
+						],
+					},
+				]);
+			},
+		);
+
+		it('reports no size for a 200-character organization', async () => {
+			const organization = 'o'.repeat(200);
+			const parsed = unwrap(
+				await parseUserNotice(
+					sequence([sequence([tlv(0x0c, text(organization)), sequence([integerFromNumber(1)])])]),
+				),
+			);
+			expect(parsed.certificatePolicies).toEqual([
+				{
+					policyIdentifier: '1.2.3.4.1',
+					policyQualifiers: [
+						{ type: 'userNotice', noticeRef: { organization, noticeNumbers: [1] } },
+					],
+				},
+			]);
+		});
+	});
+
+	describe('TeletexString names (X.690 §8.23.5.2 initial state)', () => {
+		const commonNameSubject = (value: Uint8Array): Uint8Array =>
+			sequence([setOf([sequence([objectIdentifier(OIDS.commonName), value])])]);
+
+		it('decodes a TeletexString subject value, reading 2/4 as the currency sign', async () => {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
+			const rewritten = rewriteCertificateSubject(
+				certificate.der,
+				commonNameSubject(tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24))),
+			);
+			expect(unwrap(parseCertificateDer(rewritten)).subject.values.commonName).toBe('US\u{a4}');
+		});
+
+		it('compares a TeletexString name with a UTF8String name after RFC 4518 preparation', async () => {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
+			const subjectOf = (value: Uint8Array) =>
+				unwrap(
+					parseCertificateDer(rewriteCertificateSubject(certificate.der, commonNameSubject(value))),
+				).subject;
+			const teletex = subjectOf(tlv(0x14, new TextEncoder().encode('Blocked Org')));
+			const utf8 = subjectOf(tlv(0x0c, new TextEncoder().encode('  blocked   ORG  ')));
+			const other = subjectOf(tlv(0x0c, new TextEncoder().encode('Other Org')));
+			expect(compareDistinguishedNames(teletex, utf8)).toBe(true);
+			expect(compareDistinguishedNames(utf8, teletex)).toBe(true);
+			expect(compareDistinguishedNames(teletex, other)).toBe(false);
+		});
+
+		it('refuses a TeletexString octet outside its initial state as unsupported', async () => {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
+			const rewritten = rewriteCertificateSubject(
+				certificate.der,
+				commonNameSubject(tlv(0x14, Uint8Array.of(0xc1, 0x41))),
+			);
+			expect(parseCertificateDer(rewritten)).toMatchObject({ ok: false, code: 'unsupported' });
+		});
+	});
+
+	it('keeps a leading U+FEFF in UTF8String names and DisplayText', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: '\u{FEFF}bom.example' },
+			extensions: {
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'userNotice', explicitText: '\u{FEFF}notice' }],
+					},
+				],
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(certificate.certificate.pem));
+		expect(parsed.subject.values.commonName).toBe('\u{FEFF}bom.example');
+		expect(parsed.certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{ type: 'userNotice', explicitText: '\u{FEFF}notice', explicitTextType: 'utf8String' },
+				],
+			},
+		]);
+	});
+
 	it('parses BMPString DisplayText in certificate policies', async () => {
 		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bmp-policy-parse.example' },
@@ -2388,9 +2700,8 @@ describe('parse: coverage — error paths', () => {
 		}
 	});
 
-	it('preserves a valid unsupported authorityInfoAccess GeneralName as unknown', async () => {
+	it('decodes an x400Address authorityInfoAccess location', async () => {
 		const aiaValue = sequence([
-			// x400Address [3] is a valid but unsupported GeneralName alternative.
 			sequence([objectIdentifier('1.3.6.1.5.5.7.48.2'), tlv(0xa3, new Uint8Array())]),
 		]);
 		const cert = await createSelfSignedCertificateWithRawExtensions({
@@ -2398,7 +2709,10 @@ describe('parse: coverage — error paths', () => {
 			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
 		});
 		const parsed = unwrap(parseCertificatePem(cert.certificate.pem));
-		expect(parsed.authorityInfoAccess?.[0]?.location).toMatchObject({ type: 'unknown', tag: 0xa3 });
+		expect(parsed.authorityInfoAccess?.[0]?.location).toEqual({
+			type: 'x400Address',
+			value: new Uint8Array(),
+		});
 	});
 
 	it('parseAuthorityKeyIdentifier rejects malformed authorityCertIssuer shapes', () => {
@@ -2417,7 +2731,7 @@ describe('parse: coverage — error paths', () => {
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0xa1, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0x01))]),
 			),
-		).toThrow('High-tag-number DER form is not supported');
+		).toThrow('DER element exceeds input length');
 		expect(() =>
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),

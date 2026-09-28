@@ -209,6 +209,38 @@ export function sliceElement(
 	return source.slice(element.start - element.headerLength, element.end);
 }
 
+/** A certificate with its TBSCertificate subject replaced and its signature left as it was. */
+export function rewriteCertificateSubject(
+	certificateDer: Uint8Array,
+	subjectDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const serialNumberIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const subjectIndex = serialNumberIndex + 4;
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === subjectIndex ? subjectDer : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
 /** The `index`-th child of a SEQUENCE, as its own DER element. */
 export function fieldAt(der: Uint8Array, index: number): DerElement {
 	const child = readSequenceChildren(der)[index];
@@ -470,6 +502,54 @@ export async function withCrlExtension(
 			.map((child) => sliceElement(tbsDer, child)),
 		extensions,
 	]);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
+
+/** Re-signs a CRL with `issuerDer` as its issuer Name. */
+export async function withCrlIssuer(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	issuerDer: Uint8Array,
+): Promise<Uint8Array> {
+	const tbsDer = childAt(crlDer, 0);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const issuerIndex = tbsChildren[0]?.tag === 0x02 ? 2 : 1;
+	const rebuiltTbsDer = sequence(
+		tbsChildren.map((child, index) =>
+			index === issuerIndex ? issuerDer : sliceElement(tbsDer, child),
+		),
+	);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
+
+/** Re-signs a self-signed certificate with `nameDer` as both its issuer and its subject. */
+export async function reissueSelfSignedCertificateWithName(
+	certificateDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	nameDer: Uint8Array,
+): Promise<Uint8Array> {
+	const tbsDer = childAt(certificateDer, 0);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const versionOffset = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const issuerIndex = versionOffset + 2;
+	const subjectIndex = versionOffset + 4;
+	const rebuiltTbsDer = sequence(
+		tbsChildren.map((child, index) =>
+			index === issuerIndex || index === subjectIndex ? nameDer : sliceElement(tbsDer, child),
+		),
+	);
 	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
 	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
 	return sequence([

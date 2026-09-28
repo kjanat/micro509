@@ -27,8 +27,8 @@ export interface Script {
 
 type Relation = 'inside' | 'ancestor' | 'none';
 
-const CORPUS = ['rfc', 'itu', 'w3c'] as const;
-const SPEC_RE = /docs\/(rfc|itu|w3c)(\/|$|[^A-Za-z0-9_.-])/;
+const CORPUS = ['rfc', 'itu', 'w3c', 'ms'] as const;
+const SPEC_RE = /docs\/(rfc|itu|w3c|ms)(\/|$|[^A-Za-z0-9_.-])/;
 const GLOB_META = /[*?[]/;
 const PROSE_CONSUMERS: ReadonlySet<string> = new Set(['git', 'gh', 'glab']);
 const METADATA: ReadonlySet<string> = new Set([
@@ -64,9 +64,9 @@ const PATTERN_VALUE_FOLLOWS = /^(?:--regexp|--file|-[A-Za-z]*[ef])$/;
 const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings', 'census']);
 const SPEC_RUNNERS: ReadonlySet<string> = new Set(['bun', 'node', 'deno', 'tsx', 'ts-node', 'run', 'runner', 'runner-run']);
 
-export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c}/**';
+export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c,ms}/**';
 
-export const DENY_MESSAGE = `STOP. Delegate authoritative spec reads (docs/rfc, docs/itu, docs/w3c) to the spec-lookup agent.
+export const DENY_MESSAGE = `STOP. Delegate authoritative spec reads (docs/rfc, docs/itu, docs/w3c, docs/ms) to the spec-lookup agent.
 
   Agent(subagent_type: "spec-lookup", prompt: "<your exact spec question>")
 

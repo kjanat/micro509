@@ -21,13 +21,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
+  for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
+  within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
+  extension field may use them. A tag number below 31 in that form, one whose
+  first subsequent octet is `0x80`, and one that ends before its final octet,
+  however long, are `malformed`. `checkStrictDer` reports
+  UNIVERSAL 31 to 36 as `unsupported` and the reserved numbers from 37 up as
+  `malformed`.
 - IDNA2008 (RFC 5890-5893, RFC 8753) over frozen Unicode 12.0.0 tables
   derived from the IANA registry. The builder converts U-labels to A-labels
   in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name of a
   SRVName, and dNSName and rfc822Name constraints, and fails with
   `invalid_idn` on a label that is not valid IDNA2008, an `xn--` label that is
   not an A-label, or an ASCII label beside an IDN label that is not NR-LDH. A
-  trailing root dot is kept and is not tested as a label.
+  dNSName or rfc822Name domain, SAN or constraint, that ends in the root dot
+  fails with `domain_trailing_dot`. RFC 5280 §4.2.1.6 requires the RFC 1034
+  §3.5 preferred name syntax, which has no trailing dot.
 - RFC 9608 `noRevAvail` (id-ce 56). Parsing exposes it as
   `ParsedCertificate.noRevAvail`, and `extensions.noRevAvail: true` emits it.
   The builder refuses it beside cA TRUE, `crlDistributionPoints`, freshestCRL
@@ -93,8 +103,158 @@ revocation })` report a certificate carrying `noRevAvail` or
   and `micro509/pkcs`. `createPkcs12MacData`, and `createPfx` through `mac`,
   throw these codes as a `ResultError`.
 
+- RFC 4985 §4 SRVName name constraints. `NameConstraintForm` gains
+  `{ type: 'srv', value }`, whose value is `_Service.Name`, `_Service`, or
+  `Name`. The builder writes it as an id-on-dnsSRV otherName with the Name in
+  A-labels and refuses any other shape (`invalid_srv_name_constraint`);
+  parsing decodes an id-on-dnsSRV otherName base to it, and it is accepted as
+  an initial constraint. Path validation matches a SRVName SAN's service
+  case-insensitively and its Name as that domain or a subdomain, both parts
+  when the restriction has both. While a SRVName constraint is in force, a
+  SRVName SAN that is not `_Service.Name` fails, and a malformed restriction
+  fails every SRVName. Every SRVName, typed or received, is held to one
+  profile: an RFC 6335 §5.1 service name and a Name of STD3 LDH labels with
+  IDNA2008 A-labels. The builder stores U+3002, U+FF0E and U+FF61 as "."
+  (RFC 4985 §3), in SANs, restrictions and initial constraints. A Name may
+  end in the root dot of an absolute name. It is kept as written, and
+  restriction matching compares its labels without the root label (RFC 3490
+  §2, §3.1).
+- `SubjectAltName` gains `otherName` (`typeId` and the DER of its value),
+  `x400Address`, `ediPartyName` (content octets), and `registeredID`
+  (dotted OID). Parsing produces them where it produced `unknown`, and the
+  builder encodes them; an `otherName` with the SRVName or SmtpUTF8Mailbox
+  type-id is refused (`other_name_type_id_has_variant`), as is a value that is
+  not one DER element or holds, at any depth, a universal-class element whose
+  form or contents break X.690 or whose rules micro509 cannot check, or a SET
+  or SET OF whose children follow neither DER order
+  (`invalid_other_name_value`). `x400Address` contents must follow the RFC
+  5280 Appendix A.1 ORAddress schema and `ediPartyName` contents the
+  EDIPartyName, with each DirectoryString validated by its encoding
+  (`invalid_general_name_content`); TeletexString, the Teletex and
+  extended-network-address extension attributes, and extension-attribute
+  types RFC 5280 does not define are refused as unsupported. A value or
+  contents nested deeper than 64 levels throw `limit_exceeded`. `unknown`
+  remains as raw builder input.
+- TeletexString Name attribute values decode in certificate, CRL, OCSP and
+  PKCS #7 names and in `decodeDerString`, which refused them before. Decoding
+  follows the initial state X.690 §8.23.5.2 fixes: the T.61 primary set
+  (register entry 102) with SPACE and DELETE, reading 2/3 as # and 2/4 as ¤
+  (T.61 Figure 2 Note 4). A C0 control function, an escape or shift sequence,
+  a position T.61 Table 1 leaves empty, or an octet from 0x80 up is
+  unsupported and returns `unsupported`. A decoded TeletexString value compares
+  like the other DirectoryString alternatives, after RFC 4518 preparation (RFC
+  5280 §7.1), so it matches a UTF8String or PrintableString value with the same
+  characters in issuer/subject chaining, CRL and OCSP issuer matching and
+  directoryName name constraints, with case and insignificant spaces
+  disregarded.
+- `unsupported` and `limit_exceeded` on the parse error codes. `unsupported`,
+  on `ParseCertificateErrorCode`, `ParseCertificateSigningRequestErrorCode`,
+  `ParseCertificateRevocationListErrorCode`, `ParseOcspRequestErrorCode`,
+  `ParseOcspResponseErrorCode`, `ParsePkcs7ErrorCode`, `ParsePfxErrorCode` and
+  `DecodeDerErrorCode`, is input the profile may allow but micro509 does not
+  decode, today a TeletexString octet outside the X.690 §8.23.5.2 initial
+  state. `limit_exceeded`, on those and on `ImportKeyErrorCode`,
+  `ImportEncryptedKeyErrorCode`, `ParsePfxErrorCode` and
+  `ParsePkcs12MacDataErrorCode`, is an implementation limit of micro509's own:
+  an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag
+  number of 2^53 or more, or DER or BER nested deeper than 64 levels, which
+  returned `malformed` before. The
+  throwing parsers throw a `ResultError` carrying the code.
+  `DECODE_REFUSAL_CODES`, its `DecodeRefusalCode` type and `DecodeFailureCode`
+  (`malformed` plus both) are exported from `micro509` and `micro509/result`,
+  and each of those error code types is built from them.
+  `VERIFY_ERROR_CODES`, `MatchServiceIdentityErrorCode` and the
+  `verifyCertificateSigningRequest` and `checkExtendedKeyUsage` failures carry
+  both codes too, so a certificate or CSR source that `buildCandidatePath`,
+  `validateCandidatePath`, `verifyCertificateChain`, the `validateFor*`
+  profiles or `matchServiceIdentity` cannot decode reports its refusal, and
+  `trustAnchorFromCertificate` throws it. `validateCandidatePath` and
+  `checkExtendedKeyUsage` report it at the index of the chain element they
+  cannot decode. An `intermediates` or `roots` entry that `buildCandidatePath`
+  or `verifyCertificateChain` cannot load has no chain index, so its refusal,
+  or its `issuer_not_found` when malformed, names the entry in the new
+  `details.source` (`VerifyFailureSource`). A directoryName name constraint that
+  micro509 cannot decode fails the chain with its refusal at the index of the
+  certificate checked against it. The same holds for
+  `MatchCertificatePrivateKeyErrorCode`,
+  `CheckCertificateRevocationAgainstCrlErrorCode`,
+  `ValidateOcspResponseErrorCode`, `CheckCertificateRevocationErrorCode`,
+  `RevocationIndeterminateReasonCode`, `CreatePkcs7CertBagErrorCode`,
+  `CreatePkcs7SignedDataErrorCode` and the
+  `verifyCertificateRevocationListSignature`,
+  `validateCertificateRevocationList` and `verifyOcspResponseSignature`
+  failures, where a CRL, OCSP response or request, or certificate that
+  micro509 cannot decode was reported as `signature_invalid`,
+  `non_applicable`, `request_mismatch`, `malformed_certificate`,
+  `invalid_certificate` or `invalid_signer_certificate`. A
+  distribution point, issuing distribution point or CRL issuer directoryName
+  that micro509 cannot decode fails `checkCertificateRevocationAgainstCrl`
+  with its refusal. The chain level treats an OCSP refusal like the
+  `signature_invalid` it replaces. `checkChainRevocation` records a CRL or
+  OCSP response it cannot parse as a `RevocationParseError` whose `code` is
+  `malformed` or the refusal, and `RevocationExecutionError` is the union of
+  it and `RevocationProcessingError`.
+- An OBJECT IDENTIFIER over the 64-octet limit inside RSASSA-PSS parameters
+  made the parameters `malformed`, so a certificate, CSR or CRL carrying them
+  parsed, and verifying it reported unsupported algorithm parameters. Parsing
+  now returns `limit_exceeded`, and
+  `verifySignature` returns it as the new `VerifySignatureLimitFailure`
+  (`VerifySignatureResult`), as it does for PKCS #1 or ECDSA parameters or a
+  signer SPKI past a decoding limit, which it reported as unsupported
+  parameters or a `verification_error`. A bare trust anchor whose SPKI is past
+  a decoding limit fails path validation with `limit_exceeded` rather than
+  `signature_invalid`. `verifyPkcs7SignedData` reports a refusal from
+  signature verification with its code instead of `malformed`.
+- `rejectOversizedDisplayText` on `verifyCertificateChain` and
+  `validateCandidatePath` rejects a certificate whose user notice
+  `explicitText` or `noticeRef` organization exceeds 200 characters with the
+  new `display_text_oversized` verify code, which joins `VERIFY_ERROR_CODES`
+  with the character count in `details.actual` and the field in the new
+  `details.userNoticeField` (`'explicitText'` or `'noticeRefOrganization'`).
+  By default such a certificate validates, and its parsed user notice carries
+  `oversizedExplicitText`, or its `noticeRef` carries `oversizedOrganization`,
+  with the count (the new `OversizedDisplayText` type). RFC 5280 §4.2.1.4 asks
+  certificate users to handle an oversized explicitText gracefully, and PKITS
+  4.8.19 leaves rejection to the application. The RFC says nothing about an
+  oversized organization, and keeping it is micro509's receiving policy.
+- URI-ID and SRV-ID matching accept a presented wildcard where RFC 9525 §6.3
+  allows one in the DNS domain name portion, such as `https://*.example.com/`
+  or `_imap.*.example.com`. It is the whole left-most label and matches one
+  label. A `sip` or `sips` URI-ID takes none (RFC 5922 §7.2).
+- A URI-ID whose host is an IPv4 address or a bracketed IPv6 address matches
+  by its octets (RFC 9525 §6.4).
+
 ### Changed
 
+- A typed SRVName SAN outside the RFC 6335 service grammar or STD3 LDH Name
+  syntax is refused with the new `invalid_srv_name`.
+- A critical subjectAltName holding a SRVName that is not `_Service.Name`
+  under that profile, or a SmtpUTF8Mailbox that holds a Byte Order Mark or
+  lacks a non-ASCII RFC 6531 Local-part and a domain of NR-LDH labels and
+  A-labels, carries information
+  path validation cannot process (RFC 5280 §4.2), and the chain fails with
+  `unrecognized_critical_extension`.
+- SRV-ID matching compares the Name of the reference identifier and of each
+  presented SRVName without the root label, so `_imaps.example.com.` and
+  `_imaps.example.com` match (RFC 3490 §2, §3.1). A Name with an empty label,
+  a repeated terminal dot or no labels still matches nothing.
+- SRV-ID matching holds the reference identifier and each presented SRVName
+  to the RFC 6335 §5.1 service name and STD3 LDH labels that the builder and
+  name constraints already enforce. A reference such as
+  `_123.example.com` or `_mail.example_com` is malformed input, and a presented
+  SRVName outside the grammar matches nothing.
+- A critical `otherName` name constraint fails closed only for SANs of the
+  same type-id, following X.509 §9.4.2.2, where each type-id is its own name
+  form. A UPN constraint no longer rejects a SRVName or SmtpUTF8Mailbox SAN,
+  and a certificate carrying a UPN still fails under it. The
+  `unsupported_name_constraints` detail names the type-id
+  (`otherName 1.3.6.1.4.1.311.20.2.3`). An `otherName` constraint base is
+  decoded into `typeId` and `value`, and a malformed one fails the parse.
+- A `registeredID` GeneralName whose OID is malformed fails the parse, in a
+  certificate and in a CRL. A critical subjectAltName carrying a
+  `registeredID` is processed rather than reported as an
+  `unrecognized_critical_extension`; a critical `registeredID` name
+  constraint still fails closed.
 - A reference identifier's domain converts to A-labels by IDNA2008 lookup
   after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
   processing. The mapping follows RFC 5895 §2 in order: each character to its
@@ -125,7 +285,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   builder invariant. `CrlEncoderErrorCode` gains
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
 - An RFC 7292 MAC password containing a UTF-16 surrogate (a non-BMP character
-  or a lone surrogate) is not a BMPString (RFC 7292 Appendix B.1).
+  or a lone surrogate), U+FFFE or U+FFFF is not a BMPString (RFC 7292 Appendix
+  B.1, X.680 §41.15).
   `createPkcs12MacData` and `createPfx` throw `ResultError` code
   `password_not_bmp_string` for it, and `parsePkcs12MacData`, `parsePfxDer`
   and `parsePfxPem` return that code. `parsePfxDer` and `parsePfxPem` reported
@@ -140,9 +301,25 @@ revocation })` report a certificate carrying `noRevAvail` or
   levels. `ParsedPfxAttribute.valuesHex` and the unknown bag's `valueDer` hold
   the received value with definite lengths and universal constructed strings
   joined, so they are not guaranteed to be DER.
+- A presented URI-ID whose host is a percent-encoded U-label, such as
+  `https://b%C3%BCcher.example/`, no longer matches the reference
+  `https://xn--bcher-kva.example/`. RFC 9525 §2 requires A-labels in the DNS
+  domain name portion of a URI-ID, and RFC 3986 §6 decodes only percent-encoded
+  unreserved characters. A reference URI-ID's host still decodes as UTF-8
+  and converts to A-labels (RFC 9525 §6.3).
 
 ### Fixed
 
+- Key import returned `malformed` for a decode limit inside a
+  SubjectPublicKeyInfo, PKCS#8, SEC 1 or EncryptedPrivateKeyInfo, and
+  `invalid_password` for one inside decrypted PKCS#8, PKCS#1 or SEC 1 content.
+  `verifyPkcs7SignedData` returned `malformed` for one inside signedAttrs.
+  They now return `limit_exceeded`.
+- PFX parsing accepted any context-specific constructed tag where ContentInfo
+  content, SafeBag bagValue and CertBag certValue are `[0] EXPLICIT`. Any
+  other tag is now `malformed`.
+- A BER implementation limit inside decrypted PFX SafeContents returned
+  `invalid_password`. It now returns `limit_exceeded`.
 - Policy validation applied a policyMappings extension found in the
   end-entity certificate. RFC 5280 §6.1.3 runs the policy-mapping step of
   §6.1.4 only for certificates before the last, and RFC 9618 keeps that, so a
@@ -193,9 +370,56 @@ revocation })` report a certificate carrying `noRevAvail` or
   DER encoder. `CreateCertificateErrorCode` gains `validity_date_invalid`, and
   `CrlEncoderErrorCode` and `OcspEncoderErrorCode` gain `invalid_date`, thrown
   as a `ResultError` before encoding.
+- Decoding ASN.1 text dropped a leading U+FEFF as a byte order mark. A UTCTime
+  or GeneralizedTime whose contents began with the octets EF BB BF parsed as
+  the time that followed, in certificates, CRLs, OCSP responses and
+  `decodeDerTime`; it is now malformed. A UTF8String keeps the character in
+  `decodeDerString`, parsed names and DisplayText.
+- BMPString decoding and `derBmpString` accepted U+FFFE and U+FFFF, which
+  X.680 §41.15 leaves out of BMPString. `decodeDerString` and name parsing now
+  reject them as they reject surrogates, `derBmpString` throws, and a BMPString
+  explicitText holding one fails with `invalid_bmp_string`.
+- OBJECT IDENTIFIER decoding refused any arc above 2^53 − 1, so a certificate
+  or CRL carrying a 2.25 UUID OID failed to parse, and the builder refused such
+  an OID with `invalid_oid`. Arcs now decode, encode and canonicalize exactly
+  up to 64 octets per sub-identifier (values below 2^448). X.660 §7.6 leaves
+  arcs unbounded; the bound is an implementation limit, checked before the arc
+  is accumulated, since decoding grew quadratically with an arc's length. A
+  longer arc returns `limit_exceeded` from every parser and from the builder,
+  which checks each arc's decimal length before it builds the arc and adds the
+  code to `ExtensionEncoderErrorCode`.
+- `createPfx` wrote any `friendlyName` into its BMPString, including surrogate
+  pairs, U+FFFE, U+FFFF, an empty name and names over 255 characters, and PFX
+  parsing accepted them. RFC 2985 §5.5.1 makes friendlyName one BMPString of 1
+  to 255 characters. `createPfx` now throws `ResultError` code
+  `invalid_friendly_name` from the new `PfxEncoderErrorCode`, and parsing
+  returns `malformed`.
+- DisplayText parsing (user-notice `explicitText` and the `noticeRef`
+  organization) replaced invalid UTF-8 with U+FFFD, accepted octets outside
+  the IA5String and VisibleString repertoires, and accepted any length. It now
+  decodes the tagged type strictly. An empty DisplayText and any other
+  encoding return `malformed`. An `explicitText` over 200 characters, such as
+  PKITS 4.8.19's, is kept whole and reported as `oversizedExplicitText`, and
+  an organization over 200 characters as `oversizedOrganization`. See Added.
+- CRL issuer and PKCS #7 signer issuer parsing decoded an attribute value that
+  failed its string type's decoding as UTF-8 and replaced invalid sequences
+  with U+FFFD. Such a value now returns `malformed`, as it does in a
+  certificate.
+- A UTF8String the builder wrote from a string holding a lone UTF-16
+  surrogate carried U+FFFD in its place, so the certificate held different
+  text from the input. A lone surrogate in a name attribute now fails with the
+  new `name_attribute_lone_surrogate`, and in an explicitText or `noticeRef`
+  organization with the new `display_text_lone_surrogate`. A surrogate pair
+  and U+FFFD itself encode as before.
 
 ### Security
 
+- A received dNSName or rfc822Name ending in the root dot, such as
+  `evil.example.com.`, matched no dNSName or rfc822Name constraint, so an
+  excluded `example.com` did not exclude it. While constraints of its type are
+  in force, such a name now fails with `name_constraints_violated`, and an
+  initial dNSName or rfc822Name constraint ending in the root dot returns
+  `unsupported_initial_name_constraints`.
 - Chain-level revocation skipped a certificate carrying `id-pkix-ocsp-nocheck`
   whatever the extension held, and `hasOcspNoCheckExtension` counted it the
   same way. Only the NULL value RFC 6960 §4.2.2.2.1 defines now counts.
@@ -204,6 +428,57 @@ revocation })` report a certificate carrying `noRevAvail` or
   `a%62c.example` matched the reference `abc.example` and `0x7f.0.0.1` matched
   `127.0.0.1`. A presented dNSName, and the Common Name fallback, now compare
   by a case-insensitive exact match (RFC 9549 §2.3).
+- A directoryName name constraint whose DN could not be decoded matched no
+  name, so an excluded subtree excluded nothing. While one is in force, every
+  subject DN and directoryName SAN fails with `name_constraints_violated`.
+- A directoryName comparison that RFC 4518 string preparation cannot perform,
+  such as one over a value holding a private-use character, counted as a
+  mismatch, so an excluded subtree did not exclude the name. Such a comparison
+  is now Undefined. It fails an excluded subtree and does not satisfy a
+  permitted one. A multi-valued RDN matches when some one-to-one pairing of
+  its attributes matches every pair, and is Undefined when no such pairing
+  exists but one does with Undefined pairs allowed, whatever order its
+  attributes take. Matching an RDN takes time linear in its attribute count,
+  in CRL distribution point names too.
+- URI name constraints and URI-ID matching read a URI SAN's host differently.
+  The constraint took the WHATWG URL hostname, which left
+  `ldap://%62locked.example/` percent-encoded and kept the trailing dot of
+  `https://blocked.example./`, so both escaped a `blocked.example` exclusion,
+  and the first still matched the URI-ID `ldap://blocked.example/`. URI-ID
+  matching cut every host at ";", so `https://blocked.example;extra/` matched
+  `https://blocked.example/`, and kept the trailing dot, so
+  `https://blocked.example./` did not. Both now read the host by RFC 3986:
+  a percent-encoded unreserved character decodes, the dot after the rightmost
+  label is dropped, and a reg-name that is not a domain name after decoding,
+  a percent-encoded U-label included, fails every URI constraint and matches
+  no URI-ID.
+- A SIP or SIPS URI-ID was cut at "/", "?" or "#" before its userinfo "@"
+  was found, so `sip:alice/phone@attacker.example` took the host `alice` and
+  matched `sip:alice/phone@victim.example`. The host now follows the one "@"
+  RFC 3261 §25.1 allows and ends at the first ";" or "?". A second "@", an
+  empty user part, a "/" in the hostport, or a ":" with no port digits after
+  it makes the URI-ID invalid, and so does a `sip://` or `sips://` URI-ID,
+  which §25.1 does not allow.
+- A URI's userinfo was dropped unread, so a presented
+  `https://bad%zz@example.com` took the host `example.com`, matched the
+  URI-ID `https://example.com`, and was evaluated against URI constraints.
+  A userinfo outside RFC 3986 §3.2.1, or for `sip` and `sips` outside the
+  RFC 3261 §25.1 user and password, now makes the host invalid. A reference
+  identifier's userinfo follows RFC 3987 §2.2 `iuserinfo`.
+- The path, query and fragment of a URI-ID or URI SAN, and the parameters
+  and headers of a SIP URI-ID, were never read, so `https://example.com/%zz`
+  and `sip:victim.example;%zz` matched the URI-IDs `https://example.com/` and
+  `sip:victim.example`, and the first was evaluated against URI constraints.
+  They must now follow RFC 3986 §3.3 to §3.5, RFC 3987 §2.2 for a reference
+  identifier, and the RFC 3261 §25.1 uri-parameters and headers, with every
+  "%" opening an escaped octet and no SIP parameter name repeated. A SIP host
+  must be a §25.1 hostname or an IP address.
+- A URI name constraint that was not a DNS name, such as
+  `https://blocked.example`, matched no host, so an excluded subtree excluded
+  nothing. The builder refuses it with the new `invalid_uri_name_constraint`,
+  initial constraints return `unsupported_initial_name_constraints`, and while
+  a received one is in force every URI SAN fails with
+  `name_constraints_violated`.
 - A dNSName or rfc822Name name constraint whose domain is malformed, such as
   `.example.com.`, matched no name, so an excluded subtree excluded nothing.
   While one is in force, every dNSName, rfc822Name or SmtpUTF8Mailbox of its
@@ -220,9 +495,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   one, passed path validation. It now parses as
   `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
   domain (RFC 9598 §6). A received mailbox fails whenever rfc822Name
-  constraints apply unless its Local-part is a non-ASCII RFC 6531 Local-part
-  and its domain is NR-LDH labels and A-labels that pass the RFC 5893 Bidi
-  rule. The builder emits
+  constraints apply unless it holds no Byte Order Mark, its Local-part is a
+  non-ASCII RFC 6531 Local-part, and its domain is NR-LDH labels and A-labels
+  that pass the RFC 5893 Bidi rule. The builder emits
   it and enforces RFC 9598 §3: `invalid_smtp_utf8_mailbox` for a missing `@`,
   a Byte Order Mark, a Local-part outside the RFC 6531 Dot-string or
   Quoted-string grammar, or a domain that is not lowercase NR-LDH labels and

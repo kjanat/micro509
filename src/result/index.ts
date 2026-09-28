@@ -6,6 +6,8 @@
  */
 
 export type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -15,6 +17,7 @@ export type {
 	UnwrappableResult,
 } from '#micro509/result/result';
 export {
+	DECODE_REFUSAL_CODES,
 	errorResult,
 	failureResult,
 	indexedErrorResult,

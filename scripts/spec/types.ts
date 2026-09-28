@@ -1,4 +1,4 @@
-export type DocKind = 'rfc' | 'pkits' | 'itu' | 'w3c';
+export type DocKind = 'rfc' | 'pkits' | 'itu' | 'w3c' | 'ms';
 
 export interface SourceLine {
 	readonly line: number;
@@ -50,7 +50,15 @@ export interface W3cMeta {
 	readonly date: string | undefined;
 }
 
-export type DocumentMeta = RfcMeta | PkitsMeta | ItuMeta | W3cMeta;
+export interface MsMeta {
+	readonly kind: 'ms';
+	readonly title: string;
+	readonly document: string;
+	readonly version: string | undefined;
+	readonly date: string | undefined;
+}
+
+export type DocumentMeta = RfcMeta | PkitsMeta | ItuMeta | W3cMeta | MsMeta;
 
 export interface DocumentRef {
 	readonly id: string;

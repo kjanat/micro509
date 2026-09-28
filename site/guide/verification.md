@@ -86,6 +86,17 @@ and anchors one search may examine, including those it skips because they are
 already on the path or their names do not match. The default is 100,000. When the bound stops the search before a trusted path
 is found, the result is `path_building_limit_exceeded`.
 
+A user notice `explicitText` or `noticeRef` organization longer than the 200
+characters RFC 5280 §4.2.1.4 allows a DisplayText is kept whole by the parser
+and reported as `oversizedExplicitText` on the qualifier or
+`oversizedOrganization` on the `noticeRef`, and the chain validates. §4.2.1.4
+asks certificate users to handle an oversized `explicitText` gracefully, and
+micro509 applies the same policy to the organization.
+`rejectOversizedDisplayText: true` on `verifyCertificateChain` or
+`validateCandidatePath` rejects such a certificate with
+`display_text_oversized` instead, and `details.userNoticeField` names the
+field. PKITS 4.8.19 leaves that choice for `explicitText` to the application.
+
 ## Verification purposes
 
 Four built-in validation profiles. `serverAuth`,
@@ -242,8 +253,9 @@ Supported identity types:
 
 - **DNS-ID** — with wildcard matching and case-insensitive comparison
 - **IP-ID** — with IPv6 normalization
-- **URI-ID** — scheme + host matching
-- **SRV-ID** — service name matching via otherName SAN
+- **URI-ID** — scheme + host matching, with wildcard matching except for SIP
+  and IP hosts compared by octets
+- **SRV-ID** — service name matching via otherName SAN, with wildcard matching
 
 ## Error codes
 
@@ -277,6 +289,7 @@ Every other error-code union in the library is tabled in the
 | `self_signed_leaf_not_allowed`               | Self-signed leaf without explicit opt-in       |
 | `unrecognized_critical_extension`            | Unknown critical extension                     |
 | `no_rev_avail_conflict`                      | noRevAvail with cA or a revocation pointer     |
+| `display_text_oversized`                     | Notice text over 200 chars, opt-in rejection   |
 | `intermediate_eku_constraint`                | Intermediate has restrictive EKU               |
 | `explicit_policy_required`                   | Policy required but not satisfied              |
 | `initial_policy_set_not_satisfied`           | Initial policy set not met                     |
@@ -287,6 +300,8 @@ Every other error-code union in the library is tabled in the
 | `ec_domain_parameters_missing`               | EC public key without a named curve            |
 | `certificate_revoked`                        | Revocation evidence confirms revocation        |
 | `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
+| `unsupported`                                | Certificate input micro509 does not decode     |
+| `limit_exceeded`                             | Certificate input exceeds a decoding limit     |
 
 ## CSR verification
 

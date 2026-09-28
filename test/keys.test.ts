@@ -49,9 +49,18 @@ import {
 	unwrap,
 } from '#micro509';
 import { toArrayBuffer, toHex } from '#micro509/internal/asn1/asn1';
-import { concatBytes, integerFromNumber, octetString, sequence } from '#micro509/internal/asn1/der';
+import {
+	bitString,
+	concatBytes,
+	explicitContext,
+	integerFromNumber,
+	nullValue,
+	octetString,
+	sequence,
+	tlv,
+} from '#micro509/internal/asn1/der';
 import { md5 } from '#micro509/internal/crypto/hash';
-import { encodePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2';
+import { encodePbes2AlgorithmIdentifier, encryptPbes2 } from '#micro509/internal/crypto/pbes2';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { hexToBytes } from '#test/helpers';
 
@@ -1067,6 +1076,24 @@ describe('keys: coverage — malformed inputs', () => {
 		}
 	});
 
+	test('tolerates OneAsymmetricKey extension fields from [2] up, high-tag-number ones included', async () => {
+		const { integerFromNumber, objectIdentifier, octetString, sequence } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const seedHex = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
+		const pubHex = 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
+		const der = sequence([
+			integerFromNumber(1),
+			sequence([objectIdentifier('1.3.101.112')]),
+			octetString(octetString(hexToBytes(seedHex))),
+			hexToBytes(`812100${pubHex}`),
+			hexToBytes('8200'),
+			hexToBytes('9f1f00'),
+			hexToBytes('bf814800'),
+		]);
+		expect(await importPkcs8Der(der)).toMatchObject({ ok: true });
+	});
+
 	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
 		const { integerFromNumber, nullValue, objectIdentifier, sequence } = await import(
 			'#micro509/internal/asn1/der'
@@ -1790,5 +1817,62 @@ describe('encrypted PKCS#8 KDF work-factor limit', () => {
 		if (!result.ok) {
 			expect(result.error.code).toBe('kdf_iterations_exceeded');
 		}
+	});
+});
+
+describe('key import decode limits', () => {
+	const overLongOid = tlv(0x06, Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f));
+	const overLongAlgorithm = sequence([overLongOid, nullValue()]);
+	const pkcs8WithOverLongAlgorithm = sequence([
+		integerFromNumber(0),
+		overLongAlgorithm,
+		octetString(octetString(new Uint8Array(32))),
+	]);
+
+	it('importSpkiDer returns limit_exceeded for an OID arc over 64 octets', async () => {
+		const spki = sequence([overLongAlgorithm, bitString(new Uint8Array(32))]);
+		expect(await importSpkiDer(spki)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+	});
+
+	it('importPkcs8Der returns limit_exceeded for an OID arc over 64 octets', async () => {
+		expect(await importPkcs8Der(pkcs8WithOverLongAlgorithm)).toMatchObject({
+			ok: false,
+			code: 'limit_exceeded',
+		});
+	});
+
+	it('importSec1Der returns limit_exceeded for a curve OID arc over 64 octets', async () => {
+		const sec1 = sequence([
+			integerFromNumber(1),
+			octetString(new Uint8Array(32)),
+			explicitContext(0, overLongOid),
+		]);
+		expect(await importSec1Der(sec1)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+	});
+
+	it('importEncryptedPkcs8Der returns limit_exceeded for EncryptedPrivateKeyInfo nested past 64 levels', async () => {
+		let nested = nullValue();
+		for (let depth = 0; depth < 100; depth += 1) {
+			nested = sequence([nested]);
+		}
+		expect(await importEncryptedPkcs8Der(sequence([nested, nested]), 'secret')).toMatchObject({
+			ok: false,
+			code: 'limit_exceeded',
+		});
+	});
+
+	it('importEncryptedPkcs8Der returns limit_exceeded for decrypted PKCS#8 with an OID arc over 64 octets', async () => {
+		const encryption = await encryptPbes2(pkcs8WithOverLongAlgorithm, {
+			password: 'secret',
+			iterations: 1,
+		});
+		const der = sequence([
+			encryption.algorithmIdentifierDer,
+			octetString(encryption.encryptedData),
+		]);
+		expect(await importEncryptedPkcs8Der(der, 'secret')).toMatchObject({
+			ok: false,
+			code: 'limit_exceeded',
+		});
 	});
 });

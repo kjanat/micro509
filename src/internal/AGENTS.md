@@ -13,20 +13,20 @@ Public barrels should stay in domain folders.
 internal/
 ├── asn1/    # DER/ASN.1 primitives, OID catalog
 ├── crypto/  # signature, hashing, encryption helpers
-├── shared/  # base64 + DN + IP + IDNA helpers with cross-domain use
+├── shared/  # base64 + DN + IP + IDNA + URI host helpers with cross-domain use
 ├── verify/  # policy/path/constraint engines
 └── x509/    # extension/name metadata helpers
 ```
 
 ## WHERE TO LOOK
 
-| Need                     | Location  | Notes                                                 |
-| ------------------------ | --------- | ----------------------------------------------------- |
-| ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution                 |
-| Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing                |
-| Cross-domain utilities   | `shared/` | base64 + DN + IP + IDNA helpers (pure, deterministic) |
-| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding     |
-| Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic     |
+| Need                     | Location  | Notes                                                    |
+| ------------------------ | --------- | -------------------------------------------------------- |
+| ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution                    |
+| Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing                   |
+| Cross-domain utilities   | `shared/` | base64 + DN + IP + IDNA + URI host (pure, deterministic) |
+| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding        |
+| Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic        |
 
 ## CONVENTIONS
 
@@ -39,6 +39,13 @@ internal/
 - `shared/idna-tables.ts` is generated; regenerate it with
   `bun scripts/idna-tables.bun.ts` and never edit it by hand.
 - Keep parser limits explicit when traversing nested structures.
+- A decoder that refuses input without calling it malformed throws through
+  `asn1/decode-refusal.ts`: `unsupported` for a construct micro509 does not
+  decode, `limit_exceeded` for an implementation limit such as
+  `MAX_OID_SUBIDENTIFIER_OCTETS` or `DEFAULT_MAX_DER_DEPTH`. Every Result
+  boundary maps those codes with `decodeFailureResult` or `decodeRefusalOf`; a
+  bare `throw new Error` stays `malformed`. A catch that replaces a decode
+  error with its own message calls `rethrowDecodeRefusal` first.
 - Use integer and length helpers from `asn1/` instead of local reimplementation.
 - Register new OIDs in `asn1/oids.json` under their registration arc; consume
   them as `OIDS.<name>`. Never inline a dotted-decimal literal in source.
@@ -58,6 +65,24 @@ internal/
   redundant-leading-zero alias cannot dodge a rule keyed on OID equality.
 - `x509/general-name.ts` is the only GeneralName decoder; certificate and CRL
   parsing both consume it so the two layers cannot drift on an alternative.
+- `x509/general-name-profile.ts` owns GeneralName content profiles: the
+  SRVName grammar, the URI name constraint, DirectoryString, EDIPartyName,
+  and ORAddress (schema in `x509/or-address.ts`). The builder, initial
+  constraints, and the name-constraint engine all call it, so issuance and
+  evaluation accept the same language.
+- URI name constraints and URI-ID matching read a URI's host through
+  `shared/uri-host.ts`, so the two decisions see the same host.
+- `asn1/asn1.ts` `checkStrictDer` walks one DER element and holds every
+  universal-class element to the X.690 rules its tag fixes, DER's clauses 10
+  and 11 included. It answers `unsupported` where those rules rest on ISO/IEC
+  2022, ISO 8601 or implicitly tagged contents, and for UNIVERSAL 31 to 36,
+  and throws `limit_exceeded` past its depth or tag-number limit. Use it where
+  caller bytes must be DER throughout. The ordinary reader and
+  `assertDerMaxDepth` keep their behaviour.
+- `asn1/der.ts` `readIdentifier` reads X.690 §8.1.2 identifier octets for both
+  the DER and the BER reader. A high-tag-number element keeps its leading
+  octet in `tag` and its number in `tagNumber`, so compare `tagNumber` when the
+  class allows numbers from 31 up.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.

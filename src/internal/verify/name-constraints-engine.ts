@@ -17,23 +17,29 @@ import {
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
-	DEFAULT_MAX_DER_DEPTH,
-	type DerElement,
-	readRootElement,
-} from '#micro509/internal/asn1/der';
+	DECODE_REFUSAL_CODES,
+	decodeRefusalOf,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
+import type { DerElement } from '#micro509/internal/asn1/der';
+import { DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import {
-	compareDistinguishedNames,
-	isWithinDirectoryNameSubtree,
-} from '#micro509/internal/shared/dn';
+import type { NameMatch } from '#micro509/internal/shared/dn';
+import { compareDistinguishedNames, directoryNameSubtreeMatch } from '#micro509/internal/shared/dn';
 import { domainToAscii } from '#micro509/internal/shared/idna';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
-import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
-import type { Micro509Error } from '#micro509/result/result';
+import { isMailboxDomain, presentedSmtpUtf8MailboxDomain } from '#micro509/internal/shared/mailbox';
+import { uriAuthorityHost } from '#micro509/internal/shared/uri-host';
+import {
+	parsePresentedSrvName,
+	parseSrvNameRestriction,
+	parseUriNameConstraint,
+} from '#micro509/internal/x509/general-name-profile';
+import type { DecodeRefusalCode, Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
 	NameConstraintForm,
@@ -65,7 +71,8 @@ export interface NameConstraintValidationState {
 /** Discriminant codes for name-constraint validation failures. */
 export type NameConstraintValidationFailureCode =
 	| 'name_constraints_violated'
-	| 'unsupported_name_constraints';
+	| 'unsupported_name_constraints'
+	| DecodeRefusalCode;
 
 /** Diagnostic context attached to a name-constraint validation failure. */
 export interface NameConstraintValidationFailureDetails {
@@ -181,8 +188,12 @@ interface AccumulatedNameConstraints {
 	 * a subsequent certificate carrying a name of such a form MUST be
 	 * rejected; certificates without one stay acceptable.
 	 */
-	readonly unsupportedCriticalForms: ReadonlySet<UnsupportedNameConstraintForm['type']>;
+	readonly unsupportedCriticalForms: ReadonlySet<UnsupportedDirectForm>;
+	/** Type-ids of otherName forms imposed the same way; X.509 §9.4.2.2 makes each a distinct form. */
+	readonly unsupportedCriticalOtherNames: ReadonlySet<string>;
 }
+
+type UnsupportedDirectForm = Exclude<UnsupportedNameConstraintForm['type'], 'otherName'>;
 
 /**
  * Walks the chain root-to-leaf, accumulating nameConstraints from CA
@@ -257,6 +268,7 @@ function seedInitialNameConstraints(
 			state.initialPermittedSubtrees.length > 0 ? [state.initialPermittedSubtrees] : [],
 		excluded: state.initialExcludedSubtrees,
 		unsupportedCriticalForms: new Set(),
+		unsupportedCriticalOtherNames: new Set(),
 	};
 }
 
@@ -292,33 +304,32 @@ function accumulateConstraints(
 					),
 				]
 			: current.excluded;
-	const newUnsupported = critical ? listUnsupportedNameConstraintTypes(constraints) : [];
-	const unsupportedCriticalForms =
-		newUnsupported.length > 0
-			? new Set([...current.unsupportedCriticalForms, ...newUnsupported])
-			: current.unsupportedCriticalForms;
-	return { permittedLevels, excluded, unsupportedCriticalForms };
+	const unsupported = critical ? listUnsupportedNameConstraintForms(constraints) : [];
+	return {
+		permittedLevels,
+		excluded,
+		unsupportedCriticalForms: new Set([
+			...current.unsupportedCriticalForms,
+			...unsupported.flatMap((form) => (form.type === 'otherName' ? [] : [form.type])),
+		]),
+		unsupportedCriticalOtherNames: new Set([
+			...current.unsupportedCriticalOtherNames,
+			...unsupported.flatMap((form) => (form.type === 'otherName' ? [form.typeId] : [])),
+		]),
+	};
 }
 
-/** Collects the distinct unsupported GeneralName form types from a nameConstraints extension. */
-function listUnsupportedNameConstraintTypes(
+/** Collects the unsupported GeneralName forms from a nameConstraints extension. */
+function listUnsupportedNameConstraintForms(
 	constraints: NameConstraints<ParsedNameConstraintForm>,
-): readonly UnsupportedNameConstraintForm['type'][] {
-	const unsupportedTypes = new Set<UnsupportedNameConstraintForm['type']>();
-	for (const subtree of constraints.permittedSubtrees ?? []) {
-		if (!isSupportedNameConstraintForm(subtree.base)) {
-			unsupportedTypes.add(subtree.base.type);
-		}
-	}
-	for (const subtree of constraints.excludedSubtrees ?? []) {
-		if (!isSupportedNameConstraintForm(subtree.base)) {
-			unsupportedTypes.add(subtree.base.type);
-		}
-	}
-	return [...unsupportedTypes];
+): readonly UnsupportedNameConstraintForm[] {
+	return [
+		...(constraints.permittedSubtrees ?? []),
+		...(constraints.excludedSubtrees ?? []),
+	].flatMap((subtree) => (isSupportedNameConstraintForm(subtree.base) ? [] : [subtree.base]));
 }
 
-/** True for name forms this engine can evaluate: dns, email, uri, ip, directoryName. */
+/** True for name forms this engine can evaluate: dns, email, uri, ip, directoryName, srv. */
 function isSupportedNameConstraintForm(form: ParsedNameConstraintForm): form is NameConstraintForm {
 	switch (form.type) {
 		case 'dns':
@@ -326,6 +337,7 @@ function isSupportedNameConstraintForm(form: ParsedNameConstraintForm): form is 
 		case 'uri':
 		case 'ip':
 		case 'directoryName':
+		case 'srv':
 			return true;
 		case 'otherName':
 		case 'x400Address':
@@ -348,13 +360,25 @@ function checkCertificateNames(
 	accumulated: AccumulatedNameConstraints,
 	index: number,
 ): NameConstraintValidationResult {
-	const subjectResult = checkCertificateSubjectName(certificate, accumulated, index);
-	if (!subjectResult.ok) return subjectResult;
-	const sanResult = checkCertificateSubjectAltNames(certificate, accumulated, index);
-	if (!sanResult.ok) return sanResult;
-	const subjectEmailResult = checkCertificateSubjectEmailFallback(certificate, accumulated, index);
-	if (!subjectEmailResult.ok) return subjectEmailResult;
-	return { ok: true };
+	try {
+		const subjectResult = checkCertificateSubjectName(certificate, accumulated, index);
+		if (!subjectResult.ok) return subjectResult;
+		const sanResult = checkCertificateSubjectAltNames(certificate, accumulated, index);
+		if (!sanResult.ok) return sanResult;
+		return checkCertificateSubjectEmailFallback(certificate, accumulated, index);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal === undefined) throw error;
+		return nameConstraintFailure(
+			refusal.code,
+			refusal.message,
+			index,
+			nameConstraintDetails({
+				subjectCommonName: certificate.subject.values.commonName,
+				actual: refusal.message,
+			}),
+		);
+	}
 }
 
 /** Checks a certificate subject DN against the accumulated directory-name constraints. */
@@ -396,8 +420,8 @@ function checkCertificateSubjectAltName(
 	san: SubjectAltName,
 	index: number,
 ): NameConstraintValidationResult {
-	const unsupportedForm = sanUnsupportedFormType(san);
-	if (unsupportedForm !== undefined && accumulated.unsupportedCriticalForms.has(unsupportedForm)) {
+	const unsupportedForm = unprocessableConstraintFormOf(san, accumulated);
+	if (unsupportedForm !== undefined) {
 		return nameConstraintFailure(
 			'unsupported_name_constraints',
 			`critical name constraints impose ${unsupportedForm} constraints that cannot be processed, and the certificate contains a ${unsupportedForm} subject alternative name`,
@@ -425,13 +449,28 @@ function checkCertificateSubjectAltName(
 	}
 	const checkable = checkableResult.value;
 	if (
-		checkable?.type === 'uri' &&
-		accumulatedHasUriConstraints(accumulated) &&
-		uriAuthorityLacksFqdn(checkable.value)
+		checkable?.type === 'srv' &&
+		accumulatedHasConstraintsOfType('srv', accumulated) &&
+		parsePresentedSrvName(asciiLowercase(checkable.value)) === undefined
 	) {
 		return nameConstraintFailure(
 			'name_constraints_violated',
-			`SAN uri:${checkable.value} has no FQDN authority and cannot be evaluated against URI name constraints`,
+			`SAN srv:${checkable.value} is not _Service.Name and cannot be evaluated against SRVName constraints`,
+			index,
+			nameConstraintDetails({
+				subjectCommonName: certificate.subject.values.commonName,
+				actual: `srv:${checkable.value}`,
+			}),
+		);
+	}
+	if (
+		checkable?.type === 'uri' &&
+		accumulatedHasConstraintsOfType('uri', accumulated) &&
+		uriConstraintHost(checkable.value) === undefined
+	) {
+		return nameConstraintFailure(
+			'name_constraints_violated',
+			`SAN uri:${checkable.value} has no FQDN authority host and cannot be evaluated against URI name constraints`,
 			index,
 			nameConstraintDetails({
 				subjectCommonName: certificate.subject.values.commonName,
@@ -480,24 +519,13 @@ function checkSmtpUtf8Mailbox(
 	);
 }
 
-/**
- * RFC 9598 §5: the Local-part is a non-ASCII RFC 6531 Local-part and the
- * lowercased domain is NR-LDH labels and A-labels before the domain is compared.
- */
+/** RFC 9598 §5: a presented SmtpUTF8Mailbox whose domain the email constraints permit. */
 function isSmtpUtf8MailboxDomainPermitted(
 	mailbox: string,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
-	const at = mailbox.lastIndexOf('@');
-	const localPart = mailbox.slice(0, Math.max(at, 0));
-	const domain = asciiLowercase(mailbox.slice(at + 1));
-	return (
-		at > 0 &&
-		isSmtpUtf8LocalPart(localPart) &&
-		[...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) &&
-		isMailboxDomain(domain, 'lookup') &&
-		isMailboxDomainPermitted(domain, accumulated)
-	);
+	const domain = presentedSmtpUtf8MailboxDomain(mailbox);
+	return domain !== undefined && isMailboxDomainPermitted(domain, accumulated);
 }
 
 function isMailboxDomainPermitted(
@@ -536,9 +564,13 @@ function isWellFormedConstraint(constraint: NameConstraintForm): boolean {
 		}
 		case 'email':
 			return constraintMailboxDomain(constraint.value) !== undefined;
-		case 'uri':
-		case 'ip':
+		case 'srv':
+			return parseSrvNameRestriction(asciiLowercase(constraint.value)) !== undefined;
 		case 'directoryName':
+			return parseDirectoryNameDerHex(constraint.derHex) !== undefined;
+		case 'uri':
+			return parseUriNameConstraint(constraint.value) !== undefined;
+		case 'ip':
 			return true;
 		default: {
 			const _exhaustive: never = constraint;
@@ -617,44 +649,65 @@ function accumulatedHasEmailConstraints(accumulated: AccumulatedNameConstraints)
 	return accumulated.excluded.some((c) => c.type === 'email');
 }
 
-/** True when any level of accumulated constraints addresses the URI name form. */
-function accumulatedHasUriConstraints(accumulated: AccumulatedNameConstraints): boolean {
-	for (const level of accumulated.permittedLevels) {
-		if (level.some((c) => c.type === 'uri')) {
-			return true;
-		}
-	}
-	return accumulated.excluded.some((c) => c.type === 'uri');
+/** True when any level of accumulated constraints addresses the given name form. */
+function accumulatedHasConstraintsOfType(
+	type: NameConstraintForm['type'],
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	return [...accumulated.excluded, ...accumulated.permittedLevels.flat()].some(
+		(constraint) => constraint.type === type,
+	);
 }
 
 /**
- * Maps a SAN to the unsupported constraint form it instantiates, if any.
- *
- * SRV-ID SANs are otherName [0] instances. Unknown SANs carry the full DER
- * tag byte: 0xa0 otherName [0], 0xa3 x400Address [3], 0xa5 ediPartyName [5],
- * 0x88 registeredID [8].
+ * The unprocessable critical constraint form a SAN instantiates, if one is in
+ * force. An otherName is its own form per type-id. Raw `unknown` input carries
+ * the DER tag byte, and an unknown otherName meets every otherName type-id.
  */
-function sanUnsupportedFormType(
+function unprocessableConstraintFormOf(
 	san: SubjectAltName,
-): UnsupportedNameConstraintForm['type'] | undefined {
-	if (san.type === 'srv' || san.type === 'smtpUtf8Mailbox') {
-		return 'otherName';
-	}
-	if (san.type !== 'unknown') {
-		return undefined;
-	}
-	switch (san.tag) {
-		case 0xa0:
-			return 'otherName';
-		case 0xa3:
-			return 'x400Address';
-		case 0xa5:
-			return 'ediPartyName';
-		case 0x88:
-			return 'registeredID';
+	accumulated: AccumulatedNameConstraints,
+): string | undefined {
+	const otherName = (typeId: string): string | undefined =>
+		accumulated.unsupportedCriticalOtherNames.has(typeId) ? `otherName ${typeId}` : undefined;
+	const direct = (form: UnsupportedDirectForm): string | undefined =>
+		accumulated.unsupportedCriticalForms.has(form) ? form : undefined;
+	switch (san.type) {
+		case 'otherName':
+			return otherName(san.typeId);
+		case 'smtpUtf8Mailbox':
+			return otherName(OIDS.idOnSmtpUtf8Mailbox);
+		case 'x400Address':
+		case 'ediPartyName':
+		case 'registeredID':
+			return direct(san.type);
+		case 'unknown':
+			return unknownTagForm(san.tag, accumulated);
 		default:
 			return undefined;
 	}
+}
+
+function unknownTagForm(tag: number, accumulated: AccumulatedNameConstraints): string | undefined {
+	let form: UnsupportedDirectForm;
+
+	switch (tag) {
+		case 0xa3:
+			form = 'x400Address';
+			break;
+		case 0xa5:
+			form = 'ediPartyName';
+			break;
+		case 0x88:
+			form = 'registeredID';
+			break;
+		case 0xa0:
+			return accumulated.unsupportedCriticalOtherNames.size > 0 ? 'otherName' : undefined;
+		default:
+			return undefined;
+	}
+
+	return accumulated.unsupportedCriticalForms.has(form) ? form : undefined;
 }
 
 /**
@@ -671,7 +724,12 @@ function sanToConstraintCheckable(san: SubjectAltName): SubjectAltNameCheckableR
 		case 'uri':
 			return { ok: true, value: { type: 'uri', value: san.value } };
 		case 'srv':
+			return { ok: true, value: { type: 'srv', value: san.value } };
 		case 'smtpUtf8Mailbox':
+		case 'otherName':
+		case 'x400Address':
+		case 'ediPartyName':
+		case 'registeredID':
 			return { ok: true, value: undefined };
 		case 'ip':
 			try {
@@ -711,12 +769,15 @@ function isNamePermitted(
 	name: NameConstraintForm,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
-	if (hasMalformedConstraint(name.type, accumulated)) {
+	if (
+		hasMalformedConstraint(name.type, accumulated) ||
+		(endsInRootDot(name) && accumulatedHasConstraintsOfType(name.type, accumulated))
+	) {
 		return false;
 	}
 	// Check excluded — if any match, reject.
 	for (const constraint of accumulated.excluded) {
-		if (nameMatchesConstraint(name, constraint)) {
+		if (nameConstraintMatch(name, constraint) !== 'mismatch') {
 			return false;
 		}
 	}
@@ -727,11 +788,24 @@ function isNamePermitted(
 		if (relevant.length === 0) {
 			continue;
 		}
-		if (!relevant.some((constraint) => nameMatchesConstraint(name, constraint))) {
+		if (!relevant.some((constraint) => nameConstraintMatch(name, constraint) === 'match')) {
 			return false;
 		}
 	}
 	return true;
+}
+
+/** RFC 5280 §4.2.1.6: a dNSName or rfc822Name host in RFC 1034 §3.5 preferred name syntax has no trailing root dot. */
+function endsInRootDot(name: NameConstraintForm): boolean {
+	return (name.type === 'dns' || name.type === 'email') && name.value.endsWith('.');
+}
+
+/** RFC 4518 §2: a comparison that string preparation cannot perform is Undefined. */
+function nameConstraintMatch(name: NameConstraintForm, constraint: NameConstraintForm): NameMatch {
+	if (name.type === 'directoryName' && constraint.type === 'directoryName') {
+		return matchesDnConstraint(name.derHex, constraint.derHex);
+	}
+	return nameMatchesConstraint(name, constraint) ? 'match' : 'mismatch';
 }
 
 /** Dispatches to the type-specific matching function for the name form. */
@@ -748,18 +822,37 @@ function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstra
 	if (name.type === 'ip' && constraint.type === 'ip') {
 		return matchesIpConstraint(name.addressBytes, constraint.addressBytes, constraint.maskBytes);
 	}
-	if (name.type === 'directoryName' && constraint.type === 'directoryName') {
-		return matchesDnConstraint(name.derHex, constraint.derHex);
+	if (name.type === 'srv' && constraint.type === 'srv') {
+		return matchesSrvConstraint(name.value, constraint.value);
 	}
 	return false;
 }
 
 /**
+ * RFC 4985 §4: a restriction's service, when present, must equal the SRVName's
+ * service case-insensitively (§2), and its Name, when present, is satisfied by
+ * that domain or any subdomain added to the left.
+ */
+function matchesSrvConstraint(name: string, constraint: string): boolean {
+	const presented = parsePresentedSrvName(asciiLowercase(name));
+	const restriction = parseSrvNameRestriction(asciiLowercase(constraint));
+	return (
+		presented !== undefined &&
+		restriction !== undefined &&
+		(restriction.service.length === 0 || presented.service === restriction.service) &&
+		(restriction.name.length === 0 ||
+			presented.name === restriction.name ||
+			presented.name.endsWith(`.${restriction.name}`))
+	);
+}
+
+/**
  * DNS name constraint matching. RFC 5280 §4.2.1.10 adds zero or more labels on
  * the left; §7.2 compares label by label case-insensitively. Constraint
- * "example.com" matches "example.com" and any subdomain. The leading-period
- * form ".example.com" restricts to subdomains, following the convention shared
- * by OpenSSL, Go and NSS rather than the RFC.
+ * "example.com" matches "example.com" and any subdomain. RFC 5280 defines no
+ * leading-period dNSName form; ".example.com" matches subdomains only, as in
+ * OpenSSL, BoringSSL, Go, NSS, mozilla::pkix and rustls-webpki (RFC 5280
+ * erratum 5997).
  */
 function matchesDnsConstraint(name: string, constraint: string): boolean {
 	const lowerName = name.toLowerCase();
@@ -808,65 +901,38 @@ function matchesEmailConstraint(name: string, constraint: string): boolean {
 }
 
 /**
- * RFC 5280 §4.2.1.10: URI constraint matching.
- * Applied to the host part of the URI.
- * - Constraint ".example.com" matches subdomains only.
- * - Constraint "example.com" matches ONLY that exact host (no subdomain
- *   expansion, unlike DNS constraints).
+ * RFC 5280 §4.2.1.10: a URI constraint applies to the host part, a constraint
+ * without a leading period names one host, and ".example.com" is satisfied by
+ * its subdomains only.
  */
 function matchesUriConstraint(uri: string, constraint: string): boolean {
-	const host = extractUriHost(uri);
-	if (host === undefined) {
+	const host = uriConstraintHost(uri);
+	const parsed = parseUriNameConstraint(constraint);
+	if (host === undefined || parsed === undefined) {
 		return false;
 	}
-	const lowerHost = host.toLowerCase();
-	const lowerConstraint = constraint.toLowerCase();
-	if (lowerConstraint.length === 0) {
-		return true;
-	}
-	if (lowerConstraint.startsWith('.')) {
-		return lowerHost.endsWith(lowerConstraint);
-	}
-	// Non-period constraint: exact host match only (RFC 5280 §4.2.1.10).
-	return lowerHost === lowerConstraint;
-}
-
-/** Extracts the host (reg-name) portion of a URI, stripping scheme, userinfo, port, and path. */
-function extractUriHost(uri: string): string | undefined {
-	try {
-		const url = new URL(uri);
-		return url.hostname;
-	} catch {
-		return undefined;
+	switch (parsed.type) {
+		case 'any':
+			return true;
+		case 'host':
+			return host === parsed.name;
+		case 'subdomains':
+			return host.endsWith(`.${parsed.name}`);
+		default: {
+			const _exhaustive: never = parsed;
+			throw new Error(`Unhandled UriNameConstraint type: ${String(_exhaustive)}`);
+		}
 	}
 }
 
 /**
- * RFC 5280 §4.2.1.10: a URI subject to a uniformResourceIdentifier constraint
- * MUST be rejected when its authority component has no FQDN host. True for a
- * missing or empty authority, a bracketed IPv6 literal, an IPv4 literal, or a
- * single-label host such as `localhost` (an FQDN has at least two labels).
+ * RFC 5280 §4.2.1.10: the domain name of a URI's authority host, which a URI
+ * constraint in force requires. `undefined` for no authority, an IP address, a
+ * reg-name that is not a domain name, or a single-label host.
  */
-function uriAuthorityLacksFqdn(uri: string): boolean {
-	const host = extractUriHost(uri);
-	if (host === undefined || host.length === 0 || host.startsWith('[')) {
-		return true;
-	}
-	if (isIpLiteral(host)) {
-		return true;
-	}
-	const labels = host.split('.').filter((label) => label.length > 0);
-	return labels.length < 2;
-}
-
-/** True when `host` parses as an IPv4 or IPv6 literal. */
-function isIpLiteral(host: string): boolean {
-	try {
-		parseIpAddressToBytes(host);
-		return true;
-	} catch {
-		return false;
-	}
+function uriConstraintHost(uri: string): string | undefined {
+	const host = uriAuthorityHost(uri, 'presented');
+	return host.type === 'dns' && host.name.includes('.') ? host.name : undefined;
 }
 
 /**
@@ -897,13 +963,13 @@ function matchesIpConstraint(
  * The subject DN must equal or be subordinate to the constraint DN,
  * using RFC 5280 section 7.1 name comparison semantics.
  */
-function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): boolean {
+function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): NameMatch {
 	const subjectName = parseDirectoryNameDerHex(subjectDerHex);
 	const constraintName = parseDirectoryNameDerHex(constraintDerHex);
 	if (subjectName === undefined || constraintName === undefined) {
-		return false;
+		return 'mismatch';
 	}
-	return isWithinDirectoryNameSubtree(subjectName, constraintName);
+	return directoryNameSubtreeMatch(subjectName, constraintName);
 }
 
 /** Re-parses a hex-encoded DER Name for RDN-by-RDN comparison. Returns `undefined` on malformed input. */
@@ -940,7 +1006,8 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 			attributes,
 			values,
 		};
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		return undefined;
 	}
 }
@@ -997,7 +1064,8 @@ function parseDirectoryNameRdn(
 				valueElement.tag,
 				requireElement(valueElement, 'directoryName value').value,
 			);
-		} catch {
+		} catch (error) {
+			rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 			return undefined;
 		}
 		const fieldKey = nameFieldKeyFromOid(oid);
@@ -1033,6 +1101,8 @@ function formatConstraintForm(form: NameConstraintForm): string {
 			return `ip:${decodeIpAddress(form.addressBytes)}`;
 		case 'directoryName':
 			return `dn:${form.derHex.slice(0, 20)}${form.derHex.length > 20 ? '...' : ''}`;
+		case 'srv':
+			return `srv:${form.value}`;
 		default: {
 			const exhaustive = form;
 			throw new Error(`Unhandled NameConstraintForm type: ${String(exhaustive)}`);
