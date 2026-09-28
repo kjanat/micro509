@@ -457,24 +457,32 @@ function mergeHits(hits: readonly SearchHit[]): readonly DocumentHits[] {
 	}));
 }
 
+function renderRunLines(out: Out, run: readonly RenderLine[]): void {
+	let previousLine: number | undefined;
+	for (const entry of run) {
+		if (previousLine !== undefined && entry.line > previousLine + 1) out.log('  --');
+		previousLine = entry.line;
+		out.log(`${String(entry.line).padStart(6)}${entry.match ? ':' : '-'} ${entry.text}`);
+	}
+}
+
+function renderRunHeader(out: Out, label: string, previous: string): string {
+	if (label === previous) {
+		out.log('  --');
+		return previous;
+	}
+	if (previous !== '') out.log('');
+	out.log(label);
+	return label;
+}
+
 function renderHits(out: Out, hits: readonly SearchHit[]): void {
 	let group = '';
 	for (const document of mergeHits(hits)) {
 		for (const run of runsOf(document.lines)) {
 			const label = run.find((entry) => entry.match)?.label ?? document.doc;
-			if (label === group) {
-				out.log('  --');
-			} else {
-				if (group !== '') out.log('');
-				out.log(label);
-				group = label;
-			}
-			let previousLine: number | undefined;
-			for (const entry of run) {
-				if (previousLine !== undefined && entry.line > previousLine + 1) out.log('  --');
-				previousLine = entry.line;
-				out.log(`${String(entry.line).padStart(6)}${entry.match ? ':' : '-'} ${entry.text}`);
-			}
+			group = renderRunHeader(out, label, group);
+			renderRunLines(out, run);
 		}
 	}
 }

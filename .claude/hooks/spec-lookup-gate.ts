@@ -664,32 +664,56 @@ function launcherOperand(words: readonly string[], start: number, launcher: stri
 	return index;
 }
 
+const PACKAGE_EXECUTORS: ReadonlySet<string> = new Set(['npx', 'bunx', 'npm']);
+const RUN_SUBCOMMAND_RUNNERS: ReadonlySet<string> = new Set([
+	'bun',
+	'deno',
+	'run',
+	'runner',
+	'runner-run',
+]);
+const SPEC_ALIAS_RUNNERS: ReadonlySet<string> = new Set(['bun', 'run', 'runner', 'runner-run']);
+const SPEC_ENTRYPOINT = /(?:^|\/)scripts\/spec\/main\.ts$/;
+
+function runnerName(executable: string): string {
+	return path.basename(executable).replace(/^(bun|node|tsx|ts-node)@.+$/, '$1');
+}
+
+function packageExecutable(words: readonly string[], start: number, runner: string): number | undefined {
+	const operand = launcherOperand(words, start + 1, runner);
+	if (runner === 'npx' || runner === 'bunx') return operand;
+	const name = words[operand];
+	if (runner === 'npm') {
+		return name === 'exec' || name === 'x' ? launcherOperand(words, operand + 1, 'npm') : undefined;
+	}
+	if (runner === 'bun' && name === 'x') return launcherOperand(words, operand + 1, 'bunx');
+	return undefined;
+}
+
+function directSpecEntrypoint(
+	words: readonly string[],
+	start: number,
+	runner: string,
+): number | undefined {
+	let operand = launcherOperand(words, start + 1, runner);
+	if (words[operand] === 'run' && RUN_SUBCOMMAND_RUNNERS.has(runner)) {
+		operand = launcherOperand(words, operand + 1, runner);
+	}
+	const entrypoint = words[operand] ?? '';
+	if (SPEC_ENTRYPOINT.test(entrypoint)) return operand;
+	return entrypoint === 'spec' && SPEC_ALIAS_RUNNERS.has(runner) ? operand : undefined;
+}
+
 function specEntrypoint(words: readonly string[]): number | undefined {
 	let start = commandIndex(words);
 	while (start < words.length) {
 		const executable = words[start] ?? '';
-		if (/(?:^|\/)scripts\/spec\/main\.ts$/.test(executable)) return start;
-		// npx/bunx may name a versioned runtime package, e.g. tsx@4.
-		const runner = path.basename(executable).replace(/^(bun|node|tsx|ts-node)@.+$/, '$1');
-		if (!SPEC_RUNNERS.has(runner) && !['npx', 'bunx', 'npm'].includes(runner)) return undefined;
-		let operand = launcherOperand(words, start + 1, runner);
-		const name = words[operand];
-		if (runner === 'npx' || runner === 'bunx') {
-			start = operand;
-			continue;
-		}
-		if (runner === 'npm' || (runner === 'bun' && name === 'x')) {
-			if (name !== 'exec' && name !== 'x') return undefined;
-			start = launcherOperand(words, operand + 1, runner === 'bun' ? 'bunx' : 'npm');
-			continue;
-		}
-		if (name === 'run' && ['bun', 'deno', 'run', 'runner', 'runner-run'].includes(runner)) {
-			operand = launcherOperand(words, operand + 1, runner);
-		}
-		const entrypoint = words[operand] ?? '';
-		if (/(?:^|\/)scripts\/spec\/main\.ts$/.test(entrypoint)) return operand;
-		if (entrypoint === 'spec' && ['bun', 'run', 'runner', 'runner-run'].includes(runner)) return operand;
-		return undefined;
+		if (SPEC_ENTRYPOINT.test(executable)) return start;
+		const runner = runnerName(executable);
+		if (!SPEC_RUNNERS.has(runner) && !PACKAGE_EXECUTORS.has(runner)) return undefined;
+		const nested = packageExecutable(words, start, runner);
+		if (nested === undefined) return directSpecEntrypoint(words, start, runner);
+		start = nested;
 	}
 	return undefined;
 }

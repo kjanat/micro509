@@ -113,7 +113,7 @@ describe('ITU series and bundled identities', () => {
 		'reads %s and its date from a bundle member cover',
 		(recommendation) => {
 			const source = cover(recommendation);
-			const stem = recommendation.replace('.', '') + '1';
+			const stem = `${recommendation.replace('.', '')}1`;
 			expect(ituIdentifier(stem, 'X.680', source)).toBe(
 				`itu-${recommendation.replace('.', '').toLowerCase()}-2021`,
 			);

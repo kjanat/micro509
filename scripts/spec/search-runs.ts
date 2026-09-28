@@ -5,8 +5,7 @@ export interface RenderLine {
 	readonly label: string;
 }
 
-/** Keep context across removed page furniture attached to an actual match. */
-export function runsOf(lines: readonly RenderLine[]): readonly (readonly RenderLine[])[] {
+function splitRuns(lines: readonly RenderLine[]): RenderLine[][] {
 	const runs: RenderLine[][] = [];
 	let current: RenderLine[] = [];
 	let label: string | undefined;
@@ -23,22 +22,40 @@ export function runsOf(lines: readonly RenderLine[]): readonly (readonly RenderL
 		current.push(entry);
 	}
 	if (current.length > 0) runs.push(current);
-	if (!lines.some((line) => line.match)) return [];
+	return runs;
+}
+
+function matchLabel(run: readonly RenderLine[] | undefined): string | undefined {
+	return run?.find((line) => line.match)?.label;
+}
+
+function attachOrphanRun(runs: RenderLine[][], index: number): void {
+	const run = runs[index];
+	if (run === undefined) return;
+	const previous = runs[index - 1];
+	const next = runs[index + 1];
+	if (previous !== undefined && (next === undefined || matchLabel(previous) === run[0]?.label)) {
+		previous.push(...run);
+	} else {
+		next?.unshift(...run);
+	}
+	runs.splice(index, 1);
+}
+
+function attachOrphanRuns(runs: RenderLine[][]): void {
 	for (let index = 0; index < runs.length; ) {
-		const run = runs[index];
-		if (run === undefined || run.some((line) => line.match)) {
+		if (runs[index]?.some((line) => line.match) === true) {
 			index += 1;
 			continue;
 		}
-		const previous = runs[index - 1];
-		const next = runs[index + 1];
-		const previousLabel = previous?.find((line) => line.match)?.label;
-		if (previous !== undefined && (next === undefined || previousLabel === run[0]?.label)) {
-			previous.push(...run);
-		} else if (next !== undefined) {
-			next.unshift(...run);
-		}
-		runs.splice(index, 1);
+		attachOrphanRun(runs, index);
 	}
+}
+
+/** Keep context across removed page furniture attached to an actual match. */
+export function runsOf(lines: readonly RenderLine[]): readonly (readonly RenderLine[])[] {
+	if (!lines.some((line) => line.match)) return [];
+	const runs = splitRuns(lines);
+	attachOrphanRuns(runs);
 	return runs;
 }
