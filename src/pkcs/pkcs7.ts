@@ -960,8 +960,8 @@ async function verifyPkcs7BareSignerInfo(
 		return verificationResult.valid
 			? { ok: true }
 			: verifyPkcs7Failure('signature_invalid', 'SignedData signature does not verify');
-	} catch {
-		return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+	} catch (error) {
+		return signatureVerificationThrowFailure(error);
 	}
 }
 
@@ -976,6 +976,16 @@ function pkcs7Failure(
 }
 
 /** Shorthand for constructing a PKCS#7 verification failure result. */
+/** A signer's signature verification that threw: its decode refusal, else `malformed`. */
+function signatureVerificationThrowFailure(
+	error: unknown,
+): ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure> {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	return refusal === undefined
+		? verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData')
+		: verifyPkcs7Failure(refusal.code, refusal.message);
+}
+
 function verifyPkcs7Failure(
 	code: VerifyPkcs7SignedDataErrorCode,
 	message: string,
@@ -1573,8 +1583,8 @@ async function verifySignedAttrs(
 			return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
 		}
 		verified = verificationResult.valid;
-	} catch {
-		return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+	} catch (error) {
+		return signatureVerificationThrowFailure(error);
 	}
 	if (!verified) {
 		return verifyPkcs7Failure(

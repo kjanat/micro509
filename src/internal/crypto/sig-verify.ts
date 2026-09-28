@@ -302,6 +302,9 @@ export async function verifySignedData(
  * or runtime verification failures.
  *
  * Tries both DER and raw ECDSA encodings when the first attempt fails.
+ *
+ * @throws `limit_exceeded` on RSA-PSS parameters holding an OID sub-identifier
+ * over 64 octets.
  */
 export async function verifySignedDataDetailed(
 	signatureAlgorithmOid: string,

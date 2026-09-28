@@ -4,23 +4,31 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	createCertificate,
 	createCertificateRevocationList,
+	createCertificateSigningRequest,
 	createOcspResponse,
 	createPkcs7CertBag,
 	createPkcs7SignedData,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	matchCertificatePrivateKey,
+	parseCertificateDer,
 	parseCertificatePem,
+	parseCertificateRevocationListDer,
+	parseCertificateSigningRequestDer,
 	validateCertificateRevocationList,
 	validateOcspResponse,
 	verifyCertificateRevocationListSignature,
+	verifyCertificateSigningRequest,
 	verifyOcspResponseSignature,
 } from '#micro509';
+import { verifySignature } from '#micro509/crypto';
 import { toHex } from '#micro509/internal/asn1/asn1';
 import {
+	explicitContext,
 	nullValue,
 	objectIdentifier,
 	octetString,
+	readSequenceChildren,
 	sequence,
 	setOf,
 	tlv,
@@ -30,7 +38,9 @@ import {
 	appendCertificateExtensions,
 	FAR_FUTURE_NEXT_UPDATE,
 	issueChain,
+	replaceCsrSignatureAlgorithm,
 	rewriteCertificateSubject,
+	sliceElement,
 } from '#test/helpers';
 
 const teletexSubject = sequence([
@@ -244,5 +254,79 @@ describe('decode refusals in matchCertificatePrivateKey', () => {
 			ok: false,
 			code: 'limit_exceeded',
 		});
+	});
+});
+
+describe('decode refusals in RSA-PSS signature parameters', () => {
+	const overlongArc = Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f);
+	const overlongHashParameters = sequence([
+		explicitContext(0, sequence([tlv(0x06, overlongArc), nullValue()])),
+	]);
+	const limitExceeded = { ok: false, code: 'limit_exceeded' };
+
+	it('reports a CSR whose RSA-PSS hash OID is over a decoding limit as limit_exceeded', async () => {
+		const keyPair = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'pss-limit.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		const refused = replaceCsrSignatureAlgorithm(
+			csr.der,
+			sequence([objectIdentifier(OIDS.rsassaPss), overlongHashParameters]),
+		);
+		expect(parseCertificateSigningRequestDer(refused)).toMatchObject(limitExceeded);
+		expect(await verifyCertificateSigningRequest(refused)).toMatchObject(limitExceeded);
+	});
+
+	it('reports a certificate or CRL whose RSA-PSS hash OID is over a decoding limit as limit_exceeded', async () => {
+		const algorithm = sequence([objectIdentifier(OIDS.rsassaPss), overlongHashParameters]);
+		const withAlgorithm = (der: Uint8Array): Uint8Array => {
+			const [tbs, , signatureValue] = readSequenceChildren(der);
+			if (tbs === undefined || signatureValue === undefined) throw new Error('fixture shape');
+			const tbsDer = sliceElement(der, tbs);
+			const children = readSequenceChildren(tbsDer);
+			const signatureIndex = children.findIndex((child) => child.tag === 0x30);
+			return sequence([
+				sequence(
+					children.map((child, index) =>
+						index === signatureIndex ? algorithm : sliceElement(tbsDer, child),
+					),
+				),
+				algorithm,
+				sliceElement(der, signatureValue),
+			]);
+		};
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'pss-limit-issuer.example' },
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'pss-limit-issuer.example' },
+			signerPrivateKey: keyPair.privateKey,
+			issuerPublicKey: keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		expect(parseCertificateDer(withAlgorithm(certificate.der))).toMatchObject(limitExceeded);
+		expect(parseCertificateRevocationListDer(withAlgorithm(crl.der))).toMatchObject(limitExceeded);
+	});
+
+	it('verifySignature reports RSA-PSS parameters over a decoding limit as limit_exceeded', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'pss-limit-signer.example' },
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		if (!parsed.ok) throw new Error('fixture certificate does not parse');
+		expect(
+			await verifySignature({
+				signerSpkiDer: parsed.value.subjectPublicKeyInfoDer,
+				signatureAlgorithm: { oid: OIDS.rsassaPss, parametersDer: overlongHashParameters },
+				publicKeyAlgorithm: {
+					oid: parsed.value.publicKeyAlgorithmOid,
+					parametersOid: parsed.value.publicKeyParametersOid,
+				},
+				signature: new Uint8Array(64),
+				data: new Uint8Array(1),
+			}),
+		).toMatchObject(limitExceeded);
 	});
 });

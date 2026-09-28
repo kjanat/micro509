@@ -194,6 +194,13 @@ revocation })` report a certificate carrying `noRevAvail` or
   OCSP response it cannot parse as a `RevocationParseError` whose `code` is
   `malformed` or the refusal, and `RevocationExecutionError` is the union of
   it and `RevocationProcessingError`.
+- An OBJECT IDENTIFIER over the 64-octet limit inside RSASSA-PSS parameters
+  made the parameters `malformed`, so a certificate, CSR or CRL carrying them
+  parsed, and verifying it reported unsupported algorithm parameters. Parsing
+  now returns `limit_exceeded`, and
+  `verifySignature` returns it as the new `VerifySignatureLimitFailure`
+  (`VerifySignatureResult`). `verifyPkcs7SignedData` reports a refusal from
+  signature verification with its code instead of `malformed`.
 - `rejectOversizedDisplayText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice
   `explicitText` or `noticeRef` organization exceeds 200 characters with the
