@@ -10,6 +10,8 @@ export type {
 	SignDataResult,
 	VerifySignatureConfigFailure,
 	VerifySignatureInput,
+	VerifySignatureLimitFailure,
+	VerifySignatureResult,
 	VerifySignedDataFailure,
 	VerifySignedDataResult,
 	VerifySignedDataSuccess,

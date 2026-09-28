@@ -27,8 +27,8 @@ export interface Script {
 
 type Relation = 'inside' | 'ancestor' | 'none';
 
-const CORPUS = ['rfc', 'itu', 'w3c'] as const;
-const SPEC_RE = /docs\/(rfc|itu|w3c)(\/|$|[^A-Za-z0-9_.-])/;
+const CORPUS = ['rfc', 'itu', 'w3c', 'ms'] as const;
+const SPEC_RE = /docs\/(rfc|itu|w3c|ms)(\/|$|[^A-Za-z0-9_.-])/;
 const GLOB_META = /[*?[]/;
 const INTENT_RE = /#\s*spec-intent:\s*\S.{9,}/;
 const PROSE_CONSUMERS: ReadonlySet<string> = new Set(['git', 'gh', 'glab']);
@@ -64,15 +64,15 @@ const PATTERN_FLAGS = /^(?:--regexp|--file)(?:=|$)|^-[A-Za-z]*[ef]/;
 const PATTERN_VALUE_FOLLOWS = /^(?:--regexp|--file|-[A-Za-z]*[ef])$/;
 const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings']);
 
-export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c}/**';
+export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c,ms}/**';
 
-export const DENY_MESSAGE = `STOP. The authoritative spec corpus (docs/rfc, docs/itu, docs/w3c) is read only by the spec-lookup agent.
+export const DENY_MESSAGE = `STOP. The authoritative spec corpus (docs/rfc, docs/itu, docs/w3c, docs/ms) is read only by the spec-lookup agent.
 
 Do not read, grep, or cat these files directly, and do not search a directory that contains them. Hand the question to the spec-lookup subagent, which censuses the whole docs/ tree, fetches missing or superseded documents, reads whole sections, and returns a cited answer:
 
   Agent(subagent_type: "spec-lookup", prompt: "<your exact spec question>")
 
-To search the rest of the repository, scope the search to a directory that does not contain docs/rfc, docs/itu, or docs/w3c.`;
+To search the rest of the repository, scope the search to a directory that does not contain docs/rfc, docs/itu, docs/w3c, or docs/ms.`;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);

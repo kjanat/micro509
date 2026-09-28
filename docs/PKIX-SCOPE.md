@@ -77,6 +77,48 @@ Current conformance evidence:
       version v1. A BOOLEAN whose content is not a single `0x00` or `0xFF`
       octet is rejected as malformed (X.690 §11.1). PKCS#12 input may be BER;
       see §15.
+- [x] Encode, decode and canonicalize OBJECT IDENTIFIER arcs with arbitrary
+      precision. X.660 §7.6 leaves arc values unbounded, and RFC 5280
+      Appendix B states "There is no maximum size for OIDs"; its 2^28 arc,
+      100-byte and 20-element figures are the minimum an implementation must
+      support. micro509 bounds one sub-identifier's base-128 encoding at 64
+      octets (values below 2^448) as an implementation limit, checked before
+      any of the arc is accumulated. Decoding an arc grows quadratically with
+      its octets (`bench/oid-bench.ts`: 1,000 octets in 1 ms, 10,000 in 22 ms,
+      100,000 in 1.1 s on the reference machine), and the bound keeps a parse
+      linear in its input. A longer arc returns `limit_exceeded` from every
+      parser, and the builder refuses it with `invalid_oid`.
+- [x] Decode a TeletexString Name attribute value in the initial state X.690
+      §8.23.5.2 fixes: register entry 102, the T.61 primary set, read by T.61
+      Table 1 with 2/3 as # and 2/4 as ¤ (T.61 Figure 2 Note 4), plus the SPACE
+      and DELETE of X.680 Table 8. No standard maps TeletexString to Unicode
+      (RFC 4518 §2.1); micro509 maps each character to the ISO/IEC 10646
+      character of the same name, as the RFC 1345 `T.61-7bit` table does.
+      Octets below 0x20 (the C0 control functions, ESC and the shifts among
+      them), the six positions T.61 Table 1 leaves empty, and octets from 0x80
+      up (C1 and the right half, where X.690 designates nothing) are
+      unsupported, and the parse returns `unsupported` rather than `malformed`,
+      since micro509 does not decode them and X.690 and T.61 disagree on the
+      right half. RFC 5280 §7.1 makes TeletexString support optional and
+      defines a match as the same attribute type with values equal after RFC
+      4518 preparation, which transcodes a TeletexString by a local mapping
+      (RFC 4518 §2.1) before the remaining steps; micro509 prepares the decoded
+      value like the other DirectoryString alternatives, so it matches a
+      UTF8String or PrintableString value with the same characters, in
+      issuer/subject chaining, CRL and OCSP issuer matching and directoryName
+      name constraints. A TeletexString value micro509 cannot decode fails the
+      parse of a certificate, CRL, OCSP message or PKCS#7 signer; inside a
+      directoryName name constraint it fails every subject DN and directoryName
+      SAN while the constraint is in force (RFC 4518 §2 makes a failed
+      preparation Undefined, and RFC 5280 leaves the consequence unspecified).
+      A decoded value that preparation refuses, such as one holding a
+      private-use character, makes its comparison Undefined as well. In a
+      directoryName name constraint an Undefined comparison fails an excluded
+      subtree and does not satisfy a permitted one. A multi-valued RDN is
+      Undefined when no one-to-one pairing of its attributes matches every
+      pair but one does with Undefined pairs allowed. Matching an RDN takes time
+      linear in its attribute count. Issuer/subject chaining and
+      CRL and OCSP issuer matching treat it as no match.
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.
 - [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
@@ -102,12 +144,80 @@ Current conformance evidence:
 - [x] Support initial permitted/excluded subtrees as validator inputs.
 - [x] Apply constraints across supported name forms, not just DNS SANs.
 - [x] Handle self-issued certificates correctly when evaluating constraints.
+- [x] Enforce SRVName restrictions per RFC 4985 §4: `_Service.Name`,
+      `_Service`, or `Name`, the service matched case-insensitively and the
+      Name matching that domain and its subdomains label by label.
+- [x] Accept a SRVName Name, in a SAN or a restriction, that ends in the
+      dot of an absolute name, and keep it as written. Restriction matching
+      and SRV-ID matching compare the Name's labels without the root label,
+      which RFC 3490 §2 does not count as a label, so `_mail.example.com.`
+      and `_mail.example.com` match each other (RFC 3490 §3.1 requirement 4).
+      An empty label elsewhere, a repeated terminal dot and an empty Name are
+      malformed.
+- [x] Hold every SRVName, in typed SANs, typed and initial restrictions, and
+      received names and restrictions under evaluation, to one syntax. The
+      service is an RFC 6335 §5.1 service name (1 to 15 letters, digits and
+      hyphens, at least one letter, no leading, trailing or adjacent hyphen).
+      RFC 4985 §2 requires the components to be consistent with an RFC 2782
+      SRV RR, and RFC 6335 §5.2, which updates RFC 2782, requires the Service
+      Label to be such a name. The Name is STD3 LDH labels (RFC 4985 §3).
+      U+3002, U+FF0E and U+FF61 are stored as U+002E (RFC 4985 §3). Holding a
+      received Name's `xn--` labels to IDNA2008 A-labels is micro509's
+      choice; RFC 4985 requires conversion only when a Name is stored.
+      RFC 4985 gives a relying party no rule for a received restriction
+      outside this syntax. micro509 cannot evaluate one, counts it as
+      malformed and rejects every SRVName while it is in force, as RFC 5280
+      §4.2 requires for a critical extension holding information that cannot
+      be processed.
+- [x] Match a dNSName constraint that starts with a period, such as
+      `.example.com`, against subdomains only. `www.example.com` and
+      `a.b.example.com` fall inside it, and `example.com` does not. RFC 5280
+      §4.2.1.10 defines the leading period for URI and rfc822Name constraints
+      only, and erratum 5997 (Held for Document Update) records the readings
+      for dNSName. OpenSSL, BoringSSL, Go, NSS, mozilla::pkix and
+      rustls-webpki all match subdomains only.
+- [x] Hold every URI constraint, typed, initial or received, to RFC 5280
+      §4.2.1.10 and Appendix B: a DNS name in A-labels, which names one host,
+      or the same with a leading period, which names its subdomains only.
+      RFC 5280 sets no label syntax for a URI constraint or a URI SAN host,
+      and RFC 3986 lets a reg-name hold "\_". micro509 takes ASCII labels of 1
+      to 63 letters, digits, hyphens and underscores for both, so a
+      constraint and the hosts it is matched against share one alphabet. The
+      builder and the initial-constraint input refuse a full URI such as
+      `https://blocked.example`, a port or path, an IP address, a root dot and
+      a U-label. A received constraint of that kind is malformed, and every URI
+      SAN is rejected while it is in force (RFC 5280 §4.2). RFC 5280 does not
+      define an empty URI constraint; micro509 matches it against every host,
+      as for dNSName.
+- [x] Read a URI SAN's host once, by RFC 3986, for URI constraints and URI-ID
+      matching alike: the authority after `//`, past any userinfo and before
+      any port. A userinfo outside RFC 3986 §3.2.1, such as `bad%zz`, or a
+      path, query or fragment outside §3.3 to §3.5, such as `/%zz`, makes the
+      host invalid. A reference identifier follows the RFC 3987 §2.2 IRI
+      grammar instead, without the bidirectional formatting characters of
+      §4.1. A percent-encoded unreserved character decodes, so
+      `ldap://%62locked.example/` has the host `blocked.example` (RFC 3986
+      §2.3 and §6.2.2.2, RFC 5280 §7.4 step 3). Other percent-encoded octets
+      stay encoded: RFC 3986 §6 does not make a percent-encoded U-label equal
+      its A-label, and RFC 9525 §2 requires A-labels in a presented URI-ID, so
+      `https://b%C3%BCcher.example/` is not a domain name. The single dot RFC 3986
+      §3.2.2 allows after the rightmost label is dropped. No normalization rule
+      makes `blocked.example.` equal `blocked.example`; reading both as one
+      FQDN is micro509's choice. Under any URI constraint the certificate is
+      rejected when a URI SAN has no authority, an IP host, a single-label host
+      such as `localhost`, or a reg-name that is not a domain name after
+      decoding, such as `blocked.example;extra` (";" is a sub-delim) or
+      `*.example.com` (RFC 5280 §4.2.1.10).
 - [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
-      extension imposes a form the validator cannot process (`otherName`,
-      `x400Address`, `ediPartyName`, `registeredID`) **and** an instance of
-      that form appears in a subsequent certificate's SANs; chains where the
-      form never appears stay acceptable, and unsupported forms in
-      non-critical extensions are ignored.
+      extension imposes a form whose constraint-matching semantics micro509
+      does not implement
+      (`x400Address`, `ediPartyName`, `registeredID`, and every `otherName`
+      type-id other than SRVName) **and** an instance of that form appears in
+      a subsequent certificate's SANs. Each `otherName` type-id is its own
+      form (X.509 §9.4.2.2), so a UPN constraint does not reject an SRVName or
+      SmtpUTF8Mailbox. Chains where the form never appears stay acceptable,
+      unsupported forms in non-critical extensions are ignored, and initial
+      constraints of these forms are refused.
       (IETF Datatracker[^rfc5280])
 
 Current GeneralName matrix for `nameConstraints`:
@@ -119,22 +229,59 @@ Current GeneralName matrix for `nameConstraints`:
 | `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
 | `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
 | SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `complete` |
-| other `otherName`           | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| SRVName `otherName`         | decode to typed SRVName values   | enforce RFC 4985 §4 restrictions           | `complete` |
+| other `otherName`           | decode type-id and value DER     | fail closed per type-id when critical      | `complete` |
 | `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
+
+- Typing a GeneralName alternative is separate from supporting it. A critical
+  subjectAltName carrying an `otherName` of an unrecognised type-id, an
+  `x400Address` or an `ediPartyName` is an unprocessed critical extension. A
+  `registeredID` is processed, since its whole value is an OID; its name
+  constraints still fail closed, and it satisfies no DNS, URI or SRV identity.
+- The builder validates the representation it emits. An `otherName` value is
+  one DER element. Every universal-class element inside it, at any depth, has
+  the form and contents X.690 fixes for its tag, DER's clauses 10 and 11
+  included, and none is end-of-contents (X.690 §8.1.5, §10.1). TeletexString
+  and VideotexString (ISO-IR repertoires), escape sequences and
+  code-extension controls (ISO/IEC 2022), TIME and a GeneralizedTime at second
+  60 (ISO 8601), a REAL with a long-form exponent (ambiguous in X.690
+  §8.5.7.4 d)), EXTERNAL, EMBEDDED PDV and CHARACTER STRING (implicitly
+  tagged contents), and the types of UNIVERSAL 31 to 36 are refused as
+  unsupported. A SET or SET OF must list its children in the DER SET order
+  (X.690 §10.3) or the DER SET OF order (§11.6). micro509 does not know the
+  schema behind an arbitrary type-id, so contents under context-specific,
+  application and private tags stay unchecked, as do DEFAULT omission and
+  NamedBitList trailing bits. An `ediPartyName` holds an
+  optional `[0]` and a
+  required `[1]` DirectoryString, and an `x400Address` follows the RFC 5280
+  Appendix A.1 ORAddress schema: fields, tags, order, multiplicity, string
+  repertoires and upper bounds, with DER SET ordering. TeletexString, the
+  Teletex extension attributes (types 2 to 6), extended-network-address
+  (type 22) and extension-attribute types RFC 5280 does not define are
+  refused as unsupported. Parsing keeps both forms as opaque bytes.
 
 - Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753). The derived
   property values, the Unicode properties the contextual and Bidi rules read,
   and the RFC 5895 width decompositions are frozen to Unicode 12.0.0; NFC and
   case mapping come from the runtime. The builder converts U-labels to
   A-labels in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name
-  of a SRVName, and dNSName and rfc822Name constraints, and checks every
+  of a SRVName and SRVName restriction, and dNSName and rfc822Name
+  constraints, and checks every
   `xn--` label round trips, under the RFC 5891 §4 registration tests.
   Caller-supplied initial DNS and mail constraints convert under the §5
   lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
-  9525 §6.3). A URI host is not converted. RFC 5280 §7.4 maps an IRI to a URI
-  by percent-encoding and forbids converting its ireg-name.
+  9525 §6.3). A reference URI-ID's host decodes its percent-encoded octets as
+  UTF-8 (RFC 3986 §3.2.2) before that conversion. A presented URI host is not
+  converted.
+- RFC 4985 §3 requires the IDNA2003 ToASCII conversion of RFC 3490 §4
+  before a SRVName Name is stored. RFC 5890 and RFC 5891 obsolete RFC 3490,
+  and no RFC moves SRVName to IDNA2008. micro509 converts the Name with
+  IDNA2008, as RFC 9549 requires for dNSName, so a label on which the two
+  disagree, such as one holding U+00DF, converts differently. The frozen
+  Unicode 12.0.0 tables and the refusal of a label IDNA2008 disallows are
+  micro509's choices.
 - A name with no IDN label passes the builder unchecked, so a successful
   conversion does not establish that the whole name is a valid DNS name.
   ASCII labels beside an IDN label must be NR-LDH.
@@ -149,6 +296,23 @@ Current GeneralName matrix for `nameConstraints`:
 ## 6. Certificate policy processing
 
 - [x] Support `certificatePolicies`.
+- [x] Parse each user-notice DisplayText (`explicitText` and the `noticeRef`
+      organization) as the ASN.1 type its tag names: a valid UTF8String,
+      IA5String, VisibleString or BMPString (RFC 5280 §4.2.1.4), returned
+      unchanged. An empty DisplayText and any other encoding fail the parse
+      as `malformed`. A DisplayText over 200 characters is kept whole and
+      reported with its character count, as `oversizedExplicitText` on the
+      qualifier or `oversizedOrganization` on the `noticeRef`; its length is
+      bounded by the input alone, and decoding it is linear. §4.2.1.4 asks
+      certificate users to handle an oversized `explicitText` gracefully. It
+      says nothing about an oversized organization, and keeping one is
+      micro509's receiving policy. Path validation accepts both by default and
+      rejects either with `display_text_oversized` under
+      `rejectOversizedDisplayText`, with `details.userNoticeField` naming the
+      field; PKITS §4.8.19 leaves that choice for `explicitText` to the
+      application. The 200-character bound and the RFC 6818 §3 rules for
+      conforming CAs (no IA5String, no control characters, NFC) bind the
+      builder.
 - [x] Support `policyConstraints`.
 - [x] Support `policyMappings`.
 - [x] Support `inhibitAnyPolicy`.
@@ -158,7 +322,12 @@ Current GeneralName matrix for `nameConstraints`:
       (IETF Datatracker[^rfc9618])
 - [x] Conformance evidence landed: the full PKITS policy sections (4.8–4.12)
       pass, with every manifest expectation verified against the official
-      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)).
+      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). 4.8.19, whose
+      explicitText is 310 characters, validates under the default settings as
+      the manifest expects; the harness also checks that the notice is kept
+      whole and reported, that `rejectOversizedDisplayText` rejects the path
+      for that reason alone, and that the other user-notice tests validate
+      under it.
 
 ## 7. Trust-anchor model
 
@@ -176,6 +345,28 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] Verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) accept the same identity union as `matchServiceIdentity()`.
 - [x] Only support CN fallback as an explicit RFC 6125 compatibility mode; RFC 9525 forbids using the Common Name RDN to identify a service. (IETF Datatracker[^rfc6125], [^rfc9525])
 - [x] Make wildcard behavior explicit and test it hard.
+- [x] Match a presented wildcard in a URI-ID or SRV-ID as RFC 9525 §6.3 does
+      in the DNS domain name portion: one `*` forming the whole left-most
+      label, matching exactly one label. A wildcard placed anywhere else makes
+      the identifier invalid and it is ignored. A `sip` or `sips` URI-ID takes
+      no wildcard (RFC 5922 §7.2), and a reference identifier holds none.
+- [x] Take a URI-ID's host as §7 reads a URI SAN's host. A `sip` or `sips`
+      URI has no RFC 3986 authority, so its host comes from the RFC 3261
+      §25.1 hostport, as RFC 9525 §6.2 splits `sip:voice.college.example`.
+      §25.1 puts the userinfo and hostport right after the scheme, so a `//`
+      there makes the URI-ID invalid. The hostport follows the one "@" §25.1
+      allows, which ends a userinfo of a non-empty user and an optional
+      password, and ends at the first ";" or "?". The user part may hold "?",
+      "/" and ";". A second "@", a user or password outside the §25.1
+      grammar, a "/" or escaped octet in the hostport, a host that is neither
+      a §25.1 hostname nor an IP address, or a ":" with no port digits after
+      it makes the URI-ID invalid. So do uri-parameters or headers outside
+      their §25.1 grammar and a parameter name that appears twice, compared
+      without regard to case (§19.1.1, §19.1.4). Every "%" opens an escaped
+      octet, as the RFC 2396 rules §19.1.2 adopts require, although the
+      `token` production admits a raw "%". An IP host matches by
+      its octets (RFC 9525 §6.4).
+- [x] Hold an SRV-ID, presented or reference, to the SRVName syntax of §7.
 
 Focused RFC 9525 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
 
@@ -316,8 +507,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Accept BER for the PFX, the authSafe ContentInfo, the AuthenticatedSafe
       and each SafeContents in `parsePfxDer` / `parsePfxPem`: indefinite
       lengths, non-minimal lengths and constructed OCTET STRINGs (RFC 7292 §4;
-      X.690 §7.3). BER nesting is limited to 64 levels. Certificate and PKCS#8
-      bag payloads must be DER. The MAC is verified over the AuthenticatedSafe
+      X.690 §7.3). BER nesting is limited to 64 levels (`limit_exceeded`).
+      Certificate and PKCS#8 bag payloads must be DER. The MAC is verified over the AuthenticatedSafe
       octets as received (RFC 7292 Appendix A).
 - [x] Verify and create the RFC 7292 MAC with SHA-256 only. Any other digest
       returns `unsupported_mac_algorithm`.
@@ -325,7 +516,14 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       Appendix B.1). A password containing a UTF-16 surrogate, from a non-BMP
       character or a lone surrogate, is rejected with
       `password_not_bmp_string`. RFC 7292 does not specify this case, so the
-      rejection is micro509 policy.
+      rejection is micro509 policy. X.680 §41.15 leaves U+FFFE and U+FFFF out
+      of BMPString, and a password holding either gets the same code.
+- [x] Hold a bag's friendlyName to RFC 2985 §5.5.1, which RFC 7292 imports:
+      one value, a BMPString of 1 to 255 characters from the BMPString
+      repertoire (X.680 §41.15), so no surrogate code unit, U+FFFE or U+FFFF.
+      `createPfx` throws `invalid_friendly_name` for any other name, and
+      parsing returns `malformed` for any other value. Rejecting a second
+      friendlyName attribute in one bag is micro509 policy.
 - [x] Reject MacData iterations of 0 or below as `malformed`. RFC 7292 §4
       gives the field no range, so this is micro509 policy.
 - [x] Verify RFC 9879 PBMAC1 with PBKDF2 and an HMAC-SHA-256, HMAC-SHA-384 or

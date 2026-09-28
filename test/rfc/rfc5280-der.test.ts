@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
+import type { IssuingDistributionPoint } from '#micro509';
 import {
 	createCertificateRevocationList,
 	createOcspRequest,
 	createOcspResponse,
 	createSelfSignedCertificate,
-	type IssuingDistributionPoint,
 	parseCertificateDer,
 	parseCertificateRevocationListDer,
 	parseOcspRequestDer,

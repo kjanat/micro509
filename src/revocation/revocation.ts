@@ -5,7 +5,8 @@
  * @module
  */
 
-import type { Result } from '#micro509/result/result';
+import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import type { DecodeRefusalCode, Result } from '#micro509/result/result';
 import { rethrowIfInvariant } from '#micro509/result/result';
 import type {
 	CrlApplicabilityFailureReason,
@@ -118,7 +119,8 @@ export interface CheckCertificateRevocationInput {
 /** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
 export type CheckCertificateRevocationErrorCode =
 	| 'revocation_evidence_missing'
-	| 'revocation_status_indeterminate';
+	| 'revocation_status_indeterminate'
+	| DecodeRefusalCode;
 
 /** Every {@linkcode RevocationIndeterminateReasonCode}, as a runtime array. */
 export const REVOCATION_INDETERMINATE_REASON_CODES = [
@@ -140,6 +142,8 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'signature_invalid',
 	'stale_crl',
 	'stale_response',
+	'unsupported',
+	'limit_exceeded',
 ] as const;
 
 /** Why a particular piece of evidence could not produce a definitive `good`/`revoked` answer. */
@@ -335,16 +339,8 @@ export async function checkCertificateRevocation(
 	let normalizedCertificate: ParsedCertificate;
 	try {
 		normalizedCertificate = normalizeCertificate(input.certificate);
-	} catch {
-		return revocationSuccess({
-			status: 'indeterminate',
-			code: 'revocation_status_indeterminate',
-			message: 'Certificate input is malformed',
-			details: {
-				checkedSources,
-				indeterminateEvidence: [],
-			},
-		});
+	} catch (error) {
+		return undecodableCertificateResult(error, checkedSources);
 	}
 	let ocspGoodResult: RevocationCheckGoodValue | undefined;
 	let crlGoodResult: RevocationCheckGoodValue | undefined;
@@ -394,6 +390,22 @@ export async function checkCertificateRevocation(
 	});
 }
 
+function undecodableCertificateResult(
+	error: unknown,
+	checkedSources: readonly RevocationEvidenceKind[],
+): CheckCertificateRevocationResult {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	return revocationSuccess({
+		status: 'indeterminate',
+		code: refusal?.code ?? 'revocation_status_indeterminate',
+		message: refusal?.message ?? 'Certificate input is malformed',
+		details: {
+			checkedSources,
+			indeterminateEvidence: [],
+		},
+	});
+}
+
 async function checkRevocationEvidenceEntry(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationEvidenceInput,
@@ -405,12 +417,13 @@ async function checkRevocationEvidenceEntry(
 			: await checkCertificateRevocationWithOcsp(input, evidence, certificate);
 	} catch (error) {
 		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return {
 			status: 'indeterminate',
 			detail: {
 				kind: evidence.kind,
-				code: 'signature_invalid',
-				message: `${evidence.kind.toUpperCase()} evidence input is malformed`,
+				code: refusal?.code ?? 'signature_invalid',
+				message: refusal?.message ?? `${evidence.kind.toUpperCase()} evidence input is malformed`,
 			},
 		};
 	}

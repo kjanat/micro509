@@ -32,7 +32,7 @@ import {
 // A private extension: SEQUENCE { tier UTF8String, seats INTEGER }
 const LICENSE_OID = '1.3.6.1.4.1.55555.1';
 const seats =
-  crypto.getRandomValues(new Uint8Array(1))[0] ?? 25;
+  crypto.getRandomValues(new Uint32Array(1))[0] ?? 25;
 const payload = derSequence([
   derUtf8String('enterprise'),
   derIntegerFromNumber(seats),
@@ -105,7 +105,7 @@ const license = defineExtensionDecoder({
 
 // Same certificate shape as the previous example
 const seats =
-  crypto.getRandomValues(new Uint8Array(1))[0] ?? 25;
+  crypto.getRandomValues(new Uint32Array(1))[0] ?? 25;
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'licensed.example' },
   extensions: {

@@ -17,11 +17,17 @@
  */
 
 import { canonicalizeOid } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeRefusalOf,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
-import { domainToAscii } from '#micro509/internal/shared/idna';
+import { asciiLowercase, domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import { presentedSmtpUtf8MailboxDomain } from '#micro509/internal/shared/mailbox';
 import type { NameConstraintValidationState } from '#micro509/internal/verify/name-constraints-engine';
 import {
 	createNameConstraintValidationState,
@@ -43,7 +49,14 @@ import {
 	loadSingleCertificate,
 	verifyCertificateSignature,
 } from '#micro509/internal/verify/verify-path';
+import {
+	normalizeLabelSeparators,
+	parsePresentedSrvName,
+	parseSrvNameRestriction,
+	parseUriNameConstraint,
+} from '#micro509/internal/x509/general-name-profile';
 import type {
+	DecodeRefusalCode,
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -63,7 +76,7 @@ import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type { PolicyValidationInput, PolicyValidationOutcome } from '#micro509/verify/policy';
-import type { ExtendedKeyUsage, GeneralSubtree } from '#micro509/x509/extensions';
+import type { ExtendedKeyUsage, GeneralSubtree, SubjectAltName } from '#micro509/x509/extensions';
 import type {
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
@@ -107,14 +120,14 @@ export type EkuCheckResult =
 			readonly value: undefined;
 	  }
 	| IndexedErrorResult<
-			'leaf_eku_missing' | 'intermediate_eku_constraint',
+			'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
 			Record<never, never>,
 			EkuCheckFailure
 	  >;
 
 /** Failure from {@linkcode checkExtendedKeyUsage} with the chain index of the certificate that failed. */
 export interface EkuCheckFailure
-	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint'> {
+	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 	/** Zero-based index into the chain of the certificate that lacks the required EKU. */
@@ -161,6 +174,7 @@ export interface TrustAnchor {
  * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
  * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
  * - `no_rev_avail_conflict` — a certificate carries noRevAvail alongside a CA basicConstraints, cRLDistributionPoints, freshestCRL, or an id-ad-ocsp authorityInfoAccess entry (RFC 9608 §3).
+ * - `display_text_oversized` — under `rejectOversizedDisplayText`, a certificate's user notice `explicitText` or `noticeRef` organization exceeds the 200 characters of RFC 5280 §4.2.1.4.
  * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
  * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
  * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
@@ -171,6 +185,8 @@ export interface TrustAnchor {
  * - `ec_domain_parameters_missing` — an elliptic curve public key carries no namedCurve domain parameters.
  * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
  * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
+ * - `unsupported` — a certificate source holds a construct micro509 does not decode (see `ParseCertificateErrorCode`).
+ * - `limit_exceeded` — a certificate source exceeds a micro509 decoding limit (see `ParseCertificateErrorCode`).
  */
 export const VERIFY_ERROR_CODES = [
 	'no_trusted_root',
@@ -188,6 +204,7 @@ export const VERIFY_ERROR_CODES = [
 	'self_signed_leaf_not_allowed',
 	'unrecognized_critical_extension',
 	'no_rev_avail_conflict',
+	'display_text_oversized',
 	'intermediate_eku_constraint',
 	'explicit_policy_required',
 	'initial_policy_set_not_satisfied',
@@ -198,6 +215,8 @@ export const VERIFY_ERROR_CODES = [
 	'ec_domain_parameters_missing',
 	'certificate_revoked',
 	'revocation_indeterminate',
+	'unsupported',
+	'limit_exceeded',
 ] as const;
 
 /** See the doc comment above {@linkcode VERIFY_ERROR_CODES} for the meaning of each code. */
@@ -223,6 +242,18 @@ export interface VerifyFailureDetails {
 		| 'suppressed_by_presented_identifier'
 		| 'common_name_missing'
 		| 'common_name_mismatch';
+	/** The user notice DisplayText that exceeds 200 characters. Set on `display_text_oversized`. */
+	readonly userNoticeField?: 'explicitText' | 'noticeRefOrganization';
+	/** The `intermediates` or `roots` entry that failed to load, which has no chain index. */
+	readonly source?: VerifyFailureSource;
+}
+
+/** An entry of {@linkcode BuildCandidatePathInput.intermediates} or {@linkcode BuildCandidatePathInput.roots}. */
+export interface VerifyFailureSource {
+	/** The input array holding the entry. */
+	readonly kind: 'intermediates' | 'roots';
+	/** Zero-based position of the entry in that array. */
+	readonly position: number;
 }
 
 /** A chain verification failure with its error code, human message, chain index, and diagnostic details. */
@@ -302,6 +333,13 @@ export interface ValidateCandidatePathInput
 	readonly purpose?: VerifyPurpose;
 	/** When `true`, allows a self-signed leaf that is also the root. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
+	/**
+	 * When `true`, rejects a certificate whose user notice `explicitText` or
+	 * `noticeRef` organization exceeds 200 characters with
+	 * `display_text_oversized`. Defaults to `false`, and the parsed certificate
+	 * reports such a value as `oversizedExplicitText` or `oversizedOrganization`.
+	 */
+	readonly rejectOversizedDisplayText?: boolean;
 }
 
 /** Success payload from {@linkcode validateCandidatePath}. */
@@ -373,6 +411,13 @@ export interface VerifyCertificateChainInput
 	readonly serviceIdentity?: ServiceIdentityInput;
 	/** When `true`, allows a self-signed leaf. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
+	/**
+	 * When `true`, rejects a certificate whose user notice `explicitText` or
+	 * `noticeRef` organization exceeds 200 characters with
+	 * `display_text_oversized`. Defaults to `false`, and the parsed certificate
+	 * reports such a value as `oversizedExplicitText` or `oversizedOrganization`.
+	 */
+	readonly rejectOversizedDisplayText?: boolean;
 	/** Optional revocation checking. */
 	readonly revocation?: ChainRevocationInput;
 }
@@ -402,7 +447,7 @@ export type VerifyChainResult =
 /** Failure from {@linkcode verifyCertificateSigningRequest}. */
 export interface VerifyRequestFailure
 	extends Micro509Error<
-		'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+		'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
 		VerifyFailureDetails
 	> {
 	/** Always `false` for failures. */
@@ -416,7 +461,7 @@ export type VerifyRequestResult =
 			readonly value: ParsedCertificateSigningRequest;
 	  }
 	| ErrorResult<
-			'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+			'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
 			VerifyFailureDetails,
 			VerifyRequestFailure
 	  >;
@@ -518,6 +563,8 @@ interface VerifyFailureDetailsInput {
 		| 'common_name_missing'
 		| 'common_name_mismatch'
 		| undefined;
+	readonly userNoticeField?: 'explicitText' | 'noticeRefOrganization' | undefined;
+	readonly source?: VerifyFailureSource | undefined;
 }
 
 /** Mutable validation state accumulated during path walks. */
@@ -549,6 +596,40 @@ type ValidationCheckResult =
 
 // buildCandidatePath
 
+function loadCertificatePool(
+	sources: readonly CertificateSource[],
+	kind: VerifyFailureSource['kind'],
+): { readonly ok: true; readonly certificates: readonly ParsedCertificate[] } | VerifyChainFailure {
+	const certificates: ParsedCertificate[] = [];
+	for (const [position, source] of sources.entries()) {
+		try {
+			certificates.push(...loadCertificates([source]));
+		} catch (error) {
+			return certificateSourceFailure(error, { kind, position });
+		}
+	}
+	return { ok: true, certificates };
+}
+
+function certificateSourceFailure(
+	error: unknown,
+	source: VerifyFailureSource | undefined,
+): VerifyChainFailure {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	if (refusal !== undefined) {
+		return failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message, source }));
+	}
+	return failure(
+		'issuer_not_found',
+		'certificate source is malformed or leaf source does not contain exactly one certificate',
+		0,
+		detail({
+			actual: error instanceof Error ? error.message : 'certificate source is malformed',
+			source,
+		}),
+	);
+}
+
 /**
  * Discovers and signature-verifies a candidate certification path from a
  * leaf certificate to a trusted root or trust anchor. Does NOT validate
@@ -564,28 +645,21 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 > {
 	assertPathBuildingChecks(input.maxPathBuildingChecks);
 	let leaf: ParsedCertificate;
-	let intermediates: readonly ParsedCertificate[];
-	let roots: readonly ParsedCertificate[];
 	try {
 		leaf = loadSingleCertificate(input.leaf);
-		intermediates = loadCertificates(input.intermediates ?? []);
-		roots = loadCertificates(input.roots);
 	} catch (error) {
-		return failure(
-			'issuer_not_found',
-			'certificate source is malformed or leaf source does not contain exactly one certificate',
-			0,
-			detail({
-				actual: error instanceof Error ? error.message : 'certificate source is malformed',
-			}),
-		);
+		return certificateSourceFailure(error, undefined);
 	}
+	const intermediates = loadCertificatePool(input.intermediates ?? [], 'intermediates');
+	if (!intermediates.ok) return intermediates;
+	const roots = loadCertificatePool(input.roots, 'roots');
+	if (!roots.ok) return roots;
 	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
 	const buildResult = await buildChainInternal(
 		leaf,
-		intermediates,
-		roots,
+		intermediates.certificates,
+		roots.certificates,
 		anchors,
 		at,
 		{ failure, detail },
@@ -690,7 +764,11 @@ async function validateCandidatePathRaw(
 
 	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input);
 	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
-	const certificateFailure = await validatePathCertificates(chain, at);
+	const certificateFailure = await validatePathCertificates(
+		chain,
+		at,
+		input.rejectOversizedDisplayText === true,
+	);
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
 	if (pathLengthFailure !== undefined) return pathLengthFailure;
@@ -726,14 +804,58 @@ async function validateSelfSignedLeafAllowed(
 async function validatePathCertificates(
 	chain: readonly ParsedCertificate[],
 	at: Date,
+	rejectOversizedDisplayText: boolean,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
 		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
 		const certificateValidation = validateCertificateAtPathIndex(current, index, at);
 		if (certificateValidation !== undefined) return certificateValidation;
+		if (rejectOversizedDisplayText) {
+			const displayTextValidation = validateDisplayTextAtPathIndex(current, index);
+			if (displayTextValidation !== undefined) return displayTextValidation;
+		}
 		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
 		if (issuerValidation !== undefined) return issuerValidation;
+	}
+	return undefined;
+}
+
+/** RFC 5280 §4.2.1.4 bounds a DisplayText at 200 characters; PKITS 4.8.19 lets the application reject a longer explicitText. */
+function validateDisplayTextAtPathIndex(
+	current: ParsedCertificate,
+	index: number,
+): ValidateCandidatePathFailure | undefined {
+	for (const policy of current.certificatePolicies ?? []) {
+		for (const qualifier of policy.policyQualifiers ?? []) {
+			if (qualifier.type !== 'userNotice') {
+				continue;
+			}
+			const oversized = [
+				['explicitText', 'explicitText', qualifier.oversizedExplicitText],
+				[
+					'noticeRefOrganization',
+					'noticeRef organization',
+					qualifier.noticeRef?.oversizedOrganization,
+				],
+			] as const;
+			for (const [field, label, size] of oversized) {
+				if (size === undefined) {
+					continue;
+				}
+				return failure(
+					'display_text_oversized',
+					`certificate policy ${policy.policyIdentifier} carries a user notice ${label} of ${String(size.characters)} characters`,
+					index,
+					detail({
+						subjectCommonName: current.subject.values.commonName,
+						expected: String(size.limit),
+						actual: String(size.characters),
+						userNoticeField: field,
+					}),
+				);
+			}
+		}
 	}
 	return undefined;
 }
@@ -987,22 +1109,27 @@ function validateIssuerConstraintsAtPathIndex(
 export async function validateCandidatePath(
 	input: ValidateCandidatePathInput,
 ): Promise<ValidateCandidatePathResult> {
-	let normalizedChain: readonly ParsedCertificate[];
-	try {
-		normalizedChain = normalizeValidationChain(input.chain);
-	} catch (error) {
+	const normalized = normalizeValidationChain(input.chain);
+	if (!normalized.ok) {
+		const { error, index } = normalized;
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return verifyFailureResult(
+				failure(refusal.code, refusal.message, index, detail({ actual: refusal.message })),
+			);
+		}
 		return verifyFailureResult(
 			failure(
 				'signature_invalid',
 				'certificate input is malformed',
-				0,
+				index,
 				detail({
 					actual: error instanceof Error ? error.message : 'certificate input is malformed',
 				}),
 			),
 		);
 	}
-	const result = await validateCandidatePathRaw({ ...input, chain: normalizedChain });
+	const result = await validateCandidatePathRaw({ ...input, chain: normalized.chain });
 	return result.ok
 		? validateCandidatePathSuccessResult(result.policyValidation)
 		: verifyFailureResult(result);
@@ -1063,6 +1190,9 @@ export async function verifyCertificateChain(
 		...copyValidationInputs(input),
 		...(input.allowSelfSignedLeaf !== undefined && {
 			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
+		}),
+		...(input.rejectOversizedDisplayText !== undefined && {
+			rejectOversizedDisplayText: input.rejectOversizedDisplayText,
 		}),
 	});
 	if (!validateResult.ok) {
@@ -1178,6 +1308,14 @@ export async function verifyCertificateSigningRequest(
 				? parseCertificateSigningRequestPemOrThrow(input)
 				: parseCertificateSigningRequestDerOrThrow(new Uint8Array(input));
 	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return verifyRequestFailureResult(
+				refusal.code,
+				refusal.message,
+				detail({ actual: refusal.message }),
+			);
+		}
 		return verifyRequestFailureResult(
 			'signature_invalid',
 			'certificate request input is malformed',
@@ -1198,6 +1336,14 @@ export async function verifyCertificateSigningRequest(
 			parsed.certificationRequestInfoDer,
 		);
 	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return verifyRequestFailureResult(
+				refusal.code,
+				refusal.message,
+				detail({ subjectCommonName: parsed.subject.values.commonName, actual: refusal.message }),
+			);
+		}
 		return verifyRequestFailureResult(
 			'signature_invalid',
 			'certificate request input is malformed',
@@ -1250,12 +1396,18 @@ export function checkExtendedKeyUsage(
 	chain: readonly ParsedCertificate[],
 	purpose: EkuCheckPurpose,
 ): EkuCheckResult {
-	let normalizedChain: readonly ParsedCertificate[];
-	try {
-		normalizedChain = normalizeValidationChain(chain);
-	} catch {
-		return ekuCheckFailureResult('leaf_eku_missing', 'certificate input is malformed', 0);
+	const normalized = normalizeValidationChain(chain);
+	if (!normalized.ok) {
+		const refusal = decodeRefusalOf(normalized.error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? ekuCheckFailureResult(
+					'leaf_eku_missing',
+					'certificate input is malformed',
+					normalized.index,
+				)
+			: ekuCheckFailureResult(refusal.code, refusal.message, normalized.index);
 	}
+	const normalizedChain = normalized.chain;
 	const leaf = normalizedChain[0];
 	if (leaf === undefined) {
 		return ekuCheckFailureResult('leaf_eku_missing', 'chain is empty', 0);
@@ -1293,7 +1445,8 @@ export function trustAnchorFromCertificate(certificate: ParsedCertificate): Trus
 	let normalizedCertificate: ParsedCertificate;
 	try {
 		normalizedCertificate = reparseCertificateForTrust(certificate);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		throw new Error('certificate input is malformed');
 	}
 	return {
@@ -1497,7 +1650,9 @@ function validateServiceIdentity(
 	}
 	if (
 		error.code !== 'subject_alt_name_mismatch' &&
-		error.code !== 'common_name_fallback_suppressed'
+		error.code !== 'common_name_fallback_suppressed' &&
+		error.code !== 'unsupported' &&
+		error.code !== 'limit_exceeded'
 	) {
 		return failure(
 			'subject_alt_name_mismatch',
@@ -1607,12 +1762,30 @@ function findUnprocessedCriticalExtension(certificate: ParsedCertificate): strin
 		// interpret is unprocessed information (RFC 5280 §4.2).
 		if (
 			extension.oid === OIDS.subjectAltName &&
-			certificate.subjectAltNames?.some((name) => name.type === 'unknown') === true
+			certificate.subjectAltNames?.some(isUninterpretedGeneralName) === true
 		) {
 			return extension.oid;
 		}
 	}
 	return undefined;
+}
+
+const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = new Set([
+	'otherName',
+	'x400Address',
+	'ediPartyName',
+	'unknown',
+]);
+
+function isUninterpretedGeneralName(name: SubjectAltName): boolean {
+	switch (name.type) {
+		case 'srv':
+			return parsePresentedSrvName(asciiLowercase(name.value)) === undefined;
+		case 'smtpUtf8Mailbox':
+			return presentedSmtpUtf8MailboxDomain(name.value) === undefined;
+		default:
+			return UNINTERPRETED_GENERAL_NAME_TYPES.has(name.type);
+	}
 }
 
 /** Constructs a {@linkcode VerifyChainFailure} with the given code, message, optional chain index, and details. */
@@ -1650,10 +1823,20 @@ function describeDateTime(value: Date): string {
 	return Number.isNaN(value.getTime()) ? '<invalid date>' : value.toISOString();
 }
 
-function normalizeValidationChain(
-	chain: readonly ParsedCertificate[],
-): readonly ParsedCertificate[] {
-	return chain.map(reparseCertificateForTrust);
+type NormalizedValidationChain =
+	| { readonly ok: true; readonly chain: readonly ParsedCertificate[] }
+	| { readonly ok: false; readonly index: number; readonly error: unknown };
+
+function normalizeValidationChain(chain: readonly ParsedCertificate[]): NormalizedValidationChain {
+	const normalized: ParsedCertificate[] = [];
+	for (const [index, certificate] of chain.entries()) {
+		try {
+			normalized.push(reparseCertificateForTrust(certificate));
+		} catch (error) {
+			return { ok: false, index, error };
+		}
+	}
+	return { ok: true, chain: normalized };
 }
 
 function reparseCertificateForTrust(certificate: ParsedCertificate): ParsedCertificate {
@@ -1671,7 +1854,7 @@ function verifyRequestFailureResult(
 	message: string,
 	details?: VerifyFailureDetails,
 ): ErrorResult<
-	'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+	'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
 	VerifyFailureDetails,
 	VerifyRequestFailure
 > {
@@ -1688,7 +1871,7 @@ function ekuCheckFailureResult(
 	message: string,
 	index: number,
 ): IndexedErrorResult<
-	'leaf_eku_missing' | 'intermediate_eku_constraint',
+	'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
 	Record<never, never>,
 	EkuCheckFailure
 > {
@@ -1807,6 +1990,8 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 		...(input.commonNameFallbackReason === undefined
 			? {}
 			: { commonNameFallbackReason: input.commonNameFallbackReason }),
+		...(input.userNoticeField === undefined ? {} : { userNoticeField: input.userNoticeField }),
+		...(input.source === undefined ? {} : { source: input.source }),
 	};
 }
 
@@ -1920,18 +2105,46 @@ function validateInitialNameConstraintSubtrees(
 	return { ok: true, value: converted };
 }
 
-/** RFC 9549 §1 and RFC 9598 §6: a DNS or mail domain constraint in A-labels. */
+/**
+ * RFC 9549 §1, RFC 9598 §6 and RFC 4985 §3: a DNS or mail domain constraint, or
+ * the Name of a SRVName constraint, in A-labels.
+ */
 function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree | undefined {
 	const { base } = subtree;
-	if (base.type !== 'dns' && base.type !== 'email') {
+	if (base.type !== 'dns' && base.type !== 'email' && base.type !== 'srv') {
 		return subtree;
 	}
-	const prefix = base.value.startsWith('.') ? '.' : '';
-	const converted = domainToAscii(base.value.slice(prefix.length), 'lookup');
-	if (!converted.ok || !/^[\x20-\x7e]*$/.test(converted.value)) {
+	const source = base.type === 'srv' ? normalizeLabelSeparators(base.value) : base.value;
+	const prefix = unconvertedConstraintPrefix(base.type, source);
+	const domain = source.slice(prefix.length);
+	if (base.type !== 'srv' && domain.endsWith('.')) {
 		return undefined;
 	}
-	return { ...subtree, base: { ...base, value: `${prefix}${converted.value}` } };
+	const converted =
+		base.type === 'srv' && domain.length === 0 ? undefined : domainToAscii(domain, 'lookup');
+	if (converted !== undefined && !converted.ok) {
+		return undefined;
+	}
+	const value = `${prefix}${converted?.value ?? ''}`;
+	if (
+		!/^[\x20-\x7e]*$/.test(value) ||
+		(base.type === 'srv' && parseSrvNameRestriction(value) === undefined)
+	) {
+		return undefined;
+	}
+	return { ...subtree, base: { ...base, value } };
+}
+
+/** The leading `.` of a domain constraint, or the `_Service` label of a SRVName constraint with its dot. */
+function unconvertedConstraintPrefix(type: 'dns' | 'email' | 'srv', value: string): string {
+	if (type !== 'srv') {
+		return value.startsWith('.') ? '.' : '';
+	}
+	if (!value.startsWith('_')) {
+		return '';
+	}
+	const dot = value.indexOf('.');
+	return dot < 0 ? value : value.slice(0, dot + 1);
 }
 
 function describeInvalidInitialNameConstraintForm(subtree: unknown): string | undefined {
@@ -1946,11 +2159,13 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 		case 'dns':
 			return typeof base.value === 'string' ? undefined : base.type;
 		case 'uri':
-			return typeof base.value === 'string' && /^[\x20-\x7e]*$/.test(base.value)
+			return typeof base.value === 'string' && parseUriNameConstraint(base.value) !== undefined
 				? undefined
 				: base.type;
 		case 'email':
 			return typeof base.value === 'string' && !base.value.includes('@') ? undefined : base.type;
+		case 'srv':
+			return typeof base.value === 'string' && base.value.length > 0 ? undefined : base.type;
 		case 'directoryName':
 			return typeof base.derHex === 'string' ? undefined : base.type;
 		case 'ip':

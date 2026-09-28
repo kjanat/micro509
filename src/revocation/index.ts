@@ -13,7 +13,9 @@ export type {
 	OcspResponseSource,
 	RevocationExecutionError,
 	RevocationIndeterminateReason,
+	RevocationParseError,
 	RevocationPolicy,
+	RevocationProcessingError,
 	RevocationSource,
 	TrustedOcspResponder,
 } from '#micro509/revocation/chain';

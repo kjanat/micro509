@@ -33,6 +33,10 @@ const W3C_NAMES = [
 
 const ITU_ITEM = /^T-REC-(X\.\d+)-\d{6}-[A-Z]!\w*!PDF-E$/;
 
+const MS_DOCUMENT = /^MS-[A-Z0-9]+$/;
+
+const MS_DOWNLOADS = 'https://winprotocoldocs-bhdugrdyduf5h2e4.b02.azurefd.net';
+
 const PANDOC = { repository: 'jgm/pandoc', version: '3.11' } as const;
 
 const PANDOC_ASSETS = new Map([
@@ -306,9 +310,60 @@ const w3c = command('w3c')
 		out.log(destination);
 	});
 
+const ms = command('ms')
+	.description('Vendor the current Microsoft Open Specifications document as text')
+	.arg(
+		'document',
+		arg.string().pattern(MS_DOCUMENT).env('MS_DOC').describe('Document short name, e.g. MS-WCCE'),
+	)
+	.action(async ({ args, out }) => {
+		const pdftotext = tool(
+			'pdftotext',
+			'MS_CONVERTER_MISSING',
+			'Install poppler, which provides pdftotext',
+		);
+		const url = `${MS_DOWNLOADS}/${args.document}/%5b${args.document}%5d.pdf`;
+		out.status(`fetching ${url}`);
+		const response = await fetch(url);
+		const bytes = response.ok ? await response.bytes() : undefined;
+		if (bytes === undefined || !startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
+			throw new CLIError(`${args.document}: no PDF at ${url}`, {
+				code: 'MS_FETCH_FAILED',
+				suggest:
+					'Find the document on https://learn.microsoft.com/en-us/openspecs/windows_protocols/',
+			});
+		}
+		const scratch = mkdtempSync(path.join(tmpdir(), 'ms-'));
+		try {
+			const pdf = path.join(scratch, 'document.pdf');
+			const converted = path.join(scratch, 'document.txt');
+			await Bun.write(pdf, bytes);
+			await run(
+				[pdftotext, '-layout', '-enc', 'UTF-8', pdf, converted],
+				undefined,
+				'MS_CONVERT_FAILED',
+			);
+			const text = await Bun.file(converted).text();
+			const version = new RegExp(`^\\[${args.document}\\] - v(\\d{8})\\s*$`, 'm').exec(text)?.[1];
+			if (version === undefined) {
+				throw new CLIError(`${args.document}: the PDF names no version`, {
+					code: 'MS_VERSION_MISSING',
+				});
+			}
+			const directory = path.join('docs', 'ms', args.document);
+			mkdirSync(directory, { recursive: true });
+			const destination = path.join(directory, `${args.document}-v${version}.txt`);
+			await Bun.write(destination, text);
+			out.log(destination);
+		} finally {
+			rmSync(scratch, { recursive: true, force: true });
+		}
+	});
+
 cli('fetch-spec')
 	.description('Vendor standards text into docs/')
 	.command(rfc)
 	.command(itu)
 	.command(w3c)
+	.command(ms)
 	.run();

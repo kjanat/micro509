@@ -13,6 +13,7 @@ import {
 	decodeObjectIdentifier,
 	requireElement,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_LIMIT_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
@@ -183,6 +184,8 @@ export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array
  *
  * Returns a typed result: success with a supported profile, unsupported with
  * a reason code, or malformed with an error message.
+ *
+ * @throws `limit_exceeded` on an OID sub-identifier over 64 octets.
  */
 export function parseRsaPssParameters(
 	parametersDer: Uint8Array | undefined,
@@ -199,6 +202,7 @@ export function parseRsaPssParameters(
 		const state = parseRsaPssParameterFields(parametersDer, element);
 		return validateRsaPssParameterProfile(state);
 	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		return {
 			ok: false,
 			code: 'malformed_rsa_pss_parameters',

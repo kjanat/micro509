@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
 import { projectRoot } from '#test/helpers';
+import type { Decision } from '../.claude/hooks/spec-lookup-gate.ts';
 import {
-	type Decision,
 	decide,
 	EXCLUDE_GLOB,
 	parsePayload,
@@ -42,6 +42,7 @@ describe('Read', () => {
 		['deny', rfc5280],
 		['deny', path.join(projectRoot, 'docs', '.', 'rfc', '..', 'rfc', 'rfc5280.txt')],
 		['deny', path.join(projectRoot, 'docs', 'itu')],
+		['deny', path.join(projectRoot, 'docs', 'ms', 'MS-WCCE', 'MS-WCCE-v20260824.txt')],
 		['pass', path.join(projectRoot, 'docs', 'PKIX-SCOPE.md')],
 		['pass', path.join(projectRoot, 'src', 'index.ts')],
 	] as const)('%s %s', (want, filePath) => {
@@ -59,6 +60,7 @@ describe('Grep', () => {
 		['deny', { path: 'docs', glob: '*.txt' }],
 		['deny', { path: 'docs/rfc' }],
 		['deny', { path: path.join(projectRoot, 'docs', 'itu', 'x.txt') }],
+		['deny', { path: 'docs/ms' }],
 		['pass', { path: 'src' }],
 		['pass', { path: path.join(projectRoot, 'test'), glob: '*.ts' }],
 	] as const)('%s %o', (want, input) => {
@@ -97,13 +99,18 @@ describe('Bash', () => {
 		['pass', 'rg -n "docs/rfc" src'],
 		['pass', 'bun spec list > /var/tmp/absent/list.txt; rg -n webidl /var/tmp/absent/list.txt'],
 		['deny', 'rg -n webidl ./absent/../docs/rfc'],
-		['pass', "rg -n foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' ."],
+		['pass', "rg -n foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' -g '!docs/ms/**' ."],
 		['pass', `rg foo -g '${EXCLUDE_GLOB}'`],
-		['pass', "rg foo --glob='!rfc' --glob='!itu' --glob='!w3c' docs"],
-		['pass', 'grep -rn foo --exclude-dir=rfc --exclude-dir=itu --exclude-dir=w3c .'],
-		['pass', "git grep -n foo -- . ':!docs/rfc' ':!docs/itu' ':!docs/w3c'"],
+		['pass', "rg foo --glob='!rfc' --glob='!itu' --glob='!w3c' --glob='!ms' docs"],
+		[
+			'pass',
+			'grep -rn foo --exclude-dir=rfc --exclude-dir=itu --exclude-dir=w3c --exclude-dir=ms .',
+		],
+		['pass', "git grep -n foo -- . ':!docs/rfc' ':!docs/itu' ':!docs/w3c' ':!docs/ms'"],
 		['deny', "rg foo -g '!docs/rfc/**' ."],
+		['deny', "rg -n foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' ."],
 		['deny', "rg foo -g '!docs/rfc/**' -g '!docs/itu/**' -g '!docs/w3c/**' docs/rfc"],
+		['deny', 'cat docs/ms/MS-WCCE/MS-WCCE-v20260824.txt'],
 		['deny', "git grep -n foo -- . ':!docs/rfc'"],
 		['deny', 'find . -name x | xargs rg foo'],
 		['deny', 'ls | rg foo docs'],

@@ -14,6 +14,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_LIMIT_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	concatBytes,
@@ -26,6 +27,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names';
+import type { KdfBudget, KdfLimitOptions, Pbkdf2Hash } from '#micro509/internal/crypto/pbes2';
 import {
 	chargeKdfBudget,
 	createKdfBudget,
@@ -33,13 +35,10 @@ import {
 	DEFAULT_MAX_PKCS12_MAC_ITERATIONS,
 	derivePbkdf2Bytes,
 	isKdfIterationLimitError,
-	type KdfBudget,
-	type KdfLimitOptions,
-	type Pbkdf2Hash,
 	WEBCRYPTO_MAX_PBKDF2_ITERATIONS,
 } from '#micro509/internal/crypto/pbes2';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	isResultError,
@@ -69,7 +68,7 @@ export type Pkcs12MacOptions =
 			readonly type?: 'pkcs12-kdf';
 			/**
 			 * Password used to derive the HMAC key via the PKCS#12 KDF. Every character must be a
-			 * BMPString character, so UTF-16 surrogates are rejected.
+			 * BMPString character, so UTF-16 surrogates, U+FFFE and U+FFFF are rejected.
 			 */
 			readonly password: string;
 			/** PKCS#12 KDF iteration count, a positive safe integer. Default: `2048`. */
@@ -152,8 +151,9 @@ const PBMAC1_MIN_KEY_LENGTH = 20;
  * block alongside its parsed representation.
  *
  * @throws {ResultError} with code `invalid_iterations` when `iterations` is out of range,
- * `password_not_bmp_string` when a `'pkcs12-kdf'` password contains a UTF-16 surrogate, and
- * `password_not_utf8` when a `'pbmac1'` password contains an unpaired UTF-16 surrogate.
+ * `password_not_bmp_string` when a `'pkcs12-kdf'` password contains a UTF-16 surrogate, U+FFFE
+ * or U+FFFF, and `password_not_utf8` when a `'pbmac1'` password contains an unpaired UTF-16
+ * surrogate.
  */
 export async function createPkcs12MacData(
 	authenticatedSafe: Uint8Array,
@@ -254,7 +254,7 @@ async function createPbmac1MacData(
 
 /** Machine-readable failure reason for {@linkcode parsePkcs12MacData}. */
 export type ParsePkcs12MacDataErrorCode =
-	| 'malformed'
+	| Exclude<DecodeFailureCode, 'unsupported'>
 	| 'kdf_iterations_exceeded'
 	| 'password_not_bmp_string'
 	| 'password_not_utf8'
@@ -263,7 +263,7 @@ export type ParsePkcs12MacDataErrorCode =
 
 type ThrownMacDataErrorCode = Exclude<
 	ParsePkcs12MacDataErrorCode,
-	'malformed' | 'kdf_iterations_exceeded'
+	DecodeFailureCode | 'kdf_iterations_exceeded'
 >;
 
 const THROWN_MAC_DATA_ERROR_CODES = [
@@ -407,7 +407,7 @@ export async function parsePkcs12MacDataOrThrow(
  * the RFC 7292 SHA-256 MAC or a PBMAC1 variant this implementation does not
  * handle, `'weak_mac_key_length'` for a PBMAC1 key length below 20 octets,
  * `'password_not_bmp_string'` when an RFC 7292 password contains a UTF-16
- * surrogate, and `'password_not_utf8'` when a PBMAC1 password contains an
+ * surrogate, U+FFFE or U+FFFF, and `'password_not_utf8'` when a PBMAC1 password contains an
  * unpaired UTF-16 surrogate. With a `password`, returns
  * `code: 'kdf_iterations_exceeded'` when the iteration count exceeds
  * `options.maxKdfIterations`, or an RFC 7292 MAC count exceeds
@@ -437,7 +437,7 @@ export async function parsePkcs12MacData(
 				return failureResult(code, error.error.message);
 			}
 		}
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed MacData');
+		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed MacData');
 	}
 }
 
@@ -721,7 +721,7 @@ async function hmac(
  * 1 for key material, 2 for an IV, 3 for a MAC key.
  *
  * @throws {ResultError} with code `password_not_bmp_string` when the password contains a
- * UTF-16 surrogate.
+ * UTF-16 surrogate, U+FFFE or U+FFFF.
  */
 export async function derivePkcs12Key(
 	password: string,
@@ -768,6 +768,12 @@ function encodePkcs12Password(password: string): Uint8Array {
 			throwPkcs12MacError(
 				'password_not_bmp_string',
 				`PKCS#12 password is not a BMPString: UTF-16 surrogate 0x${code.toString(16)} at index ${index}`,
+			);
+		}
+		if (code >= 0xfffe) {
+			throwPkcs12MacError(
+				'password_not_bmp_string',
+				`PKCS#12 password is not a BMPString: U+${code.toString(16).toUpperCase()} at index ${index}`,
 			);
 		}
 		out[index * 2] = code >> 8;

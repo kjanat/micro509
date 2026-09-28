@@ -2627,6 +2627,52 @@ describe('ocsp', () => {
 		});
 	});
 
+	it('decodes a TeletexString responderID byName value in its X.690 §8.23.5.2 initial state', () => {
+		const responderName = (commonName: Uint8Array): Uint8Array =>
+			sequence([tlv(0x31, sequence([objectIdentifier(OIDS.commonName), commonName]))]);
+		const responseWithResponder = (name: Uint8Array): Uint8Array => {
+			const certId = sequence([
+				sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+				octetString(new Uint8Array(20)),
+				octetString(new Uint8Array(20)),
+				tlv(0x02, Uint8Array.of(0x01)),
+			]);
+			const responseData = sequence([
+				explicitContext(1, name),
+				generalizedTime(new Date('2026-01-01T00:00:00Z')),
+				sequence([
+					sequence([
+						certId,
+						tlv(0x80, new Uint8Array(0)),
+						generalizedTime(new Date('2026-01-01T00:00:00Z')),
+					]),
+				]),
+			]);
+			const basicResponse = sequence([
+				responseData,
+				sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), Uint8Array.of(0x05, 0x00)]),
+				bitString(new Uint8Array(64)),
+			]);
+			return sequence([
+				tlv(0x0a, Uint8Array.of(0x00)),
+				explicitContext(
+					0,
+					sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+				),
+			]);
+		};
+		expect(
+			parseOcspResponseDerOrThrow(
+				responseWithResponder(responderName(tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24)))),
+			).responderId,
+		).toMatchObject({ type: 'byName', name: { values: { commonName: 'US\u{a4}' } } });
+		expect(
+			parseOcspResponseDer(
+				responseWithResponder(responderName(tlv(0x14, Uint8Array.of(0xc1, 0x41)))),
+			),
+		).toMatchObject({ ok: false, code: 'unsupported' });
+	});
+
 	it('parseOcspNonceFromExtensions returns undefined when no nonce extension present (lines 716-717)', async () => {
 		// Build an OCSP response with response extensions that don't include nonce
 		const issuer = await createSelfSignedCertificate({

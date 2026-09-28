@@ -20,6 +20,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -53,8 +54,13 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult } from '#micro509/result/result';
+import type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
+	ErrorResult,
+	Micro509Error,
+} from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
 import type { SignatureProfileInput } from '#micro509/x509/certificate';
 import type { NameFieldKey } from '#micro509/x509/name';
 import { nameFieldKeyFromOid } from '#micro509/x509/name';
@@ -220,8 +226,16 @@ export interface ParsedPkcs7SignedData {
 
 // Result types for PKCS#7 parsing
 
-/** Error codes for PKCS#7 parse failures. */
-export type ParsePkcs7ErrorCode = 'malformed' | 'not_signed_data';
+/**
+ * Error codes for PKCS#7 parse failures.
+ *
+ * `unsupported` is a signer issuer name value micro509 does not decode, a
+ * TeletexString octet outside the X.690 §8.23.5.2 initial state.
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
+ * or DER nested deeper than 64 levels.
+ */
+export type ParsePkcs7ErrorCode = DecodeFailureCode | 'not_signed_data';
 
 /** Error payload for a failed PKCS#7 parse. */
 export interface ParsePkcs7Failure extends Micro509Error<ParsePkcs7ErrorCode> {
@@ -304,7 +318,7 @@ export type VerifyPkcs7SignedDataResult =
 // createPkcs7CertBag
 
 /** Caller-correctable failure code from {@linkcode createPkcs7CertBag}. */
-export type CreatePkcs7CertBagErrorCode = 'invalid_certificate';
+export type CreatePkcs7CertBagErrorCode = 'invalid_certificate' | DecodeRefusalCode;
 
 /** Error payload for a failed PKCS#7 certificate bag creation. */
 export interface CreatePkcs7CertBagFailure extends Micro509Error<CreatePkcs7CertBagErrorCode> {
@@ -339,11 +353,14 @@ export function createPkcs7CertBag(
 		for (const der of certificateDers) {
 			parseCertificateDerOrThrow(der);
 		}
-	} catch {
-		return createCertBagFailure(
-			'invalid_certificate',
-			'Each PKCS#7 certificate source must be valid PEM or DER',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? createCertBagFailure(
+					'invalid_certificate',
+					'Each PKCS#7 certificate source must be valid PEM or DER',
+				)
+			: createCertBagFailure(refusal.code, refusal.message);
 	}
 	// certificates [0] IMPLICIT CertificateSet — a DER SET OF must be canonically
 	// ordered, so sort via setOf, then retag 0x31 -> 0xa0 for the IMPLICIT [0].
@@ -429,7 +446,8 @@ export type CreatePkcs7SignedDataErrorCode =
 	| 'invalid_signer_certificate'
 	| 'invalid_certificate'
 	| 'signer_certificate_key_mismatch'
-	| 'unsupported_signer_key';
+	| 'unsupported_signer_key'
+	| DecodeRefusalCode;
 
 /** Error payload for a failed PKCS#7 SignedData creation. */
 export interface CreatePkcs7SignedDataFailure
@@ -509,11 +527,14 @@ export async function createPkcs7SignedData(
 				parseCertificateDerOrThrow(der);
 				addCertificate(der);
 			}
-		} catch {
-			return createPkcs7Failure(
-				'invalid_certificate',
-				'Each additional PKCS#7 certificate source must be valid PEM or DER',
-			);
+		} catch (error) {
+			const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+			return refusal === undefined
+				? createPkcs7Failure(
+						'invalid_certificate',
+						'Each additional PKCS#7 certificate source must be valid PEM or DER',
+					)
+				: createPkcs7Failure(refusal.code, refusal.message);
 		}
 	}
 
@@ -591,11 +612,14 @@ async function buildPkcs7SignerInfo(
 	let certificate: ParsedCertificate;
 	try {
 		certificate = parseCertificateDerOrThrow(signerCertDer);
-	} catch {
-		return createPkcs7Failure(
-			'invalid_signer_certificate',
-			'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? createPkcs7Failure(
+					'invalid_signer_certificate',
+					'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
+				)
+			: createPkcs7Failure(refusal.code, refusal.message);
 	}
 	// getSignatureAlgorithm throws only for unsupported/misconfigured keys.
 	let signatureAlgorithm: SignatureAlgorithmIdentifier;
@@ -771,8 +795,12 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 				signerInfos: parseSignerInfos(der, signerInfos),
 			},
 		};
-	} catch {
-		return pkcs7Failure('malformed', 'Malformed PKCS#7 structure');
+	} catch (error) {
+		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? pkcs7Failure('malformed', 'Malformed PKCS#7 structure')
+			: pkcs7Failure(refusal.code, refusal.message);
 	}
 }
 
@@ -932,8 +960,8 @@ async function verifyPkcs7BareSignerInfo(
 		return verificationResult.valid
 			? { ok: true }
 			: verifyPkcs7Failure('signature_invalid', 'SignedData signature does not verify');
-	} catch {
-		return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+	} catch (error) {
+		return signatureVerificationThrowFailure(error);
 	}
 }
 
@@ -948,6 +976,16 @@ function pkcs7Failure(
 }
 
 /** Shorthand for constructing a PKCS#7 verification failure result. */
+/** A signer's signature verification that threw: its decode refusal, else `malformed`. */
+function signatureVerificationThrowFailure(
+	error: unknown,
+): ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure> {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	return refusal === undefined
+		? verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData')
+		: verifyPkcs7Failure(refusal.code, refusal.message);
+}
+
 function verifyPkcs7Failure(
 	code: VerifyPkcs7SignedDataErrorCode,
 	message: string,
@@ -1307,8 +1345,6 @@ function parseSignerIdentifier(der: Uint8Array): ParsedSignerIdentifier {
 	throw new Error(`Unsupported SignerIdentifier tag: ${String(element.tag)}`);
 }
 
-const textDecoder = new TextDecoder();
-
 /** Parses a Name SEQUENCE element from a PKCS#7 signer identifier into a {@linkcode ParsedName}. */
 function parseSignerIssuerName(source: Uint8Array, element: DerElement): ParsedName {
 	const derHex = toHex(source.slice(element.start - element.headerLength, element.end));
@@ -1323,12 +1359,7 @@ function parseSignerIssuerName(source: Uint8Array, element: DerElement): ParsedN
 			const oidElement = requireElement(parts[0], 'signer issuer attribute OID');
 			const valueElement = requireElement(parts[1], 'signer issuer attribute value');
 			const oid = decodeObjectIdentifier(oidElement.value);
-			let fieldValue: string;
-			try {
-				fieldValue = decodeString(valueElement.tag, valueElement.value);
-			} catch {
-				fieldValue = textDecoder.decode(valueElement.value);
-			}
+			const fieldValue = decodeString(valueElement.tag, valueElement.value);
 			const fieldKey = nameFieldKeyFromOid(oid);
 			const attribute: ParsedNameAttribute =
 				fieldKey !== undefined
@@ -1502,8 +1533,12 @@ async function verifySignedAttrs(
 	try {
 		assertImplicitSignedAttrsDer(signerInfo.signedAttrsDer);
 		signedAttributes = parseSignedAttributeRequirements(signerInfo.signedAttrsDer);
-	} catch {
-		return verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData');
+	} catch (error) {
+		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData')
+			: verifyPkcs7Failure(refusal.code, refusal.message);
 	}
 	if (signedAttributes.contentTypeOid !== encapsulatedContentTypeOid) {
 		return verifyPkcs7Failure('malformed', 'SignedData contentType attribute does not match');
@@ -1548,8 +1583,8 @@ async function verifySignedAttrs(
 			return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
 		}
 		verified = verificationResult.valid;
-	} catch {
-		return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+	} catch (error) {
+		return signatureVerificationThrowFailure(error);
 	}
 	if (!verified) {
 		return verifyPkcs7Failure(

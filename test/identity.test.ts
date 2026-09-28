@@ -6,7 +6,10 @@ import {
 	matchServiceIdentity,
 	parseCertificatePem,
 	unwrap,
+	verifyCertificateChain,
 } from '#micro509';
+import { concatBytes, ia5String, objectIdentifier, tlv } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { issueChain } from '#test/helpers';
 
 describe('identity boundary', () => {
@@ -800,6 +803,67 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it.each([
+		['_imaps.verify.example', '_imaps.verify.example.'],
+		['_imaps.verify.example.', '_imaps.verify.example'],
+		['_imaps.verify.example.', '_IMAPS.Verify.Example.'],
+	])(
+		'matches the SRV SAN %s against the reference %s across the root dot',
+		async (san, reference) => {
+			const { leaf } = await issueChain({ leafSubjectAltNames: [{ type: 'srv', value: san }] });
+			const certificate = unwrap(parseCertificatePem(leaf.pem));
+			expect(certificate.subjectAltNames).toEqual([{ type: 'srv', value: san }]);
+			expect(
+				matchServiceIdentity({ certificate, serviceIdentity: { type: 'srv', value: reference } }),
+			).toEqual({ ok: true, value: undefined });
+		},
+	);
+
+	it.each([
+		['_imaps.other.example.', 'SRV domain not present in SAN'],
+		['_imaps.sub.verify.example.', 'SRV domain not present in SAN'],
+		['_pop3.verify.example.', 'SRV service not present in SAN'],
+		['_imaps.verify.example..', 'service identity input is malformed'],
+		['_imaps..', 'service identity input is malformed'],
+		['_imaps.verify..example.', 'service identity input is malformed'],
+	])(
+		'does not match the dotted SRV SAN against the reference %s: %s',
+		async (reference, message) => {
+			const { leaf } = await issueChain({
+				leafSubjectAltNames: [{ type: 'srv', value: '_imaps.verify.example.' }],
+			});
+			const certificate = unwrap(parseCertificatePem(leaf.pem));
+			const result = matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: reference },
+			});
+			expect(result).toMatchObject({ ok: false, message });
+		},
+	);
+
+	it.each(['_123.example.com', '_mail.example_com', '_-mail.example.com'])(
+		'holds the SRV-ID %s to the SRVName grammar on both sides',
+		async (value) => {
+			const { certificate } = await createSelfSignedCertificate({
+				subject: { commonName: 'srv-grammar.example' },
+				extensions: {
+					subjectAltNames: [
+						{
+							type: 'unknown',
+							tag: 0xa0,
+							value: concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, ia5String(value))]),
+						},
+					],
+				},
+			});
+			const parsed = unwrap(parseCertificatePem(certificate.pem));
+			expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value }]);
+			expect(
+				matchServiceIdentity({ certificate: parsed, serviceIdentity: { type: 'srv', value } }),
+			).toMatchObject({ ok: false, message: 'service identity input is malformed' });
+		},
+	);
+
 	it('fails closed for unsupported direct identity types at runtime', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
@@ -899,4 +963,218 @@ describe('identity boundary', () => {
 			}),
 		).toEqual({ ok: true, value: undefined });
 	});
+});
+
+type LeafSubjectAltNames = NonNullable<
+	NonNullable<Parameters<typeof createCertificate>[0]['extensions']>['subjectAltNames']
+>;
+type ServiceIdentity = NonNullable<Parameters<typeof verifyCertificateChain>[0]['serviceIdentity']>;
+
+async function verifyServiceIdentity(
+	subjectAltNames: LeafSubjectAltNames,
+	serviceIdentity: ServiceIdentity,
+): Promise<boolean> {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: 'Service Host Root' },
+		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+	});
+	const leafKeys = await generateKeyPair();
+	const leaf = await createCertificate({
+		issuer: { commonName: 'Service Host Root' },
+		subject: { commonName: 'service-host-leaf' },
+		publicKey: leafKeys.publicKey,
+		signerPrivateKey: root.keyPair.privateKey,
+		issuerPublicKey: root.keyPair.publicKey,
+		extensions: { keyUsage: ['digitalSignature'], subjectAltNames },
+	});
+	const result = await verifyCertificateChain({
+		leaf: leaf.pem,
+		roots: [root.certificate.pem],
+		serviceIdentity,
+	});
+	return result.ok;
+}
+
+function rawSrvName(value: string): LeafSubjectAltNames[number] {
+	return {
+		type: 'unknown',
+		tag: 0xa0,
+		value: concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, ia5String(value))]),
+	};
+}
+
+describe('URI-ID and SRV-ID hosts in a verified chain', () => {
+	it.each([
+		['ldap://%62locked.example/', 'ldap://blocked.example/', true],
+		['https://blocked.example./', 'https://blocked.example/', true],
+		['https://blocked.example/', 'https://blocked.example./', true],
+		['https://user@Blocked.Example:8443/x', 'https://blocked.example/', true],
+		['sip:voice.college.example;transport=tcp', 'sip:voice.college.example', true],
+		['https://blocked.example;extra/', 'https://blocked.example/', false],
+		['https://blocked.example%3Bextra/', 'https://blocked.example/', false],
+		['https://blocked.example;extra/', 'https://blocked.example;extra/', false],
+	] as const)(
+		'reads presented %s against %s by RFC 3986 §3.2.2',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['https://us%65r:pw@example.com/', 'https://example.com/', true],
+		['https://@example.com/', 'https://example.com/', true],
+		['https://example.com/', 'https://j\u{f6}rg@example.com/', true],
+		['https://bad%zz@example.com/', 'https://example.com/', false],
+		['https://bad%@example.com/', 'https://example.com/', false],
+		['https://a b@example.com/', 'https://example.com/', false],
+		['https://a[b@example.com/', 'https://example.com/', false],
+		['https://example.com/', 'https://bad%zz@example.com/', false],
+		['https://example.com/', 'https://a\u{200e}b@example.com/', false],
+	] as const)(
+		'reads the host of %s against %s only after an RFC 3986 §3.2.1 userinfo',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['https://example.com/a/b;c=d?q=1&r=/?#frag/?', 'https://example.com/', true],
+		['https://example.com/', 'https://example.com/pfad/\u{fc}?\u{e000}#\u{fc}', true],
+		['https://example.com/%zz', 'https://example.com/', false],
+		['https://example.com/?q=%zz', 'https://example.com/', false],
+		['https://example.com/#a#b', 'https://example.com/', false],
+		['https://example.com/a b', 'https://example.com/', false],
+		['https://example.com/a[b]', 'https://example.com/', false],
+		['https://example.com/', 'https://example.com/%zz', false],
+		['https://example.com/', 'https://example.com/\u{e000}', false],
+		['https://example.com/', 'https://example.com/a\u{200e}', false],
+		['https://example.com/', 'https://ex\u{202e}ample.com/', false],
+	] as const)(
+		'reads the host of %s against %s only when the rest follows RFC 3986 or RFC 3987',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['sip:alice/phone@attacker.example', 'sip:alice/phone@victim.example', false],
+		['sip:alice?x@victim.example', 'sip:victim.example', true],
+		['sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', 'sip:victim.example', true],
+		['sip:%61lice:s%65cret@victim.example', 'sip:victim.example', true],
+		['sip:alice:@victim.example', 'sip:victim.example', true],
+		['sip:a@b@victim.example', 'sip:victim.example', false],
+		['sip:@victim.example', 'sip:victim.example', false],
+		['sip::pw@victim.example', 'sip:victim.example', false],
+		['sip:bad%zz@victim.example', 'sip:victim.example', false],
+		['sip:alice:%zz@victim.example', 'sip:victim.example', false],
+		['sip:alice:pw;x@victim.example', 'sip:victim.example', false],
+		['sip:al[ice@victim.example', 'sip:victim.example', false],
+		['sip:victim.example:5060', 'sip:victim.example', true],
+		['sip:[2001:db8::1]:5060', 'sip:[2001:db8::1]', true],
+		['sip:victim.example:', 'sip:victim.example', false],
+		['sip:alice@victim.example:;transport=tcp', 'sip:victim.example', false],
+		['sip:[2001:db8::1]:', 'sip:[2001:db8::1]', false],
+		['sip:victim.example', 'sip:victim.example:', false],
+		['sip://victim.example', 'sip:victim.example', false],
+		['sips://victim.example/', 'sips:victim.example', false],
+		['sip:victim.example', 'sip://victim.example', false],
+		[
+			'sip:victim.example;lr;maddr=[2001:db8::1]?subject=&to=sip:bob%40x.example',
+			'sip:victim.example',
+			true,
+		],
+		['sip:victim.example;%zz', 'sip:victim.example', false],
+		['sip:victim.example;transport=%zz', 'sip:victim.example', false],
+		['sip:victim.example?bad%zz', 'sip:victim.example', false],
+		['sip:victim.example?a=%zz', 'sip:victim.example', false],
+		['sip:victim.example;', 'sip:victim.example', false],
+		['sip:victim.example;a=', 'sip:victim.example', false],
+		['sip:victim.example?', 'sip:victim.example', false],
+		['sip:victim.example?a=b&', 'sip:victim.example', false],
+		['sip:victim.example;lr;LR', 'sip:victim.example', false],
+		['sip:victim.example#x', 'sip:victim.example', false],
+		['sip:vic_tim.example', 'sip:vic_tim.example', false],
+		['sip:victim.123', 'sip:victim.123', false],
+		['sip:1.2.3.999', 'sip:1.2.3.999', false],
+		['sip:victim.example/path', 'sip:victim.example', false],
+	] as const)(
+		'reads the host of the SIP URI %s against %s by RFC 3261 §25.1',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['https://[2001:db8::1]/', 'https://[2001:DB8:0::1]:443/', true],
+		['https://192.0.2.1/', 'https://192.0.2.1:443/', true],
+		['https://192.0.2.1/', 'https://192.0.2.2/', false],
+		['https://[2001:db8::1]/', 'https://[2001:db8::2]/', false],
+	] as const)(
+		'compares the IP host of %s and %s by its octets (RFC 9525 §6.4)',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['https://*.example.com/', 'https://api.example.com/', true],
+		['https://*.example.com/', 'https://example.com/', false],
+		['https://*.example.com/', 'https://a.b.example.com/', false],
+		['https://*.*.example.com/', 'https://a.b.example.com/', false],
+		['https://f*o.example.com/', 'https://foo.example.com/', false],
+		['https://*.example.com/', 'https://*.example.com/', false],
+		['sip:*.example.com', 'sip:voice.example.com', false],
+		['sips:*.example.com', 'sips:voice.example.com', false],
+	] as const)(
+		'matches the URI-ID wildcard %s against %s (RFC 9525 §6.3, RFC 5922 §7.2)',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['_imap.*.example.com', '_imap.mail.example.com', true],
+		['_imap.*.example.com', '_imap.example.com', false],
+		['_imap.*.example.com', '_imap.a.b.example.com', false],
+		['_imap.*.example.com', '_pop3.mail.example.com', false],
+		['_imap.m*.example.com', '_imap.mail.example.com', false],
+		['_imap.*.example.com', '_imap.*.example.com', false],
+	] as const)(
+		'matches the SRV-ID wildcard %s against %s (RFC 9525 §6.3)',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([rawSrvName(presented)], { type: 'srv', value: reference }),
+			).toBe(ok);
+		},
+	);
 });

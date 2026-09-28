@@ -6,6 +6,7 @@
  * @module
  */
 
+import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import { derEcdsaSignatureToRaw, rawEcdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
 import type { VerifySignedDataResult } from '#micro509/internal/crypto/sig-verify';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
@@ -20,6 +21,19 @@ export type {
 	VerifySignedDataSuccess,
 } from '#micro509/internal/crypto/sig-verify';
 export type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
+
+/** Failure: the signature algorithm parameters exceed a micro509 decoding limit. */
+export interface VerifySignatureLimitFailure {
+	/** Discriminant for the failure branch. */
+	readonly ok: false;
+	/** Machine-readable failure code. */
+	readonly code: 'limit_exceeded';
+	/** Human-readable description of the limit. */
+	readonly reason: string;
+}
+
+/** Result of {@linkcode verifySignature}. */
+export type VerifySignatureResult = VerifySignedDataResult | VerifySignatureLimitFailure;
 
 /** Input for {@linkcode verifySignature}. */
 export interface VerifySignatureInput {
@@ -63,19 +77,27 @@ export interface SignDataResult {
  * verify under one encoding, the alternate DER/raw encoding is retried.
  *
  * Returns a typed union: `{ ok: true, valid }` when verification ran,
- * `unsupported_signature_algorithm_parameters` or `verification_error`
- * failures otherwise.
+ * `unsupported_signature_algorithm_parameters`, `verification_error` or
+ * `limit_exceeded` failures otherwise.
  */
-export function verifySignature(input: VerifySignatureInput): Promise<VerifySignedDataResult> {
-	return verifySignedDataDetailed(
-		input.signatureAlgorithm.oid,
-		input.signatureAlgorithm.parametersDer,
-		input.publicKeyAlgorithm.oid,
-		input.publicKeyAlgorithm.parametersOid,
-		input.signerSpkiDer,
-		input.signature,
-		input.data,
-	);
+export async function verifySignature(input: VerifySignatureInput): Promise<VerifySignatureResult> {
+	try {
+		return await verifySignedDataDetailed(
+			input.signatureAlgorithm.oid,
+			input.signatureAlgorithm.parametersDer,
+			input.publicKeyAlgorithm.oid,
+			input.publicKeyAlgorithm.parametersOid,
+			input.signerSpkiDer,
+			input.signature,
+			input.data,
+		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		if (refusal === undefined) {
+			throw error;
+		}
+		return { ok: false, code: refusal.code, reason: refusal.message };
+	}
 }
 
 /**

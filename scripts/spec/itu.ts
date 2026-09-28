@@ -8,7 +8,7 @@ const TOC_ROW = /\t\s*\d+\s*$/;
 const CHANGE_ITEM = /^(\d+)\)\s+(\S.*)$/;
 const T_REC = /^T-REC-(X\.\d+)-(\d{4})(\d{2})-\w+!([^!]*)!/;
 
-function partsOf(value: string): readonly number[] | undefined {
+export function partsOf(value: string): readonly number[] | undefined {
 	const parts: number[] = [];
 	for (const [position, part] of value.split('.').entries()) {
 		if (position === 0 && /^[A-Z]$/.test(part)) {
@@ -33,12 +33,12 @@ function follows(previous: readonly number[], candidate: readonly number[]): boo
 	);
 }
 
-interface ClauseCandidate {
+export interface ClauseCandidate {
 	readonly parts: readonly number[];
 	readonly heading: Heading;
 }
 
-function longestChain(candidates: readonly ClauseCandidate[]): readonly Heading[] {
+export function longestChain(candidates: readonly ClauseCandidate[]): readonly Heading[] {
 	const length: number[] = [];
 	const back: (number | undefined)[] = [];
 	let end: number | undefined;

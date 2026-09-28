@@ -27,6 +27,11 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_LIMIT_CODES,
+	decodeFailureResult,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	explicitContext,
@@ -41,15 +46,13 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { md5 } from '#micro509/internal/crypto/hash';
+import type { KdfBudget, KdfLimitOptions, Pbes2Parameters } from '#micro509/internal/crypto/pbes2';
 import {
 	createKdfBudget,
 	decryptPbes2,
 	encryptPbes2,
 	isKdfIterationLimitError,
 	isWrongPasswordError,
-	type KdfBudget,
-	type KdfLimitOptions,
-	type Pbes2Parameters,
 	parsePbes2AlgorithmIdentifier,
 	wrongPasswordError,
 } from '#micro509/internal/crypto/pbes2';
@@ -61,13 +64,8 @@ import {
 	pemEncode,
 	trimLwsp,
 } from '#micro509/pem/pem';
-import {
-	type ErrorResult,
-	failureResult,
-	type Micro509Error,
-	rethrowIfInvariant,
-	successResult,
-} from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 
 export type {
 	KdfLimitOptions,
@@ -207,8 +205,14 @@ export interface LegacyPemEncryptionOptions {
 	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 }
 
-/** Machine-readable failure reason for the `import*` key functions. */
-export type ImportKeyErrorCode = 'malformed';
+/**
+ * Machine-readable failure reason for the `import*` key functions.
+ *
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
+ * or DER nested deeper than 64 levels.
+ */
+export type ImportKeyErrorCode = Exclude<DecodeFailureCode, 'unsupported'>;
 
 /** Structured failure payload for key import. */
 export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
@@ -219,9 +223,10 @@ export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
 /**
  * Success-or-failure result returned by the public `import*` key functions.
  *
- * On failure, `code` is always `'malformed'`: structurally invalid input,
- * algorithm mismatches, and wrong-password decryption failures all surface
- * the same way (see the throwing `*OrThrow` variants for raw error messages).
+ * On failure, `code` is `'malformed'` for structurally invalid input,
+ * algorithm mismatches, and wrong-password decryption failures alike (see the
+ * throwing `*OrThrow` variants for raw error messages), and `'limit_exceeded'`
+ * for an implementation limit.
  */
 export type ImportKeyResult<T> =
 	| { readonly ok: true; readonly value: T }
@@ -231,12 +236,13 @@ export type ImportKeyResult<T> =
  * Machine-readable failure reason for the `importEncrypted*` key functions.
  *
  * Distinguishes a wrong decryption password (`'invalid_password'`) from
- * structurally invalid input or algorithm mismatches (`'malformed'`), and
- * from an encoded KDF iteration count above the caller's limit
- * (`'kdf_iterations_exceeded'`).
+ * structurally invalid input or algorithm mismatches (`'malformed'`), from an
+ * encoded KDF iteration count above the caller's limit
+ * (`'kdf_iterations_exceeded'`), and from a decoding limit of micro509's own
+ * (`'limit_exceeded'`, see {@linkcode ImportKeyErrorCode}).
  */
 export type ImportEncryptedKeyErrorCode =
-	| 'malformed'
+	| ImportKeyErrorCode
 	| 'invalid_password'
 	| 'kdf_iterations_exceeded';
 
@@ -695,13 +701,13 @@ export async function importSpkiDerOrThrow(
 	}
 }
 
-/** Runs a throwing key import and maps an EXPECTED failure to a `'malformed'` result; invariants rethrow. */
+/** Runs a throwing key import and maps an EXPECTED failure to a `'malformed'` or `'limit_exceeded'` result; invariants rethrow. */
 async function importResult(run: () => Promise<CryptoKey>): Promise<ImportKeyResult<CryptoKey>> {
 	try {
 		return successResult(await run());
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed key');
 	}
 }
 
@@ -719,10 +725,7 @@ async function encryptedImportResult(
 		if (isKdfIterationLimitError(error)) {
 			return failureResult('kdf_iterations_exceeded', error.message);
 		}
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed encrypted key',
-		);
+		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed encrypted key');
 	}
 }
 
@@ -832,7 +835,8 @@ export async function importPkcs8DerOrThrow(
 	let parsedPrivateKey: ReturnType<typeof parsePkcs8PrivateKey>;
 	try {
 		parsedPrivateKey = parsePkcs8PrivateKey(der);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	let importInput: PrivateKeyImportInput;
@@ -985,7 +989,8 @@ function readEncryptedPkcs8Envelope(der: Uint8Array): {
 	let children: readonly ReturnType<typeof readSequenceChildren>[number][];
 	try {
 		children = readSequenceChildren(der);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed EncryptedPrivateKeyInfo');
 	}
 	const algorithmIdentifier = children[0];
@@ -1220,7 +1225,8 @@ export async function importSec1DerOrThrow(
 	let parsedSec1: ReturnType<typeof parseSec1PrivateKey>;
 	try {
 		parsedSec1 = parseSec1PrivateKey(der);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed SEC 1 private key');
 	}
 	let importInput: ImportEcKeyInput;
@@ -1638,7 +1644,8 @@ function toImportAlgorithm(
 function assertDecryptedPrivateKey(parse: () => unknown, message: string): void {
 	try {
 		parse();
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw wrongPasswordError(message);
 	}
 }
@@ -1794,7 +1801,7 @@ function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array |
 	let publicKey: Uint8Array | undefined;
 	let seenUnknown = false;
 	for (const child of tail) {
-		const contextNumber = (child.tag & 0xc0) === 0x80 ? child.tag & 0x1f : -1;
+		const contextNumber = (child.tag & 0xc0) === 0x80 ? child.tagNumber : -1;
 		if (contextNumber === 0) {
 			if (seenAttributes || publicKey !== undefined || seenUnknown || child.tag !== 0xa0) {
 				throw new Error('Malformed PKCS#8 private key');
@@ -1806,7 +1813,7 @@ function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array |
 				throw new Error('Malformed PKCS#8 private key');
 			}
 			publicKey = readPublicKeyBitString(child.value);
-		} else if (contextNumber >= 2 && contextNumber <= 30) {
+		} else if (contextNumber >= 2) {
 			seenUnknown = true;
 		} else {
 			throw new Error('Malformed PKCS#8 private key');
@@ -2267,7 +2274,8 @@ function parseSpkiDer(der: Uint8Array): {
 				? { parametersOid: decodeObjectIdentifier(parameters.value) }
 				: {}),
 		};
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed SubjectPublicKeyInfo');
 	}
 }

@@ -19,6 +19,12 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeFailureResult,
+	decodeRefusalOf,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
@@ -47,16 +53,25 @@ import {
 	signBytes,
 } from '#micro509/internal/crypto/signing';
 import { base64Encode } from '#micro509/internal/shared/base64';
-import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
+import {
+	compareDistinguishedNames,
+	compareRelativeDistinguishedNames,
+} from '#micro509/internal/shared/dn';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits';
 import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
+import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
+	ErrorResult,
+	Micro509Error,
+} from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
@@ -241,9 +256,13 @@ export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
 /** PEM string, DER bytes, or already-parsed certificate. */
 export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
-/** Failure detail when CRL signature verification fails. */
+/**
+ * Failure detail when CRL signature verification fails. `unsupported` and
+ * `limit_exceeded` report a CRL or issuer certificate micro509 cannot decode
+ * (see {@linkcode ParseCertificateRevocationListErrorCode}).
+ */
 export interface VerifyCertificateRevocationListSignatureFailure
-	extends Micro509Error<'signature_invalid'> {
+	extends Micro509Error<'signature_invalid' | DecodeRefusalCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -260,7 +279,7 @@ export type VerifyCertificateRevocationListSignatureResult =
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| ErrorResult<
-			'signature_invalid',
+			'signature_invalid' | DecodeRefusalCode,
 			Record<never, never>,
 			VerifyCertificateRevocationListSignatureFailure
 	  >;
@@ -292,11 +311,16 @@ export interface ValidateCertificateRevocationListInput {
 /**
  * Failure detail for {@linkcode validateCertificateRevocationList}.
  *
- * Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`.
+ * Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`,
+ * and `unsupported` or `limit_exceeded` for a CRL or issuer certificate micro509 cannot decode.
  */
 export interface ValidateCertificateRevocationListFailure
 	extends Micro509Error<
-		'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted'
+		| 'signature_invalid'
+		| 'issuer_mismatch'
+		| 'stale_crl'
+		| 'crl_sign_not_permitted'
+		| DecodeRefusalCode
 	> {
 	/** Always `false` for failures. */
 	readonly ok: false;
@@ -314,7 +338,11 @@ export type ValidateCertificateRevocationListResult =
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| ErrorResult<
-			'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+			| 'signature_invalid'
+			| 'issuer_mismatch'
+			| 'stale_crl'
+			| 'crl_sign_not_permitted'
+			| DecodeRefusalCode,
 			Record<never, never>,
 			ValidateCertificateRevocationListFailure
 	  >;
@@ -351,7 +379,8 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'issuer_mismatch'
 	| 'stale_crl'
 	| 'crl_sign_not_permitted'
-	| 'non_applicable';
+	| 'non_applicable'
+	| DecodeRefusalCode;
 
 /** Structured reason why a CRL was deemed non-applicable to a given certificate. */
 export type CrlApplicabilityFailureReason =
@@ -616,7 +645,7 @@ export async function createCertificateRevocationList(
 }
 
 /** Machine-readable failure reason for the CRL parsers. */
-export type ParseCertificateRevocationListErrorCode = 'malformed';
+export type ParseCertificateRevocationListErrorCode = DecodeFailureCode;
 
 /** Structured failure payload for CRL parsing. */
 export interface ParseCertificateRevocationListFailure
@@ -720,7 +749,7 @@ export function parseCertificateRevocationListDer(
 		return successResult(parseCertificateRevocationListDerOrThrow(der));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed CRL');
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed CRL');
 	}
 }
 
@@ -737,7 +766,7 @@ export function parseCertificateRevocationListPem(
 		return successResult(parseCertificateRevocationListPemOrThrow(pem));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed CRL');
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed CRL');
 	}
 }
 
@@ -762,11 +791,14 @@ export async function verifyCertificateRevocationListSignature(
 			typeof issuerCertificate === 'string'
 				? parseIssuerCertificatePem(issuerCertificate)
 				: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
-	} catch {
-		return verifyCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list or issuer certificate input is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? verifyCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list or issuer certificate input is malformed',
+				)
+			: verifyCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
 	try {
@@ -779,11 +811,14 @@ export async function verifyCertificateRevocationListSignature(
 			parsedCrl.signatureValue,
 			parsedCrl.tbsCertListDer,
 		);
-	} catch {
-		return verifyCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list signature verification failed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? verifyCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list signature verification failed',
+				)
+			: verifyCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	if (!verifiedResult.ok) {
 		if (verifiedResult.code === 'verification_error') {
@@ -845,20 +880,26 @@ export async function authenticateCrl(
 	let parsedCrl: ParsedCertificateRevocationList;
 	try {
 		parsedCrl = normalizeCrl(crl);
-	} catch {
-		return validateCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list signed content is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list signed content is malformed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	let issuer: ParsedCertificate;
 	try {
 		issuer = normalizeCrlCertificate(issuerCertificate);
-	} catch {
-		return validateCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'issuer certificate input is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'issuer certificate input is malformed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
@@ -899,11 +940,14 @@ export async function authenticateCrl(
 			parsedCrl.signatureValue,
 			parsedCrl.tbsCertListDer,
 		);
-	} catch {
-		return validateCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list signature verification failed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list signature verification failed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	if (!verifiedResult.ok) {
 		if (verifiedResult.code === 'verification_error') {
@@ -991,11 +1035,14 @@ export async function checkCertificateRevocationAgainstCrl(
 	let certificate: ParsedCertificate;
 	try {
 		certificate = normalizeCrlCertificate(input.certificate);
-	} catch {
-		return checkCertificateRevocationAgainstCrlFailureResult(
-			'non_applicable',
-			'certificate input is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? checkCertificateRevocationAgainstCrlFailureResult(
+					'non_applicable',
+					'certificate input is malformed',
+				)
+			: checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 	}
 	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
 	if (!authenticated.ok) {
@@ -1147,16 +1194,21 @@ async function validateOptionalDeltaCrl(
 			'delta CRL has no nextUpdate',
 		);
 	}
-	const compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+	let compatibilityFailure: CrlApplicabilityFailure | undefined;
+	try {
+		compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+	} catch (error) {
+		return crlNameRefusalFailure(error);
+	}
 	return compatibilityFailure ?? { ok: true, value: deltaValidation.value };
 }
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
 function verifyCertificateRevocationListFailureResult(
-	code: 'signature_invalid',
+	code: 'signature_invalid' | DecodeRefusalCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid',
+	'signature_invalid' | DecodeRefusalCode,
 	Record<never, never>,
 	VerifyCertificateRevocationListSignatureFailure
 > {
@@ -1165,10 +1217,19 @@ function verifyCertificateRevocationListFailureResult(
 
 /** Builds a `ValidateCertificateRevocationListFailureResult`. */
 function validateCertificateRevocationListFailureResult(
-	code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+	code:
+		| 'signature_invalid'
+		| 'issuer_mismatch'
+		| 'stale_crl'
+		| 'crl_sign_not_permitted'
+		| DecodeRefusalCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+	| 'signature_invalid'
+	| 'issuer_mismatch'
+	| 'stale_crl'
+	| 'crl_sign_not_permitted'
+	| DecodeRefusalCode,
 	Record<never, never>,
 	ValidateCertificateRevocationListFailure
 > {
@@ -1214,6 +1275,17 @@ export function isCertificateRevoked(
 
 /** Searches CRL entries for the certificate's serial, respecting indirect-CRL issuer overrides. */
 function findRevokedCertificateEntry(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+): RevokedCertificateLookupResult {
+	try {
+		return lookupRevokedCertificateEntry(certificate, crl);
+	} catch (error) {
+		return crlNameRefusalFailure(error);
+	}
+}
+
+function lookupRevokedCertificateEntry(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 ): RevokedCertificateLookupResult {
@@ -1272,6 +1344,18 @@ function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	allowDeltaCrl = false,
+): CrlApplicabilityOutcome {
+	try {
+		return evaluateCrlApplicability(certificate, crl, allowDeltaCrl);
+	} catch (error) {
+		return { ok: false, failure: crlNameRefusalFailure(error) };
+	}
+}
+
+function evaluateCrlApplicability(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	allowDeltaCrl: boolean,
 ): CrlApplicabilityOutcome {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return notApplicableOutcome(
@@ -1875,7 +1959,7 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	}
 	if (left.type === 'srv' && right.type === 'srv') {
 		// RFC 4985 §2: the SRVName Service and the DNS Name both compare case-insensitively.
-		return left.value.toLowerCase() === right.value.toLowerCase();
+		return compareSrvNames(left.value.toLowerCase(), right.value.toLowerCase());
 	}
 	if (left.type === 'email' && right.type === 'email') {
 		return compareRfc822Names(left.value, right.value);
@@ -1897,6 +1981,32 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 			return false;
 		}
 		return compareDistinguishedNames(leftName, rightName);
+	}
+	return compareOpaqueGeneralNames(left, right);
+}
+
+function compareSrvNames(left: string, right: string): boolean {
+	const leftParts = parsePresentedSrvName(left);
+	const rightParts = parsePresentedSrvName(right);
+	if (leftParts === undefined || rightParts === undefined) {
+		return left === right;
+	}
+	return leftParts.service === rightParts.service && leftParts.name === rightParts.name;
+}
+
+/** Encoding equality for the GeneralName alternatives carried as DER or an OID. */
+function compareOpaqueGeneralNames(left: GeneralName, right: GeneralName): boolean {
+	if (left.type === 'otherName' && right.type === 'otherName') {
+		return left.typeId === right.typeId && bytesEqual(left.value, right.value);
+	}
+	if (
+		(left.type === 'x400Address' && right.type === 'x400Address') ||
+		(left.type === 'ediPartyName' && right.type === 'ediPartyName')
+	) {
+		return bytesEqual(left.value, right.value);
+	}
+	if (left.type === 'registeredID' && right.type === 'registeredID') {
+		return left.value === right.value;
 	}
 	if (left.type === 'unknown' && right.type === 'unknown') {
 		return left.tag === right.tag && bytesEqual(left.value, right.value);
@@ -2026,36 +2136,6 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	}
 	for (let index = 0; index < left.length; index += 1) {
 		if (left[index] !== right[index]) {
-			return false;
-		}
-	}
-	return true;
-}
-
-/** Set-equality comparison for RDN attribute sets (order-independent, RFC 4518 string prep). */
-function compareRelativeDistinguishedNames(
-	left: ParsedRelativeDistinguishedName,
-	right: ParsedRelativeDistinguishedName,
-): boolean {
-	if (left.attributes.length !== right.attributes.length) {
-		return false;
-	}
-	const matched = Array.from({ length: right.attributes.length }, () => false);
-	for (const leftAttribute of left.attributes) {
-		let found = false;
-		for (let index = 0; index < right.attributes.length; index += 1) {
-			const rightAttribute = right.attributes[index];
-			if (rightAttribute === undefined || matched[index]) {
-				continue;
-			}
-			if (!compareNameAttributeValue(leftAttribute, rightAttribute)) {
-				continue;
-			}
-			matched[index] = true;
-			found = true;
-			break;
-		}
-		if (!found) {
 			return false;
 		}
 	}
@@ -2579,12 +2659,7 @@ function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
 			const oidElement = requireElement(parts[0], 'issuer attribute OID');
 			const valueElement = requireElement(parts[1], 'issuer attribute value');
 			const oid = decodeObjectIdentifier(oidElement.value);
-			let fieldValue: string;
-			try {
-				fieldValue = decodeString(valueElement.tag, valueElement.value);
-			} catch {
-				fieldValue = textDecoder.decode(valueElement.value);
-			}
+			const fieldValue = decodeNameValue(valueElement);
 			const fieldKey = nameFieldKeyFromOid(oid);
 			const attribute: ParsedNameAttribute =
 				fieldKey !== undefined
@@ -2610,7 +2685,10 @@ function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
 	return { derHex, rdns, attributes: allAttributes, values };
 }
 
-/** Re-parses a hex-encoded DER Name into a {@linkcode ParsedName}. Returns `undefined` on malformed input. */
+/**
+ * Re-parses a hex-encoded DER Name into a {@linkcode ParsedName}. Returns
+ * `undefined` on malformed input and throws a decode refusal.
+ */
 function parseDerHexName(hex: string): ParsedName | undefined {
 	try {
 		const bytes = hexToBytes(hex);
@@ -2620,9 +2698,19 @@ function parseDerHexName(hex: string): ParsedName | undefined {
 			return undefined;
 		}
 		return parseIssuer(bytes, element);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		return undefined;
 	}
+}
+
+/** The failure for a decode refusal a directoryName comparison threw. */
+function crlNameRefusalFailure(error: unknown): CrlApplicabilityFailure {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	if (refusal === undefined) {
+		throw error;
+	}
+	return checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 }
 
 function unwrapNameElement(source: Uint8Array, element: DerElement): DerElement {
@@ -3065,6 +3153,3 @@ function hasReparseableCrlShape(
 ): crl is ParsedCertificateRevocationList & { readonly der: Uint8Array } {
 	return 'der' in crl && crl.der instanceof Uint8Array;
 }
-
-/** Shared UTF-8 decoder instance. */
-const textDecoder = new TextDecoder();

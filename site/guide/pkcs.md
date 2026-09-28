@@ -116,7 +116,7 @@ password.
 
 The default MAC is the RFC 7292 MAC with SHA-256, keyed by the PKCS#12 KDF. Its
 password must be a BMPString, so a password with a UTF-16 surrogate (an emoji,
-for example) fails with `password_not_bmp_string`. Pass
+for example), U+FFFE or U+FFFF fails with `password_not_bmp_string`. Pass
 `mac: { type: 'pbmac1', password }` to `createPfx` for an RFC 9879 PBMAC1 MAC
 instead. It uses PBKDF2-HMAC-SHA-256 with a 32-octet key and HMAC-SHA-256, and
 encodes the password as UTF-8, so any well-formed string works. Parsing detects

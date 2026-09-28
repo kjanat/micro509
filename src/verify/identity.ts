@@ -9,9 +9,13 @@
  * @module
  */
 
-import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
+import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import { presentedDomainToAscii, referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { UriHost, UriHostSource } from '#micro509/internal/shared/uri-host';
+import { hostportHost, uriAuthorityHost } from '#micro509/internal/shared/uri-host';
+import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
+import type { DecodeRefusalCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
 import type { SubjectAltName } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
@@ -70,7 +74,8 @@ export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
 	| 'common_name_fallback_suppressed'
 	| 'service_identity_mismatch'
-	| 'unsupported_service_identity_type';
+	| 'unsupported_service_identity_type'
+	| DecodeRefusalCode;
 
 /** Diagnostic context attached to an identity-matching failure. */
 export interface MatchServiceIdentityFailureDetails {
@@ -174,8 +179,11 @@ export function matchCertificateServiceIdentity(
 	let certificate: ParsedCertificate;
 	try {
 		certificate = parseCertificateDerOrThrow(new Uint8Array(rawCertificate.der));
-	} catch {
-		return failure('subject_alt_name_mismatch', 'certificate input is malformed');
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? failure('subject_alt_name_mismatch', 'certificate input is malformed')
+			: failure(refusal.code, refusal.message);
 	}
 	switch (serviceIdentity.type) {
 		case 'dns':
@@ -331,7 +339,7 @@ function matchParsedIpServiceIdentity(
 }
 
 interface ScopedServiceIdentityOptions {
-	readonly parse: (value: string) => ServiceScopedIdentity | undefined;
+	readonly parse: (value: string, source: UriHostSource) => ServiceScopedIdentity | undefined;
 	readonly sanType: 'uri' | 'srv';
 	readonly missingMessage: string;
 	readonly serviceMismatchMessage: string;
@@ -354,7 +362,7 @@ function matchScopedServiceIdentity(
 			serviceIdentity.value,
 		);
 	}
-	const expected = options.parse(serviceIdentity.value);
+	const expected = options.parse(serviceIdentity.value, 'reference');
 	if (expected === undefined) {
 		return malformedServiceIdentityFailure(
 			certificate,
@@ -367,10 +375,10 @@ function matchScopedServiceIdentity(
 			isScopedSubjectAltName(entry, options.sanType),
 		) ?? [];
 	const matchingService = sans.flatMap((entry) => {
-		const parsed = options.parse(entry.value);
+		const parsed = options.parse(entry.value, 'presented');
 		return parsed === undefined || parsed.serviceType !== expected.serviceType ? [] : [parsed];
 	});
-	if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
+	if (matchingService.some((entry) => matchesServiceHost(entry.host, expected.host))) {
 		return success();
 	}
 	return scopedServiceIdentityFailure(certificate, expected, sans, matchingService, options);
@@ -396,8 +404,8 @@ function scopedServiceIdentityFailure(
 			options.domainMismatchMessage,
 			details(
 				certificate.subject.values.commonName,
-				expected.domainName,
-				matchingService.map((entry) => entry.domainName).join(','),
+				serviceHostText(expected.host),
+				matchingService.map((entry) => serviceHostText(entry.host)).join(','),
 			),
 		);
 	}
@@ -415,15 +423,15 @@ function scopedServiceIdentityFailure(
 	return failure(
 		'subject_alt_name_mismatch',
 		options.missingMessage,
-		details(certificate.subject.values.commonName, expected.domainName, ''),
+		details(certificate.subject.values.commonName, serviceHostText(expected.host), ''),
 	);
 }
 
 function serviceTypeFromSanValue(
 	value: string,
-	parse: (value: string) => ServiceScopedIdentity | undefined,
+	parse: ScopedServiceIdentityOptions['parse'],
 ): readonly string[] {
-	const parsed = parse(value);
+	const parsed = parse(value, 'presented');
 	return parsed === undefined ? [] : [parsed.serviceType];
 }
 
@@ -469,12 +477,27 @@ function tryNormalizeDnsName(value: string): string | undefined {
 	return referenceDomainToAscii(value);
 }
 
-/** Decomposed URI-ID or SRV-ID: a service type discriminant plus a domain. */
+/** Decomposed URI-ID or SRV-ID: a service type discriminant plus a host. */
 interface ServiceScopedIdentity {
 	/** URI scheme (e.g. `"https"`) or SRV service label (e.g. `"imap"`). */
 	readonly serviceType: string;
-	/** Normalized domain name portion for DNS comparison. */
-	readonly domainName: string;
+	/** Domain name in A-labels, which a presented identifier may wildcard, or an IP address. */
+	readonly host: ServiceHost;
+}
+
+type ServiceHost =
+	| { readonly type: 'dns'; readonly name: string }
+	| { readonly type: 'ip'; readonly bytes: Uint8Array };
+
+/** RFC 9525 §6.3 compares domain names and §6.4 compares IP addresses by their octets. */
+function matchesServiceHost(presented: ServiceHost, reference: ServiceHost): boolean {
+	return presented.type === 'ip'
+		? reference.type === 'ip' && sameIpAddressBytes(presented.bytes, reference.bytes)
+		: reference.type === 'dns' && matchesDnsName(presented.name, reference.name);
+}
+
+function serviceHostText(host: ServiceHost): string {
+	return host.type === 'ip' ? decodeIpAddress(host.bytes) : host.name;
 }
 
 /** Returns which SAN types (dns, uri, srv) the certificate presents, used for CN-fallback suppression. */
@@ -491,78 +514,112 @@ function presentedDnsIdentifierTypes(
 	return types;
 }
 
-/** Attempts to split a URI into scheme + reg-name. @returns `undefined` on failure. */
-function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
+/** RFC 9525 §6.2: a URI-ID's scheme and the host of its authority, or of a SIP URI. */
+function tryParseUriServiceIdentity(
+	value: string,
+	source: UriHostSource,
+): ServiceScopedIdentity | undefined {
 	const schemeEnd = value.indexOf(':');
 	if (schemeEnd <= 0 || !/^[A-Za-z][A-Za-z0-9+.-]*$/.test(value.slice(0, schemeEnd))) {
 		return undefined;
 	}
 	const serviceType = value.slice(0, schemeEnd).toLowerCase();
-	const domainName = extractUriRegName(value, serviceType);
-	const normalizedDomainName =
-		domainName === undefined ? undefined : tryNormalizeDnsName(domainName);
-	if (normalizedDomainName === undefined) {
-		return undefined;
-	}
-	return { serviceType, domainName: normalizedDomainName };
+	const sip = serviceType === 'sip' || serviceType === 'sips';
+	const host = sip
+		? sipUriHost(value.slice(schemeEnd + 1), source)
+		: uriAuthorityHost(value, source);
+	const serviceHost = uriServiceHost(host, source === 'presented' && !sip);
+	return serviceHost === undefined ? undefined : { serviceType, host: serviceHost };
 }
 
-/** Extracts the reg-name host from a URI, stripping scheme, userinfo, port, and path components. */
-function extractUriRegName(value: string, serviceType: string): string | undefined {
-	const schemeEnd = value.indexOf(':');
-	if (schemeEnd <= 0) {
-		return undefined;
+/** RFC 3261 §25.1 userinfo without its "@": a non-empty user and an optional password. */
+const SIP_USERINFO =
+	/^(?:[A-Za-z0-9\-_.!~*'()&=+$,;?/]|%[0-9A-Fa-f]{2})+(?::(?:[A-Za-z0-9\-_.!~*'()&=+$,]|%[0-9A-Fa-f]{2})*)?$/;
+
+/** RFC 3261 §25.1 uri-parameters, each `pname [ "=" pvalue ]` of paramchar. */
+const SIP_PARAMETERS =
+	/^(?:;(?:[A-Za-z0-9\-_.!~*'()[\]/:&+$]|%[0-9A-Fa-f]{2})+(?:=(?:[A-Za-z0-9\-_.!~*'()[\]/:&+$]|%[0-9A-Fa-f]{2})+)?)*$/;
+
+/** RFC 3261 §25.1 headers, each `hname "=" hvalue` of hnv-unreserved and unreserved characters. */
+const SIP_HEADERS =
+	/^(?:\?(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})+=(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})*(?:&(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})+=(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})*)*)?$/;
+
+/** RFC 3261 §25.1 hostname, whose toplabel opens with a letter. */
+const SIP_HOSTNAME = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z](?:[a-z0-9-]*[a-z0-9])?$/i;
+
+/**
+ * RFC 3261 §25.1: the only "@" a SIP URI may hold ends its userinfo, and its
+ * hostport is a hostname or IP address with no escaped octets and a port of at
+ * least one digit. The uri-parameters and headers after it follow their
+ * grammar, with every "%" opening an escaped octet (§19.1.2), and no parameter
+ * name appears twice (§19.1.1).
+ */
+function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
+	const at = schemeSpecific.indexOf('@');
+	const afterUserinfo = schemeSpecific.slice(at + 1);
+	const hostport = afterUserinfo.split(/[;?]/, 1)[0] ?? '';
+	const rest = afterUserinfo.slice(hostport.length);
+	const headersStart = rest.includes('?') ? rest.indexOf('?') : rest.length;
+	const parameters = rest.slice(0, headersStart);
+	if (
+		(at >= 0 && !SIP_USERINFO.test(schemeSpecific.slice(0, at))) ||
+		!SIP_PARAMETERS.test(parameters) ||
+		!SIP_HEADERS.test(rest.slice(headersStart)) ||
+		hasRepeatedParameter(parameters) ||
+		hostport.includes('%') ||
+		hostport.endsWith(':')
+	) {
+		return { type: 'invalid' };
 	}
-	const schemeSpecific = value.slice(schemeEnd + 1);
-	const hasAuthority = schemeSpecific.startsWith('//');
-	if (!hasAuthority && serviceType !== 'sip' && serviceType !== 'sips') {
-		return undefined;
-	}
-	let authority = cutAtFirstDelimiter(hasAuthority ? schemeSpecific.slice(2) : schemeSpecific, [
-		'/',
-		'?',
-		'#',
-	]);
-	const userInfoSeparator = authority.lastIndexOf('@');
-	if (userInfoSeparator >= 0) {
-		authority = authority.slice(userInfoSeparator + 1);
-	}
-	if (authority.startsWith('[')) {
-		return undefined;
-	}
-	const host = cutAtFirstDelimiter(authority, [':', ';']);
-	if (host.length === 0 || host.includes('[') || host.includes(']')) {
-		return undefined;
-	}
-	return decodeRegName(host);
+	const host = hostportHost(hostport, source);
+	return host.type === 'ip' || (host.type === 'dns' && SIP_HOSTNAME.test(host.name))
+		? host
+		: { type: 'invalid' };
 }
 
-/** RFC 3986 §3.2.2: a reg-name with its percent-encoded UTF-8 octets decoded once. */
-function decodeRegName(host: string): string | undefined {
-	if (/%(?![0-9A-Fa-f]{2})/.test(host)) {
-		return undefined;
-	}
-	try {
-		return decodeURIComponent(host);
-	} catch {
-		return undefined;
-	}
+/** RFC 3261 §19.1.4 compares parameter names without regard to case. */
+function hasRepeatedParameter(parameters: string): boolean {
+	const names = parameters
+		.split(';')
+		.slice(1)
+		.map((parameter) => (parameter.split('=', 1)[0] ?? '').toLowerCase());
+	return new Set(names).size !== names.length;
 }
 
-/** Returns the substring before the first occurrence of any delimiter character. */
-function cutAtFirstDelimiter(value: string, delimiters: readonly string[]): string {
-	let end = value.length;
-	for (const delimiter of delimiters) {
-		const index = value.indexOf(delimiter);
-		if (index >= 0 && index < end) {
-			end = index;
+/**
+ * RFC 9525 §6.3: a presented wildcard is the whole left-most label of the
+ * domain name. RFC 5922 §7.2 prohibits wildcards for SIP domains.
+ */
+function uriServiceHost(host: UriHost, wildcardAllowed: boolean): ServiceHost | undefined {
+	switch (host.type) {
+		case 'dns':
+		case 'ip':
+			return host;
+		case 'regName': {
+			const parent =
+				wildcardAllowed && host.value.startsWith('*.')
+					? presentedDomainToAscii(host.value.slice(2))
+					: undefined;
+			return parent === undefined ? undefined : { type: 'dns', name: `*.${parent}` };
+		}
+		case 'absent':
+		case 'invalid':
+			return undefined;
+		default: {
+			const _exhaustive: never = host;
+			throw new Error(`Unhandled UriHost type: ${String(_exhaustive)}`);
 		}
 	}
-	return value.slice(0, end);
 }
 
-/** Attempts to split `_service.domain` into parts. @returns `undefined` on failure. */
-function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | undefined {
+/**
+ * RFC 4985 §2 `_Service.Name`. RFC 9525 §6.3 lets a presented Name open with
+ * a `*` label.
+ */
+function tryParseSrvServiceIdentity(
+	value: string,
+	source: UriHostSource,
+): ServiceScopedIdentity | undefined {
 	if (!value.startsWith('_')) {
 		return undefined;
 	}
@@ -570,10 +627,19 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	if (dotIndex <= 1 || dotIndex === value.length - 1) {
 		return undefined;
 	}
-	const domainName = tryNormalizeDnsName(value.slice(dotIndex + 1));
-	return domainName === undefined
+	const domain = value.slice(dotIndex + 1);
+	const wildcard = source === 'presented' && domain.startsWith('*.');
+	const domainName = tryNormalizeDnsName(wildcard ? domain.slice(2) : domain);
+	const parts =
+		domainName === undefined
+			? undefined
+			: parsePresentedSrvName(`${value.slice(0, dotIndex).toLowerCase()}.${domainName}`);
+	return parts === undefined
 		? undefined
-		: { serviceType: value.slice(1, dotIndex).toLowerCase(), domainName };
+		: {
+				serviceType: parts.service.slice(1),
+				host: { type: 'dns', name: wildcard ? `*.${parts.name}` : parts.name },
+			};
 }
 
 /** Constructs a failure result with the given error code and diagnostic details. */

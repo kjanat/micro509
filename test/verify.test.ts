@@ -3,24 +3,36 @@ import {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
 	createCertificate,
+	createCertificateSigningRequest,
 	createSelfSignedCertificate,
+	DECODE_REFUSAL_CODES,
 	generateKeyPair,
+	isResultError,
+	matchServiceIdentity,
 	parseCertificateChainPem,
 	parseCertificatePem,
 	pemDecodeOrThrow,
 	trustAnchorFromCertificate,
 	unwrap,
+	VERIFY_ERROR_CODES,
 	validateCandidatePath,
 	validateForCa,
 	validateForCodeSigning,
 	validateForTlsClient,
 	validateForTlsServer,
 	verifyCertificateChain,
+	verifyCertificateSigningRequest,
 } from '#micro509';
 import {
+	concatBytes,
+	explicitContext,
+	integerFromNumber,
 	nullValue,
 	objectIdentifier,
+	octetString,
 	printableString,
+	readRootElement,
+	readSequenceChildren,
 	sequence,
 	setOf,
 	tlv,
@@ -32,21 +44,30 @@ import {
 	evaluateNameConstraints,
 } from '#micro509/internal/verify/name-constraints-engine';
 import { encodeSubjectAltName } from '#micro509/x509';
+import type { ParsedNameConstraintForm } from '#micro509/x509/extensions';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
+	appendCertificateExtensions,
 	createCertificateWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
 	issueChain,
 	legacyMailboxNameConstraints,
+	reissueSelfSignedCertificateWithName,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
+	rewriteCertificateSubject,
+	sliceElement,
 } from '#test/helpers';
 
+const UPN_TYPE_ID = '1.3.6.1.4.1.311.20.2.3';
+
+function upnOtherName(value: string): Uint8Array {
+	return tlv(0xa0, concatBytes([objectIdentifier(UPN_TYPE_ID), tlv(0xa0, utf8String(value))]));
+}
+
 function buildUnsupportedOtherNameConstraintsDer(): Uint8Array {
-	const otherName = tlv(0xa0, sequence([]));
-	const subtree = sequence([otherName]);
-	return sequence([tlv(0xa0, subtree)]);
+	return sequence([tlv(0xa0, sequence([upnOtherName('example.com')]))]);
 }
 
 type TestDnStringEncoding = 'printable' | 'utf8';
@@ -374,6 +395,179 @@ describe('chain verification', () => {
 				allowSelfSignedLeaf: true,
 			}),
 		).toMatchObject({ ok: true });
+	});
+
+	// RFC 5280 §7.1: names match after RFC 4518 preparation, whatever
+	// DirectoryString alternative each side uses.
+	it('chains a UTF8String issuer name to a TeletexString CA subject', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Teletex CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const teletexName = sequence([
+			setOf([
+				sequence([
+					objectIdentifier(OIDS.commonName),
+					tlv(0x14, new TextEncoder().encode('TELETEX  CA')),
+				]),
+			]),
+		]);
+		const caDer = await reissueSelfSignedCertificateWithName(
+			ca.certificate.der,
+			ca.keyPair.privateKey,
+			teletexName,
+		);
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Teletex CA' },
+			subject: { commonName: 'teletex-chain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		expect(await verifyCertificateChain({ leaf: leaf.pem, roots: [caDer] })).toMatchObject({
+			ok: true,
+			value: { root: { subject: { values: { commonName: 'TELETEX  CA' } } } },
+		});
+	});
+
+	it('accepts an oversized noticeRef organization by default and rejects it on request', async () => {
+		const organization = 'o'.repeat(201);
+		const selfSigned = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: 'oversized-organization.example' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'digitalSignature'],
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([utf8String(organization), sequence([integerFromNumber(7)])]),
+											utf8String('short notice'),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		const pem = selfSigned.certificate.pem;
+		expect(unwrap(parseCertificatePem(pem)).certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{
+						type: 'userNotice',
+						noticeRef: {
+							organization,
+							noticeNumbers: [7],
+							oversizedOrganization: { characters: 201, limit: 200 },
+						},
+						explicitText: 'short notice',
+						explicitTextType: 'utf8String',
+					},
+				],
+			},
+		]);
+		expect(
+			await verifyCertificateChain({ leaf: pem, roots: [pem], allowSelfSignedLeaf: true }),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyCertificateChain({
+				leaf: pem,
+				roots: [pem],
+				allowSelfSignedLeaf: true,
+				rejectOversizedDisplayText: true,
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'display_text_oversized',
+			index: 0,
+			details: {
+				subjectCommonName: 'oversized-organization.example',
+				expected: '200',
+				actual: '201',
+				userNoticeField: 'noticeRefOrganization',
+			},
+		});
+	});
+
+	it('accepts an oversized user notice explicitText by default and rejects it on request', async () => {
+		const explicitText = 'x'.repeat(201);
+		const selfSigned = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: 'oversized-notice.example' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'digitalSignature'],
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([utf8String(explicitText)]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		const pem = selfSigned.certificate.pem;
+		expect(unwrap(parseCertificatePem(pem)).certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{
+						type: 'userNotice',
+						explicitText,
+						explicitTextType: 'utf8String',
+						oversizedExplicitText: { characters: 201, limit: 200 },
+					},
+				],
+			},
+		]);
+		expect(
+			await verifyCertificateChain({ leaf: pem, roots: [pem], allowSelfSignedLeaf: true }),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyCertificateChain({
+				leaf: pem,
+				roots: [pem],
+				allowSelfSignedLeaf: true,
+				rejectOversizedDisplayText: true,
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'display_text_oversized',
+			index: 0,
+			details: {
+				subjectCommonName: 'oversized-notice.example',
+				expected: '200',
+				actual: '201',
+				userNoticeField: 'explicitText',
+			},
+		});
+		const candidate = unwrap(await buildCandidatePath({ leaf: pem, roots: [pem] }));
+		expect(
+			await validateCandidatePath({
+				chain: candidate.chain,
+				allowSelfSignedLeaf: true,
+				rejectOversizedDisplayText: true,
+			}),
+		).toMatchObject({ ok: false, code: 'display_text_oversized', index: 0 });
 	});
 
 	it('rejects purpose=ca when leaf is not a CA', async () => {
@@ -877,6 +1071,87 @@ describe('chain verification', () => {
 		if (!result.ok) {
 			expect(result.code).toBe('unrecognized_critical_extension');
 			expect(result.details?.actual).toBe(OIDS.subjectAltName);
+		}
+	});
+
+	it('processes a registeredID in the critical SAN of an empty-subject leaf', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical RegisteredID CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const issueLeaf = (
+			subjectAltNames: NonNullable<
+				NonNullable<Parameters<typeof createCertificate>[0]['extensions']>['subjectAltNames']
+			>,
+		) =>
+			createCertificate({
+				issuer: { commonName: 'Critical RegisteredID CA' },
+				subject: {},
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: { keyUsage: ['digitalSignature'], subjectAltNames },
+			});
+		const processed = await issueLeaf([{ type: 'registeredID', value: '1.2.3.4' }]);
+		expect(unwrap(parseCertificatePem(processed.pem)).extensions).toContainEqual(
+			expect.objectContaining({ oid: OIDS.subjectAltName, critical: true }),
+		);
+		expect(
+			await verifyCertificateChain({ leaf: processed.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: true });
+
+		const withUpn = await issueLeaf([
+			{ type: 'registeredID', value: '1.2.3.4' },
+			{ type: 'otherName', typeId: UPN_TYPE_ID, value: utf8String('u@example.com') },
+		]);
+		expect(
+			await verifyCertificateChain({ leaf: withUpn.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: false, code: 'unrecognized_critical_extension' });
+	});
+
+	it('rejects a critical SAN whose SRVName or SmtpUTF8Mailbox breaks its grammar', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical OtherName CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const otherName = (typeId: string, value: Uint8Array) =>
+			tlv(0xa0, concatBytes([objectIdentifier(typeId), explicitContext(0, value)]));
+		const srv = (value: string) =>
+			otherName(OIDS.idOnDnsSrv, tlv(0x16, new TextEncoder().encode(value)));
+		const mailbox = (value: string) => otherName(OIDS.idOnSmtpUtf8Mailbox, utf8String(value));
+		const verifyCriticalSan = async (name: Uint8Array) => {
+			const leaf = await createCertificateWithRawExtensions({
+				issuer: { commonName: 'Critical OtherName CA' },
+				subject: { commonName: 'critical-other-name.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: {
+					keyUsage: ['digitalSignature'],
+					customExtensions: [{ oid: OIDS.subjectAltName, critical: true, value: sequence([name]) }],
+				},
+			});
+			return verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] });
+		};
+
+		for (const name of [srv('_mail.example.com'), mailbox('\u{fc}ser@example.com')]) {
+			expect(await verifyCriticalSan(name)).toMatchObject({ ok: true });
+		}
+		for (const name of [
+			srv('not-a-srv'),
+			srv('_mail.-example.com'),
+			mailbox('user@example.com'),
+			mailbox('\u{fc}ser@-example.com'),
+			mailbox('\u{fc}ser'),
+			mailbox('\u{feff}\u{fc}ser@example.com'),
+		]) {
+			expect(await verifyCriticalSan(name)).toMatchObject({
+				ok: false,
+				code: 'unrecognized_critical_extension',
+				details: { actual: OIDS.subjectAltName },
+			});
 		}
 	});
 
@@ -2255,7 +2530,11 @@ describe('chain verification', () => {
 	it('preserves unsupported name constraint forms during parsing', () => {
 		const parsed = parseNameConstraints(buildUnsupportedOtherNameConstraintsDer());
 		expect(parsed.permittedSubtrees).toHaveLength(1);
-		expect(parsed.permittedSubtrees?.[0]?.base).toMatchObject({ type: 'otherName' });
+		expect(parsed.permittedSubtrees?.[0]?.base).toEqual({
+			type: 'otherName',
+			typeId: UPN_TYPE_ID,
+			value: utf8String('example.com'),
+		});
 	});
 
 	describe('unsupported name constraint forms (RFC 5280 §4.2.1.10)', () => {
@@ -2299,8 +2578,11 @@ describe('chain verification', () => {
 			});
 		}
 
-		// OID 2.5.4.3 — arbitrary registeredID payload.
-		const REGISTERED_ID_CONTENT = Uint8Array.of(0x55, 0x04, 0x03);
+		const upnSan = {
+			type: 'otherName',
+			typeId: UPN_TYPE_ID,
+			value: utf8String('u@example.com'),
+		} as const;
 
 		it('accepts a chain when the constrained form never appears', async () => {
 			// RFC 5280 §4.2.1.10: "If no name of the type is in the
@@ -2314,9 +2596,9 @@ describe('chain verification', () => {
 			expect(result.ok).toBe(true);
 		});
 
-		it('fails closed when a critical otherName constraint meets an SRV-ID SAN', async () => {
+		it('fails closed when a critical UPN constraint meets a UPN SAN', async () => {
 			const root = await createConstrainedRoot(buildUnsupportedOtherNameConstraintsDer(), true);
-			const leaf = await issueLeaf(root, [{ type: 'srv', value: '_imaps.unsupported-nc.example' }]);
+			const leaf = await issueLeaf(root, [upnSan]);
 			const result = await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [root.certificate.pem],
@@ -2324,14 +2606,29 @@ describe('chain verification', () => {
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
 				expect(result.error.code).toBe('unsupported_name_constraints');
+				expect(result.error.details?.actual).toBe(`otherName ${UPN_TYPE_ID}`);
 			}
 		});
 
-		it('fails closed when a critical registeredID constraint meets a registeredID SAN', async () => {
-			const constraintDer = buildRawConstraintDer(tlv(0x88, REGISTERED_ID_CONTENT));
-			const root = await createConstrainedRoot(constraintDer, true);
+		it('keeps a UPN constraint from rejecting an SRV-ID or SmtpUTF8Mailbox SAN', async () => {
+			// X.509 §9.4.2.2 makes each otherName type-id its own name form.
+			const root = await createConstrainedRoot(buildUnsupportedOtherNameConstraintsDer(), true);
 			const leaf = await issueLeaf(root, [
-				{ type: 'unknown', tag: 0x88, value: REGISTERED_ID_CONTENT },
+				{ type: 'srv', value: '_imaps.unsupported-nc.example' },
+				{ type: 'smtpUtf8Mailbox', value: '用户@unsupported-nc.example' },
+			]);
+			const result = await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+			});
+			expect(result.ok).toBe(true);
+		});
+
+		it('fails closed on a UPN SAN beside an acceptable SRV-ID SAN', async () => {
+			const root = await createConstrainedRoot(buildUnsupportedOtherNameConstraintsDer(), true);
+			const leaf = await issueLeaf(root, [
+				{ type: 'srv', value: '_imaps.unsupported-nc.example' },
+				upnSan,
 			]);
 			const result = await verifyCertificateChain({
 				leaf: leaf.pem,
@@ -2343,15 +2640,75 @@ describe('chain verification', () => {
 			}
 		});
 
+		it('fails closed when a critical SmtpUTF8Mailbox otherName constraint meets that SAN', async () => {
+			// RFC 9598 §6 carries mailbox constraints as rfc822Name, so an otherName base is unprocessable.
+			const constraintDer = buildRawConstraintDer(
+				tlv(
+					0xa0,
+					concatBytes([
+						objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+						tlv(0xa0, utf8String('用户@example.com')),
+					]),
+				),
+			);
+			const root = await createConstrainedRoot(constraintDer, true);
+			const leaf = await issueLeaf(root, [
+				{ type: 'smtpUtf8Mailbox', value: '用户@unsupported-nc.example' },
+			]);
+			const result = await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+			});
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.code).toBe('unsupported_name_constraints');
+			}
+		});
+
+		it('keeps rfc822Name constraints on a SmtpUTF8Mailbox beside an unrelated UPN constraint', async () => {
+			const constraintDer = buildRawConstraintDer(
+				tlv(0x81, new TextEncoder().encode('example.com')),
+				upnOtherName('example.com'),
+			);
+			const root = await createConstrainedRoot(constraintDer, true);
+			const leaf = await issueLeaf(root, [
+				{ type: 'smtpUtf8Mailbox', value: '用户@unsupported-nc.example' },
+			]);
+			const result = await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+			});
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.code).toBe('name_constraints_violated');
+			}
+		});
+
+		it('fails closed when a critical registeredID constraint meets a registeredID SAN', async () => {
+			const constraintDer = buildRawConstraintDer(
+				tlv(0x88, readRootElement(objectIdentifier('2.5.4.3')).value),
+			);
+			const root = await createConstrainedRoot(constraintDer, true);
+			const leaf = await issueLeaf(root, [{ type: 'registeredID', value: '2.5.4.3' }]);
+			const result = await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+			});
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.code).toBe('unsupported_name_constraints');
+			}
+		});
+
 		it.each([
-			['x400Address', 0xa3],
-			['ediPartyName', 0xa5],
+			['x400Address', 0xa3, sequence([])],
+			['ediPartyName', 0xa5, explicitContext(1, utf8String('party'))],
 		] as const)(
-			'fails closed when a critical %s constraint meets a matching SAN',
-			async (_form, tag) => {
-				const constraintDer = buildRawConstraintDer(tlv(tag, sequence([])));
+			'fails closed when a critical %s constraint meets a SAN of that form',
+			async (form, tag, value) => {
+				const constraintDer = buildRawConstraintDer(tlv(tag, value));
 				const root = await createConstrainedRoot(constraintDer, true);
-				const leaf = await issueLeaf(root, [{ type: 'unknown', tag, value: sequence([]) }]);
+				const leaf = await issueLeaf(root, [{ type: form, value }]);
 				const result = await verifyCertificateChain({
 					leaf: leaf.pem,
 					roots: [root.certificate.pem],
@@ -2377,7 +2734,7 @@ describe('chain verification', () => {
 			// permittedSubtrees: dNSName "permitted.example" + otherName
 			const constraintDer = buildRawConstraintDer(
 				tlv(0x82, new TextEncoder().encode('permitted.example')),
-				tlv(0xa0, sequence([])),
+				upnOtherName('example.com'),
 			);
 			const root = await createConstrainedRoot(constraintDer, true);
 
@@ -3718,7 +4075,9 @@ describe('validateCandidatePath direct', () => {
 			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],
 		};
 		Object.defineProperty(input, 'permittedSubtrees', {
-			value: [{ base: { type: 'otherName', value: new Uint8Array([0x05, 0x00]) } }],
+			value: [
+				{ base: { type: 'otherName', typeId: '1.2.3.4', value: new Uint8Array([0x05, 0x00]) } },
+			],
 		});
 
 		const result = await validateCandidatePath(input);
@@ -3728,6 +4087,141 @@ describe('validateCandidatePath direct', () => {
 			details: { actual: 'otherName' },
 		});
 	});
+
+	it('enforces an initial SRVName constraint', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'srv', value: '_ntp.example.com' }],
+		});
+		const result = await validateCandidatePath({
+			chain: unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
+			),
+			permittedSubtrees: [{ base: { type: 'srv', value: '_mail' } }],
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'name_constraints_violated',
+			details: { actual: 'srv:_ntp.example.com' },
+		});
+	});
+
+	it('enforces a domain-only initial SRVName constraint in A-labels', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'srv', value: '_ntp.xn--caf-dma.example' }],
+		});
+		const parsedChain = unwrap(
+			parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+		);
+		expect(
+			await validateCandidatePath({
+				chain: parsedChain,
+				permittedSubtrees: [{ base: { type: 'srv', value: 'café.example' } }],
+			}),
+		).toMatchObject({ ok: true });
+		for (const separator of ['\u3002', '\uff0e', '\uff61']) {
+			expect(
+				await validateCandidatePath({
+					chain: parsedChain,
+					permittedSubtrees: [{ base: { type: 'srv', value: `_ntp.café${separator}example` } }],
+				}),
+			).toMatchObject({ ok: true });
+		}
+		expect(
+			await validateCandidatePath({
+				chain: parsedChain,
+				permittedSubtrees: [{ base: { type: 'srv', value: 'other.example' } }],
+			}),
+		).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+
+	it.each([
+		['_ntp.example.com', 'example.com.'],
+		['_ntp.example.com.', 'example.com'],
+		['_ntp.example.com.', '_ntp.example.com.'],
+	])(
+		'compares the SRVName SAN %s and initial constraint %s without the root dot',
+		async (san, value) => {
+			const chain = await issueChain({ leafSubjectAltNames: [{ type: 'srv', value: san }] });
+			const parsedChain = unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
+			);
+			expect(
+				await validateCandidatePath({
+					chain: parsedChain,
+					permittedSubtrees: [{ base: { type: 'srv', value } }],
+				}),
+			).toMatchObject({ ok: true });
+			expect(
+				await validateCandidatePath({
+					chain: parsedChain,
+					excludedSubtrees: [{ base: { type: 'srv', value } }],
+				}),
+			).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		},
+	);
+
+	it.each([
+		'_mail!',
+		'_é',
+		'_mail.',
+		'.example.com',
+		'_mail..example.com',
+		'example.com..',
+		'_mail.example.com..',
+		'.',
+		`_${'m'.repeat(63)}`,
+		`_${'m'.repeat(16)}`,
+		'_123',
+		'_ma--il',
+		'example_com',
+		'-example.com',
+		'_mail.example-.com',
+	])('rejects the malformed initial SRVName constraint %s', async (value) => {
+		const chain = await issueChain();
+		const result = await validateCandidatePath({
+			chain: unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
+			),
+			permittedSubtrees: [{ base: { type: 'srv', value } }],
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'unsupported_initial_name_constraints',
+			details: { actual: 'srv' },
+		});
+	});
+
+	it.each([
+		['dns', 'example.com.'],
+		['dns', '.example.com.'],
+		['email', 'example.com.'],
+		['email', '.example.com.'],
+	] as const)(
+		'rejects the initial %s constraint %s ending in the root dot',
+		async (type, value) => {
+			const chain = await issueChain();
+			const result = await validateCandidatePath({
+				chain: unwrap(
+					parseCertificateChainPem(
+						`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+					),
+				),
+				permittedSubtrees: [{ base: { type, value } }],
+			});
+			expect(result).toMatchObject({
+				ok: false,
+				code: 'unsupported_initial_name_constraints',
+			});
+		},
+	);
 
 	it('rejects malformed nested initial name constraint subtree containers', async () => {
 		const chain = await issueChain();
@@ -4284,7 +4778,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('unknown SAN type is ignored during name constraint checking', async () => {
+	it('a registeredID SAN is ignored by dNSName constraints', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'NC Root' },
 			extensions: {
@@ -4606,6 +5100,39 @@ describe('coverage: verify.ts internal edge cases', () => {
 			allowSelfSignedLeaf: true,
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('fails closed on raw unknown SAN input by its wire tag', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const [firstExtension] = parsedRoot.extensions;
+		if (firstExtension === undefined) throw new Error('root has no extensions');
+		const constrainedRoot = (base: ParsedNameConstraintForm) => ({
+			...parsedRoot,
+			extensions: [
+				...parsedRoot.extensions,
+				{ ...firstExtension, oid: OIDS.nameConstraints, critical: true },
+			],
+			nameConstraints: { permittedSubtrees: [{ base }] },
+		});
+		const leafWith = (tag: number) => ({
+			...parsedLeaf,
+			subjectAltNames: [{ type: 'unknown' as const, tag, value: new Uint8Array() }],
+		});
+		const cases = [
+			[{ type: 'otherName', typeId: UPN_TYPE_ID, value: utf8String('x') }, 0xa0, false],
+			[{ type: 'x400Address', value: new Uint8Array() }, 0xa3, false],
+			[{ type: 'ediPartyName', value: new Uint8Array() }, 0xa5, false],
+			[{ type: 'registeredID', value: '1.2.3' }, 0x88, false],
+			[{ type: 'x400Address', value: new Uint8Array() }, 0x88, true],
+			[{ type: 'registeredID', value: '1.2.3' }, 0xa0, true],
+		] as const;
+		for (const [base, tag, ok] of cases) {
+			const result = evaluateNameConstraints(
+				[leafWith(tag), constrainedRoot(base)],
+				createNameConstraintValidationState({}),
+			);
+			expect(result).toMatchObject(ok ? { ok } : { ok, code: 'unsupported_name_constraints' });
+		}
 	});
 
 	it('rejects directoryName constraints that rely on empty RDN sets', async () => {
@@ -5126,5 +5653,149 @@ describe('coverage: verify.ts internal edge cases', () => {
 			roots: [root.certificate.pem],
 		});
 		expect(result.ok).toBe(true);
+	});
+});
+
+function rewriteCsrSubject(csrDer: Uint8Array, subjectDer: Uint8Array): Uint8Array {
+	const [info, algorithm, signature] = readSequenceChildren(csrDer);
+	if (info === undefined || algorithm === undefined || signature === undefined) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const infoDer = sliceElement(csrDer, info);
+	const rebuiltInfo = sequence(
+		readSequenceChildren(infoDer).map((child, index) =>
+			index === 1 ? subjectDer : sliceElement(infoDer, child),
+		),
+	);
+	return sequence([rebuiltInfo, sliceElement(csrDer, algorithm), sliceElement(csrDer, signature)]);
+}
+
+describe('decode refusals at the verification entry points', () => {
+	const teletexSubject = sequence([
+		setOf([sequence([objectIdentifier(OIDS.commonName), tlv(0x14, Uint8Array.of(0xc1, 0x41))])]),
+	]);
+
+	it('lists every decode refusal code among the verify codes', () => {
+		for (const code of DECODE_REFUSAL_CODES) {
+			expect(VERIFY_ERROR_CODES).toContain(code);
+		}
+	});
+
+	it('reports a certificate micro509 does not decode as unsupported', async () => {
+		const chain = await issueChain();
+		const unsupportedDer = rewriteCertificateSubject(chain.leaf.der, teletexSubject);
+		const sources = {
+			leaf: unsupportedDer,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		};
+		const unsupported = { ok: false, code: 'unsupported', index: 0 };
+		expect(await buildCandidatePath(sources)).toMatchObject(unsupported);
+		expect(await verifyCertificateChain(sources)).toMatchObject(unsupported);
+		expect(await validateForTlsServer(sources)).toMatchObject(unsupported);
+		const forged = { ...unwrap(parseCertificatePem(chain.leaf.pem)), der: unsupportedDer };
+		expect(await validateCandidatePath({ chain: [forged] })).toMatchObject(unsupported);
+		expect(checkExtendedKeyUsage([forged], 'serverAuth')).toMatchObject(unsupported);
+		expect(
+			matchServiceIdentity({
+				certificate: forged,
+				serviceIdentity: { type: 'dns', value: 'verify.example' },
+			}),
+		).toMatchObject({ ok: false, code: 'unsupported' });
+		let thrown: unknown;
+		try {
+			trustAnchorFromCertificate(forged);
+		} catch (error) {
+			thrown = error;
+		}
+		expect(isResultError(thrown) ? thrown.code : undefined).toBe('unsupported');
+	});
+
+	it('names the intermediates or roots entry micro509 does not decode', async () => {
+		const chain = await issueChain();
+		const unsupportedDer = rewriteCertificateSubject(chain.intermediate.der, teletexSubject);
+		const leafRefusal = await buildCandidatePath({
+			leaf: rewriteCertificateSubject(chain.leaf.der, teletexSubject),
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		});
+		expect(leafRefusal).toMatchObject({ ok: false, code: 'unsupported', index: 0 });
+		expect(leafRefusal.ok ? undefined : leafRefusal.details?.source).toBeUndefined();
+		for (const [sources, source] of [
+			[
+				{
+					leaf: chain.leaf.pem,
+					intermediates: [chain.intermediate.pem, unsupportedDer],
+					roots: [chain.root.certificate.pem],
+				},
+				{ kind: 'intermediates', position: 1 },
+			],
+			[
+				{
+					leaf: chain.leaf.pem,
+					intermediates: [chain.intermediate.pem],
+					roots: [chain.root.certificate.pem, unsupportedDer],
+				},
+				{ kind: 'roots', position: 1 },
+			],
+		] as const) {
+			const expected = { ok: false, code: 'unsupported', details: { source } };
+			expect(await buildCandidatePath(sources)).toMatchObject(expected);
+			expect(await verifyCertificateChain(sources)).toMatchObject(expected);
+		}
+		expect(
+			await verifyCertificateChain({
+				leaf: chain.leaf.pem,
+				intermediates: [chain.intermediate.pem, Uint8Array.of(0x30, 0x03, 0x02)],
+				roots: [chain.root.certificate.pem],
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			details: { source: { kind: 'intermediates', position: 1 } },
+		});
+	});
+
+	it('reports the index of the chain element micro509 does not decode', async () => {
+		const chain = await issueChain();
+		const parsed = [chain.leaf.pem, chain.intermediate.pem, chain.root.certificate.pem].map((pem) =>
+			unwrap(parseCertificatePem(pem)),
+		);
+		for (const index of [1, 2]) {
+			const forgedChain = parsed.map((certificate, position) =>
+				position === index
+					? { ...certificate, der: rewriteCertificateSubject(certificate.der, teletexSubject) }
+					: certificate,
+			);
+			const unsupported = { ok: false, code: 'unsupported', index };
+			expect(await validateCandidatePath({ chain: forgedChain })).toMatchObject(unsupported);
+			expect(checkExtendedKeyUsage(forgedChain, 'serverAuth')).toMatchObject(unsupported);
+		}
+	});
+
+	it('reports a CSR micro509 does not decode as unsupported', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'teletex-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		expect(
+			await verifyCertificateSigningRequest(rewriteCsrSubject(csr.der, teletexSubject)),
+		).toMatchObject({ ok: false, code: 'unsupported' });
+	});
+
+	it('reports a certificate over a decoding limit as limit_exceeded', async () => {
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'arc-bound.example' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const overlongArc = Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f);
+		const leaf = await appendCertificateExtensions(certificate.der, keyPair.privateKey, [
+			sequence([tlv(0x06, overlongArc), octetString(nullValue())]),
+		]);
+		expect(
+			await verifyCertificateChain({ leaf, roots: [certificate.pem], allowSelfSignedLeaf: true }),
+		).toMatchObject({ ok: false, code: 'limit_exceeded', index: 0 });
 	});
 });

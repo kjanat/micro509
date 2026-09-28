@@ -668,6 +668,71 @@ describe('certificate', () => {
 		);
 	});
 
+	it('refuses a lone surrogate in a UTF8String name attribute and keeps a supplementary character and U+FFFD', async () => {
+		for (const value of ['\uD800', 'a\uDC00b', 'x\uD83D']) {
+			expectThrownErrorCode(
+				() => encodeName([{ type: 'commonName', value }]),
+				'name_attribute_lone_surrogate',
+			);
+		}
+		for (const commonName of ['\u{1D4B3}.example', '�.example']) {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName } });
+			expect(unwrap(parseCertificatePem(certificate.pem)).subject.values.commonName).toBe(
+				commonName,
+			);
+		}
+	});
+
+	it('refuses a lone surrogate in a user notice explicitText or noticeRef organization', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'lone-surrogate-notice.example' },
+				extensions: {
+					certificatePolicies: [
+						{
+							policyIdentifier: '1.2.3.4.1',
+							policyQualifiers: [{ type: 'userNotice', explicitText: 'notice \uD800' }],
+						},
+					],
+				},
+			}),
+			'display_text_lone_surrogate',
+		);
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'lone-surrogate-organization.example' },
+				extensions: {
+					certificatePolicies: [
+						{
+							policyIdentifier: '1.2.3.4.1',
+							policyQualifiers: [
+								{
+									type: 'userNotice',
+									noticeRef: { organization: 'Org \uDFFF', noticeNumbers: [1] },
+								},
+							],
+						},
+					],
+				},
+			}),
+			'display_text_lone_surrogate',
+		);
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'supplementary-notice.example' },
+			extensions: {
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'userNotice', explicitText: 'notice \u{1F512}' }],
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.pem)).certificatePolicies).toMatchObject([
+			{ policyQualifiers: [{ type: 'userNotice', explicitText: 'notice \u{1F512}' }] },
+		]);
+	});
+
 	it('accepts surname and givenName at the RFC 5280 A.1 ub-name bound (32768)', () => {
 		expect(encodeName([{ type: 'surname', value: 'a'.repeat(32768) }])).toBeInstanceOf(Uint8Array);
 		expect(encodeName([{ type: 'givenName', value: 'a'.repeat(32768) }])).toBeInstanceOf(
