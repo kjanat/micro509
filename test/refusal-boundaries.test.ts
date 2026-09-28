@@ -17,6 +17,7 @@ import {
 	parseCertificateSigningRequestDer,
 	validateCertificateRevocationList,
 	validateOcspResponse,
+	verifyCertificateChain,
 	verifyCertificateRevocationListSignature,
 	verifyCertificateSigningRequest,
 	verifyOcspResponseSignature,
@@ -326,6 +327,70 @@ describe('decode refusals in RSA-PSS signature parameters', () => {
 				},
 				signature: new Uint8Array(64),
 				data: new Uint8Array(1),
+			}),
+		).toMatchObject(limitExceeded);
+	});
+});
+
+describe('decode refusals inside signature verification', () => {
+	const overlongArc = Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f);
+	const overlongSpki = sequence([
+		sequence([tlv(0x06, overlongArc), objectIdentifier(OIDS.prime256v1)]),
+		tlv(0x03, Uint8Array.of(0x00, 0x04)),
+	]);
+	const limitExceeded = { ok: false, code: 'limit_exceeded' };
+
+	it('verifySignature reports PKCS #1 parameters with a tag number over the limit as limit_exceeded', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'tag-limit-signer.example' },
+			algorithm: { kind: 'rsa', modulusLength: 2048, hash: 'SHA-256' },
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		if (!parsed.ok) throw new Error('fixture certificate does not parse');
+		expect(
+			await verifySignature({
+				signerSpkiDer: parsed.value.subjectPublicKeyInfoDer,
+				signatureAlgorithm: {
+					oid: OIDS.sha256WithRSAEncryption,
+					parametersDer: Uint8Array.of(0x1f, 0x90, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00, 0x00),
+				},
+				publicKeyAlgorithm: { oid: parsed.value.publicKeyAlgorithmOid },
+				signature: new Uint8Array(256),
+				data: new Uint8Array(1),
+			}),
+		).toMatchObject(limitExceeded);
+	});
+
+	it('verifySignature reports a signer SPKI with an OID over the limit as limit_exceeded', async () => {
+		expect(
+			await verifySignature({
+				signerSpkiDer: overlongSpki,
+				signatureAlgorithm: { oid: OIDS.ecdsaWithSHA256 },
+				publicKeyAlgorithm: { oid: OIDS.ecPublicKey, parametersOid: OIDS.prime256v1 },
+				signature: new Uint8Array(64),
+				data: new Uint8Array(1),
+			}),
+		).toMatchObject(limitExceeded);
+	});
+
+	it('reports a trust anchor whose SPKI holds an OID over the limit as limit_exceeded', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'anchor-limit.example' },
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		if (!parsed.ok) throw new Error('fixture certificate does not parse');
+		expect(
+			await verifyCertificateChain({
+				leaf: certificate.pem,
+				roots: [],
+				trustAnchors: [
+					{
+						subject: parsed.value.subject,
+						subjectPublicKeyInfoDer: overlongSpki,
+						publicKeyAlgorithmOid: OIDS.ecPublicKey,
+						publicKeyParametersOid: OIDS.prime256v1,
+					},
+				],
 			}),
 		).toMatchObject(limitExceeded);
 	});

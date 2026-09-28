@@ -9,6 +9,8 @@
  */
 
 import { toHex } from '#micro509/internal/asn1/asn1';
+import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import type { VerifySignedDataResult } from '#micro509/internal/crypto/sig-verify';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import type {
@@ -26,7 +28,10 @@ export type VerifyCertificateSignatureResult =
 	| { readonly ok: true; readonly valid: boolean }
 	| {
 			readonly ok: false;
-			readonly code: 'signature_invalid' | 'unsupported_signature_algorithm_parameters';
+			readonly code:
+				| 'signature_invalid'
+				| 'unsupported_signature_algorithm_parameters'
+				| 'limit_exceeded';
 			readonly reason: string;
 	  };
 
@@ -172,23 +177,36 @@ export async function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
 ): Promise<VerifyCertificateSignatureResult> {
-	const result = await verifySignedDataDetailed(
-		certificate.signatureAlgorithmOid,
-		certificate.signatureAlgorithmParametersDer,
-		issuer.publicKeyAlgorithmOid,
-		issuer.publicKeyParametersOid,
-		issuer.subjectPublicKeyInfoDer,
-		certificate.signatureValue,
-		certificate.tbsCertificateDer,
+	return signatureCheck(() =>
+		verifySignedDataDetailed(
+			certificate.signatureAlgorithmOid,
+			certificate.signatureAlgorithmParametersDer,
+			issuer.publicKeyAlgorithmOid,
+			issuer.publicKeyParametersOid,
+			issuer.subjectPublicKeyInfoDer,
+			certificate.signatureValue,
+			certificate.tbsCertificateDer,
+		),
 	);
-	if (!result.ok && result.code === 'verification_error') {
-		return {
-			ok: false,
-			code: 'signature_invalid',
-			reason: result.reason,
-		};
+}
+
+/** Runs `verify` as a path check, reporting a runtime failure as `signature_invalid` and a decoding limit as `limit_exceeded`. */
+async function signatureCheck(
+	verify: () => Promise<VerifySignedDataResult>,
+): Promise<VerifyCertificateSignatureResult> {
+	let result: VerifySignedDataResult;
+	try {
+		result = await verify();
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		if (refusal === undefined) {
+			throw error;
+		}
+		return { ok: false, code: refusal.code, reason: refusal.message };
 	}
-	return result;
+	return !result.ok && result.code === 'verification_error'
+		? { ok: false, code: 'signature_invalid', reason: result.reason }
+		: result;
 }
 
 /** The real signature checks, used unless a caller injects its own. */
@@ -847,18 +865,17 @@ export async function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
 ): Promise<VerifyCertificateSignatureResult> {
-	const verificationResult = await verifySignedDataDetailed(
-		certificate.signatureAlgorithmOid,
-		certificate.signatureAlgorithmParametersDer,
-		anchor.publicKeyAlgorithmOid,
-		anchor.publicKeyParametersOid,
-		anchor.subjectPublicKeyInfoDer,
-		certificate.signatureValue,
-		certificate.tbsCertificateDer,
+	return signatureCheck(() =>
+		verifySignedDataDetailed(
+			certificate.signatureAlgorithmOid,
+			certificate.signatureAlgorithmParametersDer,
+			anchor.publicKeyAlgorithmOid,
+			anchor.publicKeyParametersOid,
+			anchor.subjectPublicKeyInfoDer,
+			certificate.signatureValue,
+			certificate.tbsCertificateDer,
+		),
 	);
-	return !verificationResult.ok && verificationResult.code === 'verification_error'
-		? { ok: false, code: 'signature_invalid', reason: verificationResult.reason }
-		: verificationResult;
 }
 
 function describeDateTime(value: Date): string {

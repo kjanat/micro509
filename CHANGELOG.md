@@ -199,7 +199,11 @@ revocation })` report a certificate carrying `noRevAvail` or
   parsed, and verifying it reported unsupported algorithm parameters. Parsing
   now returns `limit_exceeded`, and
   `verifySignature` returns it as the new `VerifySignatureLimitFailure`
-  (`VerifySignatureResult`). `verifyPkcs7SignedData` reports a refusal from
+  (`VerifySignatureResult`), as it does for PKCS #1 or ECDSA parameters or a
+  signer SPKI past a decoding limit, which it reported as unsupported
+  parameters or a `verification_error`. A bare trust anchor whose SPKI is past
+  a decoding limit fails path validation with `limit_exceeded` rather than
+  `signature_invalid`. `verifyPkcs7SignedData` reports a refusal from
   signature verification with its code instead of `malformed`.
 - `rejectOversizedDisplayText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice

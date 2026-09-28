@@ -6,6 +6,7 @@
  */
 
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
+import { DECODE_LIMIT_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { alternateEcdsaSignatureEncoding } from '#micro509/internal/crypto/ecdsa';
@@ -303,8 +304,8 @@ export async function verifySignedData(
  *
  * Tries both DER and raw ECDSA encodings when the first attempt fails.
  *
- * @throws `limit_exceeded` on RSA-PSS parameters holding an OID sub-identifier
- * over 64 octets.
+ * @throws `limit_exceeded` on algorithm parameters or a public key that exceed
+ * a micro509 decoding limit.
  */
 export async function verifySignedDataDetailed(
 	signatureAlgorithmOid: string,
@@ -351,6 +352,7 @@ export async function verifySignedDataDetailed(
 		}
 		return { ok: true, valid: false };
 	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		return verificationError(
 			error instanceof Error ? error.message : 'signature verification failed',
 		);
@@ -391,7 +393,8 @@ function requireDerNullOrAbsentSignatureAlgorithmParameters(
 			return unsupported(algorithm, reason);
 		}
 		return undefined;
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		return unsupported(algorithm, reason);
 	}
 }
