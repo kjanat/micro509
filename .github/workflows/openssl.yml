@@ -20,6 +20,7 @@ env:
   IMAGE: ${{ format('ghcr.io/{0}/openssl', github.repository_owner) }}
   PREBUILT: ${{ format('ghcr.io/{0}/openssl-prebuilt', github.repository_owner) }}
   FORCE: ${{ inputs.force || false }}
+  BUILD: run${{ github.run_id }}.${{ github.run_attempt }}
 
 defaults: { run: { shell: "bash -euo pipefail {0}" } }
 
@@ -35,6 +36,7 @@ jobs:
       publishes: ${{ steps.resolve.outputs.publishes }}
       latest: ${{ steps.resolve.outputs.latest }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
+      date: ${{ steps.resolve.outputs.date }}
     steps:
       - &SafeCheckout { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
       - &SetupOras { uses: &Oras oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d } # v2.0.1
@@ -61,7 +63,8 @@ jobs:
           latest="${latest#openssl-}"
           prerelease="$(retry gh api 'repos/openssl/openssl/releases?per_page=100' --jq '[.[] | select(.prerelease and (.draft | not))][0].tag_name // empty')"
           prerelease="${prerelease#openssl-}"
-          printf 'latest=%s\nprerelease=%s\n' "${latest}" "${prerelease}" >> "${GITHUB_OUTPUT}"
+          date="$(date -u +%Y%m%d)"
+          printf 'latest=%s\nprerelease=%s\ndate=%s\n' "${latest}" "${prerelease}" "${date}" >> "${GITHUB_OUTPUT}"
 
           declare -A seen=()
           entries=()
@@ -96,14 +99,16 @@ jobs:
     strategy: { fail-fast: false, matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" } }
     steps:
       - *SafeCheckout
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - *LoginDocker
+      - parallel:
+          - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+          - *SetupOras
+          - *LoginDocker
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: &Image ${{ env.IMAGE }}
           flavor: latest=false
-          tags: type=raw,value=${{ matrix.release.version }}
+          tags: type=raw,value=${{ matrix.release.version }}-${{ env.BUILD }}
           labels: &DockerMeta |
             org.opencontainers.image.title=openssl
             org.opencontainers.image.description=OpenSSL ${{ matrix.release.version }}, statically linked, built from the upstream release tarball
@@ -133,10 +138,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
+      - name: Tag date and version
+        if: *IsMaster
+        env:
+          v: &MatrixRelease ${{ matrix.release.version }}
+          i: ${{ format('{0}@{1}', env.IMAGE, steps.push.outputs.digest) }}
+          date: ${{ needs.resolve.outputs.date }}
+        run: for t in "${v}-${date}" "${v}"; do oras tag "${i}" "${t}"; done
       - name: Unwrap SPDX documents and pack the linux-x64 tarball
         working-directory: ${{ runner.temp }}
         env:
-          v: &MatrixRelease ${{ matrix.release.version }}
+          v: *MatrixRelease
           spdx_image: ${{ runner.temp }}/image.spdx.json
           spdx_build: ${{ runner.temp }}/build.spdx.json
         run: |
@@ -360,13 +372,13 @@ jobs:
       - name: Push to GHCR
         if: *Release
         working-directory: *PublishArtefact
-        env: { GH_TOKEN: *GHToken, v: *MatrixRelease }
+        env: { GH_TOKEN: *GHToken, v: *MatrixRelease, date: "${{ needs.resolve.outputs.date }}" }
         run: |
           ls -l
           files=()
           for file in *.tar.gz; do files+=("${file}:application/vnd.oci.image.layer.v1.tar+gzip"); done
           oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin <<< "${GH_TOKEN}"
-          oras push "${PREBUILT}:${v}" --no-tty \
+          oras push "${PREBUILT}:${v}-${BUILD}" --no-tty \
             --artifact-type application/vnd.kjanat.openssl.prebuilt.v1 \
             --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
             --annotation "org.opencontainers.image.version=${v}" \
@@ -374,6 +386,8 @@ jobs:
             --annotation "org.opencontainers.image.description=OpenSSL ${v} tarballs for linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64" \
             --annotation "org.opencontainers.image.licenses=Apache-2.0" \
             "${files[@]}"
+          oras tag "${PREBUILT}:${v}-${BUILD}" "${v}-${date}"
+          oras tag "${PREBUILT}:${v}-${BUILD}" "${v}"
 
   tags:
     name: Floating tags
