@@ -52,8 +52,7 @@ standard. Missing files do not become zero-hit documents; compare against
 `list` and report any missing evidence.
 
 `search` retains its existing behavior: arguments are joined into one regex,
-matching is case-sensitive unless `-i` is supplied, and `--limit` defaults to
-200. Its `truncated` flag describes a bounded excerpt search. When that limit
+matching is case-sensitive unless `-i` is supplied, and `--limit` defaults to 200. Its `truncated` flag describes a bounded excerpt search. When that limit
 is hit, later documents may not have been searched. Use `census`, not a larger
 arbitrary excerpt limit, for complete document discovery. Neither command's
 hit lines replace reading the full governing section.

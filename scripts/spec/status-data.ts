@@ -49,12 +49,18 @@ export function parseRfcStatus(value: unknown, expected: string): RfcStatus | un
 	const updatedBy = relation(value['updated_by']);
 	const obsoletedBy = relation(value['obsoleted_by']);
 	if (
-		typeof id !== 'string' || rfcNumber(id) !== expected ||
-		typeof title !== 'string' || title.trim() === '' ||
-		typeof status !== 'string' || status.trim() === '' ||
-		updates === undefined || obsoletes === undefined ||
-		updatedBy === undefined || obsoletedBy === undefined
-	) return undefined;
+		typeof id !== 'string' ||
+		rfcNumber(id) !== expected ||
+		typeof title !== 'string' ||
+		title.trim() === '' ||
+		typeof status !== 'string' ||
+		status.trim() === '' ||
+		updates === undefined ||
+		obsoletes === undefined ||
+		updatedBy === undefined ||
+		obsoletedBy === undefined
+	)
+		return undefined;
 	return { number: expected, title, status, updates, obsoletes, updatedBy, obsoletedBy };
 }
 
@@ -68,10 +74,15 @@ function erratum(value: unknown): Erratum | undefined {
 	const type = value['errata_type_code'];
 	const section = value['section'];
 	if (
-		!/^[1-9][0-9]*$/.test(id) || !Number.isSafeInteger(Number(id)) ||
-		number === undefined || typeof status !== 'string' || status.trim() === '' ||
-		typeof type !== 'string' || typeof section !== 'string'
-	) return undefined;
+		!/^[1-9][0-9]*$/.test(id) ||
+		!Number.isSafeInteger(Number(id)) ||
+		number === undefined ||
+		typeof status !== 'string' ||
+		status.trim() === '' ||
+		typeof type !== 'string' ||
+		typeof section !== 'string'
+	)
+		return undefined;
 	return { id, number, status, type, section, url: `https://www.rfc-editor.org/errata/eid${id}` };
 }
 

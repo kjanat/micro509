@@ -20,20 +20,20 @@ JSDoc and regenerate it rather than editing generated pages.
 
 ## WHERE TO LOOK
 
-| Need | Location | Notes |
-| --- | --- | --- |
-| Support claims and gaps | `PKIX-SCOPE.md` | Source of truth mirrored by README and site |
-| Research procedure | `.claude/skills/spec-lookup/SKILL.md` | Canonical policy; delegate standards questions to `spec-lookup` |
-| CLI reference | `SPEC-TOOLING.md` | Commands, JSON contracts, citation mapping, cache and gate limitations |
-| Reader and research commands | `scripts/spec/` | `bun spec list`, `census`, `status`, `headings`, `read`, `search` |
-| Spec fetcher | `scripts/fetch-spec.bun.ts` | `bun spec fetch rfc/itu/w3c`; legacy package aliases remain supported |
-| RFC text | `rfc/rfc<number>.txt` | Fetched verbatim from RFC Editor |
-| PKITS specification | `rfc/pkits.txt` | NIST fixture documentation and test policy |
-| RFC status guard | `test/rfc/rfc-status.test.ts` | Live XML index with daily cache; owns explicit legacy citation pins |
-| Research regression tests | `test/spec-research.test.ts` | Local HTTP/cache tests, census, provenance and CLI integration |
-| Reader and gate tests | `test/spec-reader.test.ts`, `test/spec-lookup-gate.test.ts` | Format parsing and supported hook routing |
-| Per-RFC conformance | `test/rfc/*.test.ts` | Section-quoted behavioral evidence |
-| PKITS execution | `test/pkits.test.ts` | Fixed-time path-validation harness |
+| Need                         | Location                                                    | Notes                                                                  |
+| ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Support claims and gaps      | `PKIX-SCOPE.md`                                             | Source of truth mirrored by README and site                            |
+| Research procedure           | `.claude/skills/spec-lookup/SKILL.md`                       | Canonical policy; delegate standards questions to `spec-lookup`        |
+| CLI reference                | `SPEC-TOOLING.md`                                           | Commands, JSON contracts, citation mapping, cache and gate limitations |
+| Reader and research commands | `scripts/spec/`                                             | `bun spec list`, `census`, `status`, `headings`, `read`, `search`      |
+| Spec fetcher                 | `scripts/fetch-spec.bun.ts`                                 | `bun spec fetch rfc/itu/w3c`; legacy package aliases remain supported  |
+| RFC text                     | `rfc/rfc<number>.txt`                                       | Fetched verbatim from RFC Editor                                       |
+| PKITS specification          | `rfc/pkits.txt`                                             | NIST fixture documentation and test policy                             |
+| RFC status guard             | `test/rfc/rfc-status.test.ts`                               | Live XML index with daily cache; owns explicit legacy citation pins    |
+| Research regression tests    | `test/spec-research.test.ts`                                | Local HTTP/cache tests, census, provenance and CLI integration         |
+| Reader and gate tests        | `test/spec-reader.test.ts`, `test/spec-lookup-gate.test.ts` | Format parsing and supported hook routing                              |
+| Per-RFC conformance          | `test/rfc/*.test.ts`                                        | Section-quoted behavioral evidence                                     |
+| PKITS execution              | `test/pkits.test.ts`                                        | Fixed-time path-validation harness                                     |
 
 ## PROJECT BASELINES
 
@@ -42,17 +42,17 @@ Use `bun spec status <rfc> ... --refresh` and inspect relevant successor text
 before making a current-standards claim. Support remains defined by
 `PKIX-SCOPE.md`; metadata alone does not change it.
 
-| Domain | Project RFCs | Legacy or supporting text |
-| --- | --- | --- |
-| PKIX validation | RFC 5280, 6818, 9549, 9618 | NIST PKITS |
-| Service identity | RFC 9525 | RFC 6125 only for opt-in CN compatibility |
-| OCSP | RFC 6960, 9654, 9919 | RFC 5019 legacy lightweight profile |
-| RSA | RFC 4055, 5756, 8017 | RFC 3447 superseded PKCS #1 text |
-| Safe curves | RFC 8410, 9295 | RFC 5912 ASN.1 object classes |
-| PEM | RFC 7468 | RFC 1421 and RFC 822 frozen legacy headers |
-| PKCS containers | RFC 5652, 7292, 8018, 9879 | RFC 2315 and 5208 legacy formats |
-| International email | RFC 9598 | RFC 6531 and RFC 5321 terminology |
-| IDNA | RFC 5890-5893, 8753 | RFC 3492 Punycode, RFC 5895 mapping |
+| Domain              | Project RFCs               | Legacy or supporting text                  |
+| ------------------- | -------------------------- | ------------------------------------------ |
+| PKIX validation     | RFC 5280, 6818, 9549, 9618 | NIST PKITS                                 |
+| Service identity    | RFC 9525                   | RFC 6125 only for opt-in CN compatibility  |
+| OCSP                | RFC 6960, 9654, 9919       | RFC 5019 legacy lightweight profile        |
+| RSA                 | RFC 4055, 5756, 8017       | RFC 3447 superseded PKCS #1 text           |
+| Safe curves         | RFC 8410, 9295             | RFC 5912 ASN.1 object classes              |
+| PEM                 | RFC 7468                   | RFC 1421 and RFC 822 frozen legacy headers |
+| PKCS containers     | RFC 5652, 7292, 8018, 9879 | RFC 2315 and 5208 legacy formats           |
+| International email | RFC 9598                   | RFC 6531 and RFC 5321 terminology          |
+| IDNA                | RFC 5890-5893, 8753        | RFC 3492 Punycode, RFC 5895 mapping        |
 
 ## CONVENTIONS
 

@@ -248,7 +248,10 @@ export const readCommand = command('read')
 	.arg('doc', arg.string().describe('Document id from `spec list`, or a bare RFC number'))
 	.arg('section', arg.string().describe('Section number such as 5.1.2.5, or heading text'))
 	.flag('raw', flag.boolean().describe('Keep the original line breaks and indentation'))
-	.flag('lines', flag.boolean().describe('Label paragraphs, or raw lines, with original file line numbers'))
+	.flag(
+		'lines',
+		flag.boolean().describe('Label paragraphs, or raw lines, with original file line numbers'),
+	)
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
 		const heading = findHeading(document, args.section);
@@ -281,7 +284,8 @@ export const readCommand = command('read')
 			if (flags.raw) {
 				for (const line of body) out.log(`[L${line.line}] ${line.text}`);
 			} else {
-				for (const block of blocks) out.log(`[L${block.startLine}-L${block.endLine}] ${block.text}\n`);
+				for (const block of blocks)
+					out.log(`[L${block.startLine}-L${block.endLine}] ${block.text}\n`);
 			}
 			return;
 		}
@@ -450,10 +454,17 @@ export const searchCommand = command('search')
 	.flag('doc', flag.string().describe('Restrict the search to one document id'))
 	.flag(
 		'context',
-		flag.number({ int: true, min: 0 }).default(0).alias('C').describe('Lines of context to show around each match'),
+		flag
+			.number({ int: true, min: 0 })
+			.default(0)
+			.alias('C')
+			.describe('Lines of context to show around each match'),
 	)
 	.flag('ignore-case', flag.boolean().alias('i').describe('Match without regard to case'))
-	.flag('limit', flag.number({ int: true, min: 1 }).default(200).describe('Maximum matches to report'))
+	.flag(
+		'limit',
+		flag.number({ int: true, min: 1 }).default(200).describe('Maximum matches to report'),
+	)
 	.action(({ args, flags, out }) => {
 		const source = args.terms.join(' ');
 		const pattern = compile(source, flags['ignore-case']);
@@ -462,7 +473,12 @@ export const searchCommand = command('search')
 		const hits: SearchHit[] = [];
 		let truncated = false;
 		for (const ref of scope) {
-			const found = searchDocument(loadDocument(ref), pattern, flags.context, flags.limit - hits.length);
+			const found = searchDocument(
+				loadDocument(ref),
+				pattern,
+				flags.context,
+				flags.limit - hits.length,
+			);
 			hits.push(...found.hits);
 			if (found.more) {
 				truncated = true;
@@ -474,7 +490,8 @@ export const searchCommand = command('search')
 			return;
 		}
 		renderHits(out, hits);
-		if (truncated) out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
+		if (truncated)
+			out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
 	});
 
 export const specCli = cli('spec')

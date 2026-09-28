@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runCommand } from 'dreamcli/testkit';
@@ -7,18 +7,26 @@ import { fetchCommand } from '../scripts/fetch-spec.bun.ts';
 import { censusLines } from '../scripts/spec/census-data.ts';
 import { discover } from '../scripts/spec/corpus.ts';
 import { censusCommand, readCommand, statusCommand } from '../scripts/spec/main.ts';
-import { isRecord, loadJsonResource, resourceCachePath } from '../scripts/spec/resource.ts';
 import type { ResourceOptions } from '../scripts/spec/resource.ts';
+import { isRecord, loadJsonResource, resourceCachePath } from '../scripts/spec/resource.ts';
 import { parseErrata, parseRfcStatus, rfcNumber } from '../scripts/spec/status-data.ts';
 import { blocksOf, renderBlocks, renderBody, sourceLines } from '../scripts/spec/text.ts';
 
 const metadata = {
-	doc_id: 'RFC5280', title: 'Fixture title', status: 'PROPOSED STANDARD',
-	updates: [], obsoletes: ['RFC3280'], updated_by: ['RFC6818'], obsoleted_by: [],
+	doc_id: 'RFC5280',
+	title: 'Fixture title',
+	status: 'PROPOSED STANDARD',
+	updates: [],
+	obsoletes: ['RFC3280'],
+	updated_by: ['RFC6818'],
+	obsoleted_by: [],
 } as const;
 const report = {
-	errata_id: '1', 'doc-id': 'RFC05280', errata_status_code: 'Reported',
-	errata_type_code: 'Technical', section: '4.1',
+	errata_id: '1',
+	'doc-id': 'RFC05280',
+	errata_status_code: 'Reported',
+	errata_type_code: 'Technical',
+	section: '4.1',
 } as const;
 
 function object(value: unknown): Readonly<Record<string, unknown>> {
@@ -50,13 +58,21 @@ describe('RFC metadata validation', () => {
 	test.each(['5280', 'rfc5280', 'RFC05280'])('normalizes %s', (value) => {
 		expect(rfcNumber(value)).toBe('5280');
 	});
-	test.each(['0', '-1', '5280.txt', '../5280', '9e3', '9007199254740992'])('rejects %s', (value) => {
-		expect(rfcNumber(value)).toBeUndefined();
-	});
+	test.each(['0', '-1', '5280.txt', '../5280', '9e3', '9007199254740992'])(
+		'rejects %s',
+		(value) => {
+			expect(rfcNumber(value)).toBeUndefined();
+		},
+	);
 	test('preserves separate direct update and obsolescence relationships', () => {
 		expect(parseRfcStatus(metadata, '5280')).toEqual({
-			number: '5280', title: 'Fixture title', status: 'PROPOSED STANDARD',
-			updates: [], obsoletes: ['3280'], updatedBy: ['6818'], obsoletedBy: [],
+			number: '5280',
+			title: 'Fixture title',
+			status: 'PROPOSED STANDARD',
+			updates: [],
+			obsoletes: ['3280'],
+			updatedBy: ['6818'],
+			obsoletedBy: [],
 		});
 	});
 	test('does not accept missing relationship data or the wrong document', () => {
@@ -65,10 +81,19 @@ describe('RFC metadata validation', () => {
 		expect(parseRfcStatus(metadata, '3261')).toBeUndefined();
 	});
 	test('normalizes and deduplicates relationship identifiers', () => {
-		expect(parseRfcStatus({ ...metadata, updated_by: ['RFC06818', 'RFC6818', 'RFC9549'] }, '5280')?.updatedBy).toEqual(['6818', '9549']);
+		expect(
+			parseRfcStatus({ ...metadata, updated_by: ['RFC06818', 'RFC6818', 'RFC9549'] }, '5280')
+				?.updatedBy,
+		).toEqual(['6818', '9549']);
 	});
 	test('keeps every published erratum status without promoting it', () => {
-		for (const status of ['Reported', 'Verified', 'Held for Document Update', 'Rejected', 'Future status']) {
+		for (const status of [
+			'Reported',
+			'Verified',
+			'Held for Document Update',
+			'Rejected',
+			'Future status',
+		]) {
 			expect(parseErrata([{ ...report, errata_status_code: status }])?.[0]?.status).toBe(status);
 		}
 	});
@@ -94,7 +119,8 @@ async function withServer(action: (fixture: FixtureServer) => Promise<void>): Pr
 	let body = '42';
 	let status = 200;
 	const server = Bun.serve({
-		hostname: '127.0.0.1', port: 0,
+		hostname: '127.0.0.1',
+		port: 0,
 		fetch() {
 			count += 1;
 			return new Response(body, { status, headers: { 'Content-Type': 'application/json' } });
@@ -105,7 +131,10 @@ async function withServer(action: (fixture: FixtureServer) => Promise<void>): Pr
 			url: `http://127.0.0.1:${server.port}/status`,
 			options: { directory, offline: false, refresh: false, maxAgeSeconds: 86400 },
 			requests: () => count,
-			respond: (nextBody, nextStatus = 200) => { body = nextBody; status = nextStatus; },
+			respond: (nextBody, nextStatus = 200) => {
+				body = nextBody;
+				status = nextStatus;
+			},
 		});
 	} finally {
 		server.stop(true);
@@ -132,7 +161,11 @@ describe('dated status cache', () => {
 	test('reports stale offline evidence without making a request', async () => {
 		await withServer(async ({ url, options, requests }) => {
 			await loadJsonResource(url, numberPayload, options);
-			const result = await loadJsonResource(url, numberPayload, { ...options, offline: true, maxAgeSeconds: 0 });
+			const result = await loadJsonResource(url, numberPayload, {
+				...options,
+				offline: true,
+				maxAgeSeconds: 0,
+			});
 			expect(result.value).toBe(42);
 			expect(result.provenance.fresh).toBe(false);
 			expect(result.provenance.source).toBe('cache');
@@ -141,8 +174,17 @@ describe('dated status cache', () => {
 	});
 	test('fails on missing offline evidence and contradictory options', async () => {
 		await withServer(async ({ url, options, requests }) => {
-			expect((await rejected(loadJsonResource(url, numberPayload, { ...options, offline: true }))).message).toContain('no usable offline cache');
-			expect((await rejected(loadJsonResource(url, numberPayload, { ...options, offline: true, refresh: true }))).message).toContain('conflict');
+			expect(
+				(await rejected(loadJsonResource(url, numberPayload, { ...options, offline: true })))
+					.message,
+			).toContain('no usable offline cache');
+			expect(
+				(
+					await rejected(
+						loadJsonResource(url, numberPayload, { ...options, offline: true, refresh: true }),
+					)
+				).message,
+			).toContain('conflict');
 			expect(requests()).toBe(0);
 		});
 	});
@@ -150,8 +192,13 @@ describe('dated status cache', () => {
 		await withServer(async ({ url, options, respond, requests }) => {
 			await loadJsonResource(url, numberPayload, options);
 			respond('unavailable', 503);
-			expect((await rejected(loadJsonResource(url, numberPayload, { ...options, refresh: true }))).message).toContain('503');
-			expect((await loadJsonResource(url, numberPayload, { ...options, offline: true })).value).toBe(42);
+			expect(
+				(await rejected(loadJsonResource(url, numberPayload, { ...options, refresh: true })))
+					.message,
+			).toContain('503');
+			expect(
+				(await loadJsonResource(url, numberPayload, { ...options, offline: true })).value,
+			).toBe(42);
 			expect(requests()).toBe(2);
 		});
 	});
@@ -159,8 +206,13 @@ describe('dated status cache', () => {
 		await withServer(async ({ url, options, respond }) => {
 			await loadJsonResource(url, numberPayload, options);
 			respond('{}');
-			expect((await rejected(loadJsonResource(url, numberPayload, { ...options, refresh: true }))).message).toContain('incomplete response');
-			expect((await loadJsonResource(url, numberPayload, { ...options, offline: true })).value).toBe(42);
+			expect(
+				(await rejected(loadJsonResource(url, numberPayload, { ...options, refresh: true })))
+					.message,
+			).toContain('incomplete response');
+			expect(
+				(await loadJsonResource(url, numberPayload, { ...options, offline: true })).value,
+			).toBe(42);
 		});
 	});
 	test('rejects corrupt, misfiled and future-dated cache envelopes', async () => {
@@ -169,11 +221,19 @@ describe('dated status cache', () => {
 			const file = resourceCachePath(options.directory, url);
 			for (const content of [
 				'not JSON',
-				JSON.stringify({ version: 1, url: 'https://wrong.example/', fetchedAt: new Date().toISOString(), payload: 42 }),
+				JSON.stringify({
+					version: 1,
+					url: 'https://wrong.example/',
+					fetchedAt: new Date().toISOString(),
+					payload: 42,
+				}),
 				JSON.stringify({ version: 1, url, fetchedAt: '2999-01-01T00:00:00.000Z', payload: 42 }),
 			]) {
 				await writeFile(file, content);
-				expect((await rejected(loadJsonResource(url, numberPayload, { ...options, offline: true }))).message).toContain('no usable offline cache');
+				expect(
+					(await rejected(loadJsonResource(url, numberPayload, { ...options, offline: true })))
+						.message,
+				).toContain('no usable offline cache');
 			}
 			expect(requests()).toBe(1);
 			await loadJsonResource(url, numberPayload, options);
@@ -191,8 +251,14 @@ describe('dated status cache', () => {
 	});
 	test('writes complete cache envelopes under concurrent refreshes', async () => {
 		await withServer(async ({ url, options }) => {
-			await Promise.all(Array.from({ length: 5 }, () => loadJsonResource(url, numberPayload, { ...options, refresh: true })));
-			const cached: unknown = JSON.parse(await readFile(resourceCachePath(options.directory, url), 'utf8'));
+			await Promise.all(
+				Array.from({ length: 5 }, () =>
+					loadJsonResource(url, numberPayload, { ...options, refresh: true }),
+				),
+			);
+			const cached: unknown = JSON.parse(
+				await readFile(resourceCachePath(options.directory, url), 'utf8'),
+			);
 			expect(object(cached)['payload']).toBe(42);
 			expect((await readdir(options.directory)).some((file) => file.endsWith('.tmp'))).toBe(false);
 		});
@@ -208,10 +274,18 @@ describe('complete multi-concept census', () => {
 		expect(result[1]?.samples[0]?.line).toBe(351);
 	});
 	test('zero samples suppresses only excerpts', () => {
-		expect(censusLines(sourceLines('x\nx'), [/x/], 0)).toEqual([{ pattern: 'x', matches: 2, samples: [] }]);
+		expect(censusLines(sourceLines('x\nx'), [/x/], 0)).toEqual([
+			{ pattern: 'x', matches: 2, samples: [] },
+		]);
 	});
 	test('the CLI reports every indexed document rather than stopping at 200 hits', async () => {
-		const result = await runCommand(censusCommand, ['MUST', 'NoSuchTerm_fa975', '--samples', '0', '--json']);
+		const result = await runCommand(censusCommand, [
+			'MUST',
+			'NoSuchTerm_fa975',
+			'--samples',
+			'0',
+			'--json',
+		]);
 		expect(result.exitCode).toBe(0);
 		const payload = json(result.stdout);
 		expect(payload['searched']).toBe(discover().length);
@@ -228,20 +302,43 @@ describe('complete multi-concept census', () => {
 describe('section citation provenance', () => {
 	test('maps a paragraph across page seams to its original source lines', () => {
 		const blocks = [
-			{ lines: [{ line: 10, text: '  A wrapped' }, { line: 11, text: '  paragraph continues' }], seamBefore: false },
+			{
+				lines: [
+					{ line: 10, text: '  A wrapped' },
+					{ line: 11, text: '  paragraph continues' },
+				],
+				seamBefore: false,
+			},
 			{ lines: [{ line: 20, text: '  across a page.' }], seamBefore: true },
 		] as const;
-		expect(renderBlocks(blocks, 2)).toEqual([{
-			startLine: 10, endLine: 20,
-			sourceLines: [...blocks[0].lines, ...blocks[1].lines],
-			text: 'A wrapped paragraph continues across a page.',
-		}]);
+		expect(renderBlocks(blocks, 2)).toEqual([
+			{
+				startLine: 10,
+				endLine: 20,
+				sourceLines: [...blocks[0].lines, ...blocks[1].lines],
+				text: 'A wrapped paragraph continues across a page.',
+			},
+		]);
 		expect(renderBody(blocks, 2)).toEqual(['A wrapped paragraph continues across a page.']);
 	});
 	test('keeps preformatted source lines and separate paragraphs distinct', () => {
-		const blocks = blocksOf(sourceLines('A paragraph.\n\nThing ::= INTEGER\n  field\n\nAnother paragraph.'), new Set());
-		expect(renderBlocks(blocks, 0).map((block) => [block.startLine, block.endLine])).toEqual([[1, 1], [3, 4], [6, 6]]);
-		expect(renderBody(blocks, 0)).toEqual(['A paragraph.', '', 'Thing ::= INTEGER', '  field', '', 'Another paragraph.']);
+		const blocks = blocksOf(
+			sourceLines('A paragraph.\n\nThing ::= INTEGER\n  field\n\nAnother paragraph.'),
+			new Set(),
+		);
+		expect(renderBlocks(blocks, 0).map((block) => [block.startLine, block.endLine])).toEqual([
+			[1, 1],
+			[3, 4],
+			[6, 6],
+		]);
+		expect(renderBody(blocks, 0)).toEqual([
+			'A paragraph.',
+			'',
+			'Thing ::= INTEGER',
+			'  field',
+			'',
+			'Another paragraph.',
+		]);
 	});
 	test('handles an empty section without invented line numbers', () => {
 		expect(renderBlocks([], 0)).toEqual([]);
@@ -272,7 +369,10 @@ describe('spec command integration', () => {
 				['https://www.rfc-editor.org/rfc/rfc5280.json', { ...metadata, updated_by: ['RFC999999'] }],
 				['https://www.rfc-editor.org/errata.json', [report]],
 			] as const) {
-				await writeFile(resourceCachePath(directory, url), JSON.stringify({ version: 1, url, fetchedAt, payload }));
+				await writeFile(
+					resourceCachePath(directory, url),
+					JSON.stringify({ version: 1, url, fetchedAt, payload }),
+				);
 			}
 			const argv = ['5280', 'RFC5280', '--offline', '--max-age', '0', '--cache-dir', directory];
 			const result = await runCommand(statusCommand, [...argv, '--json']);
@@ -296,7 +396,12 @@ describe('spec command integration', () => {
 	test('status fails with a coded error when offline evidence is absent', async () => {
 		const directory = await mkdtemp(path.join(tmpdir(), 'spec-status-missing-'));
 		try {
-			const result = await runCommand(statusCommand, ['5280', '--offline', '--cache-dir', directory]);
+			const result = await runCommand(statusCommand, [
+				'5280',
+				'--offline',
+				'--cache-dir',
+				directory,
+			]);
 			expect(result.error?.code).toBe('SPEC_STATUS_UNAVAILABLE');
 		} finally {
 			await rm(directory, { recursive: true, force: true });

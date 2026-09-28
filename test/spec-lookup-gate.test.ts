@@ -162,10 +162,14 @@ describe('Bash', () => {
 	});
 
 	test('takes agent identity from the hook payload, never a shell comment', () => {
-		const payload = parsePayload(JSON.stringify({
-			tool_name: 'Bash', agent_type: 'spec-lookup', cwd: projectRoot,
-			tool_input: { command: 'bun spec read rfc5280 4.1' },
-		}));
+		const payload = parsePayload(
+			JSON.stringify({
+				tool_name: 'Bash',
+				agent_type: 'spec-lookup',
+				cwd: projectRoot,
+				tool_input: { command: 'bun spec read rfc5280 4.1' },
+			}),
+		);
 		expect(payload).toBeDefined();
 		if (payload === undefined) return;
 		expect(decide(payload, projectRoot).kind).toBe('pass');
@@ -197,19 +201,25 @@ describe('tokenize', () => {
 describe('splitHeredocs', () => {
 	test('drops prose bodies and keeps executable ones', () => {
 		expect(splitHeredocs("git commit -F - <<'EOF'\nbody\nEOF\nls")).toEqual({
-			text: "git commit -F - <<'EOF'\nls", bodies: [],
+			text: "git commit -F - <<'EOF'\nls",
+			bodies: [],
 		});
 		expect(splitHeredocs('bash <<EOF\ncat x\nEOF')).toEqual({
-			text: 'bash <<EOF', bodies: ['cat x'],
+			text: 'bash <<EOF',
+			bodies: ['cat x'],
 		});
 	});
 });
 
 describe('hook output', () => {
 	test('parses a payload and renders a deny decision', () => {
-		const payload = parsePayload(JSON.stringify({
-			tool_name: 'Read', cwd: projectRoot, tool_input: { file_path: rfc5280 },
-		}));
+		const payload = parsePayload(
+			JSON.stringify({
+				tool_name: 'Read',
+				cwd: projectRoot,
+				tool_input: { file_path: rfc5280 },
+			}),
+		);
 		expect(payload).toBeDefined();
 		if (payload === undefined) return;
 		expect(render(decide(payload, projectRoot))).toContain('"permissionDecision":"deny"');
