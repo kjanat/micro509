@@ -248,7 +248,10 @@ describe('research command routing', () => {
 		['deny', 'env --unset=UNUSED bun spec read rfc5280 4.1'],
 		['deny', 'env --argv0 spec-helper bun spec read rfc5280 4.1'],
 		['deny', 'CI=1 env -u UNUSED MODE=test nice -n 5 bun --cwd . run spec --json census REAL NR3'],
-		['deny', '/usr/bin/nice -n 5 /usr/bin/env --unset UNUSED node scripts/spec/main.ts --json read rfc5280 4.1'],
+		[
+			'deny',
+			'/usr/bin/nice -n 5 /usr/bin/env --unset UNUSED node scripts/spec/main.ts --json read rfc5280 4.1',
+		],
 		['deny', 'sudo -u root nice -n 5 bun spec read rfc5280 4.1'],
 		['deny', 'time -f %E bun spec read rfc5280 4.1'],
 		['deny', 'exec -a spec-helper bun spec read rfc5280 4.1'],
@@ -275,10 +278,14 @@ describe('research command routing', () => {
 	});
 
 	test('takes agent identity from the hook payload, never a shell comment', () => {
-		const payload = parsePayload(JSON.stringify({
-			tool_name: 'Bash', agent_type: 'spec-lookup', cwd: projectRoot,
-			tool_input: { command: 'bun spec read ms-wcce-20260824 3.1' },
-		}));
+		const payload = parsePayload(
+			JSON.stringify({
+				tool_name: 'Bash',
+				agent_type: 'spec-lookup',
+				cwd: projectRoot,
+				tool_input: { command: 'bun spec read ms-wcce-20260824 3.1' },
+			}),
+		);
 		expect(payload).toBeDefined();
 		if (payload === undefined) return;
 		expect(decide(payload, projectRoot).kind).toBe('pass');

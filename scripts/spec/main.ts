@@ -268,7 +268,10 @@ export const readCommand = command('read')
 	.arg('doc', arg.string().describe('Document id from `spec list`, or a bare RFC number'))
 	.arg('section', arg.string().describe('Section number such as 5.1.2.5, or heading text'))
 	.flag('raw', flag.boolean().describe('Keep the original line breaks and indentation'))
-	.flag('lines', flag.boolean().describe('Label paragraphs or raw lines with original source ranges'))
+	.flag(
+		'lines',
+		flag.boolean().describe('Label paragraphs or raw lines with original source ranges'),
+	)
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
 		const heading = findHeading(document, args.section);
@@ -508,7 +511,8 @@ export const searchCommand = command('search')
 			return;
 		}
 		renderHits(out, hits);
-		if (truncated) out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
+		if (truncated)
+			out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
 	});
 
 export const specCli = cli('spec')
