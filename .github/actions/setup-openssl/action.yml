@@ -61,6 +61,7 @@ runs:
         retry gh attestation verify "${root}/${archive}" \
           --repo "${REPOSITORY}" \
           --signer-workflow "${REPOSITORY}/.github/workflows/openssl.yml" \
+          --source-ref refs/heads/master \
           --deny-self-hosted-runners
         (cd "${root}" && tar -xzf "${archive}")
 
