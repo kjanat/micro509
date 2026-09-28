@@ -211,6 +211,8 @@ export const statusCommand = command('status')
 					`  ${evidence.source} observation ${evidence.fetchedAt}; ${evidence.fresh ? 'within cache age' : 'STALE'}${flags.offline ? '; OFFLINE' : ''}`,
 				);
 				out.log(`  vendored: ${document.vendored ? 'yes' : 'no'}`);
+				out.log(`  updates: ${document.updates.join(', ') || 'none recorded'}`);
+				out.log(`  obsoletes: ${document.obsoletes.join(', ') || 'none recorded'}`);
 				out.log(`  updated by: ${document.updatedBy.join(', ') || 'none recorded'}`);
 				out.log(`  obsoleted by: ${document.obsoletedBy.join(', ') || 'none recorded'}`);
 				for (const successor of document.successors) {

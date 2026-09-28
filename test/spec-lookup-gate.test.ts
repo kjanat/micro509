@@ -186,11 +186,13 @@ describe('tokenize', () => {
 			{ words: ['e'], piped: false },
 		]);
 	});
+
 	test('keeps quoted words whole and escaped separators literal', () => {
 		expect(tokenize(`printf '%s;%s' "a b" c\\;`).segments).toEqual([
 			{ words: ['printf', '%s;%s', 'a b', 'c;'], piped: false },
 		]);
 	});
+
 	test('splits command substitutions into their own segments', () => {
 		const script = tokenize('echo "x $(cat f) y"');
 		expect(script.substitutions).toBe(true);
@@ -230,5 +232,49 @@ describe('hook output', () => {
 	test('ignores input that is not a tool payload', () => {
 		expect(parsePayload('not json')).toBeUndefined();
 		expect(parsePayload('{"tool_name":"Read"}')).toBeUndefined();
+	});
+});
+
+describe('wrapped commands', () => {
+	test.each([
+		['deny', 'nice -n 5 bun spec read rfc5280 4.1'],
+		['deny', 'nice --adjustment 5 bun spec read rfc5280 4.1'],
+		['deny', 'nice --adjustment=5 bun spec --json read rfc5280 4.1'],
+		['deny', 'nice -n5 bun run spec --json census REAL NR3'],
+		['deny', 'nice -n -5 bun spec headings rfc5280'],
+		['deny', 'nice -- bun spec read rfc5280 4.1'],
+		['deny', 'env --chdir /tmp bun spec headings rfc5280'],
+		['deny', 'env --chdir=/tmp bun spec headings rfc5280'],
+		['deny', 'env -C /tmp bun spec search nextUpdate'],
+		['deny', 'env -C/tmp bun spec search nextUpdate'],
+		['deny', 'env -iu UNUSED bun spec --json read rfc5280 4.1'],
+		['deny', 'env --unset UNUSED bun spec read rfc5280 4.1'],
+		['deny', 'env --unset=UNUSED bun spec read rfc5280 4.1'],
+		['deny', 'env --argv0 spec-helper bun spec read rfc5280 4.1'],
+		['deny', 'CI=1 env -u UNUSED MODE=test nice -n 5 bun --cwd . run spec --json census REAL NR3'],
+		[
+			'deny',
+			'/usr/bin/nice -n 5 /usr/bin/env --unset UNUSED node scripts/spec/main.ts --json read rfc5280 4.1',
+		],
+		['deny', 'sudo -u root nice -n 5 bun spec read rfc5280 4.1'],
+		['deny', 'time -f %E bun spec read rfc5280 4.1'],
+		['deny', 'exec -a spec-helper bun spec read rfc5280 4.1'],
+		['deny', 'xargs -n 1 bun spec read rfc5280 4.1'],
+		['deny', 'parallel --jobs 2 bun spec read rfc5280 4.1'],
+		['deny', 'nice -n 5 rg nextUpdate'],
+		['pass', 'nice -n 5 rg nextUpdate src'],
+		['pass', 'nice -n 5 bun spec list'],
+		['pass', 'env --unset UNUSED bun spec --json status 5280 --offline'],
+		['pass', 'nice -n 5 bun spec fetch rfc 5280'],
+		['pass', 'nice -n 5 echo bun spec read rfc5280 4.1'],
+		['pass', 'env --unset bun echo spec read rfc5280 4.1'],
+		['pass', 'env --chdir /tmp echo bun spec headings rfc5280'],
+		['pass', 'echo "nice -n 5 bun spec read rfc5280 4.1"'],
+		['pass', 'nice -- -n 5 bun spec read rfc5280 4.1'],
+		['pass', 'env MODE=test -- bun spec read rfc5280 4.1'],
+		['pass', 'nice -n'],
+	] as const)('%s %s', (want, command) => {
+		expect(verdictOf(bash(command))).toBe(want);
+		expect(verdictOf(bash(command, 'spec-lookup'))).toBe('pass');
 	});
 });

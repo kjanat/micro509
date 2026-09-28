@@ -417,13 +417,55 @@ export function splitHeredocs(command: string): SplitCommand {
 	return { text: text.join('\n'), bodies };
 }
 
-function commandIndex(words: readonly string[]): number {
-	let index = 0;
+/** Required option operands for the command wrappers this gate recognizes. */
+const PREFIX_VALUE_OPTIONS: ReadonlyMap<string, readonly string[]> = new Map([
+	['nice', ['-n', '--adjustment']],
+	['env', ['-u', '--unset', '-C', '--chdir', '-a', '--argv0']],
+	['exec', ['-a']],
+	['time', ['-f', '--format', '-o', '--output']],
+	['sudo', ['-u', '--user', '-g', '--group', '-h', '--host', '-p', '--prompt', '-C', '--close-from', '-D', '--chdir', '-R', '--chroot', '-T', '--command-timeout', '-r', '--role', '-t', '--type']],
+	['xargs', ['-a', '--arg-file', '-d', '--delimiter', '-E', '-I', '-L', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']],
+	['parallel', ['-j', '--jobs', '-S', '--sshlogin', '--sshloginfile', '-a', '--arg-file', '--colsep', '--delay', '--timeout', '--joblog', '--results', '--workdir']],
+]);
+
+/** Attached operands occupy one word; a required separate operand occupies two. */
+function prefixOptionWidth(prefix: string, option: string): number {
+	const values = PREFIX_VALUE_OPTIONS.get(prefix) ?? [];
+	if (option.startsWith('--')) return values.includes(option) ? 2 : 1;
+	for (let index = 1; index < option.length; index += 1) {
+		if (values.includes(`-${option.charAt(index)}`)) {
+			return index === option.length - 1 ? 2 : 1;
+		}
+	}
+	return 1;
+}
+
+function afterPrefix(words: readonly string[], start: number, prefix: string): number {
+	let index = start;
 	while (index < words.length) {
 		const word = words[index] ?? '';
-		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) || word.startsWith('-')) index += 1;
-		else if (PREFIXES.has(path.basename(word))) index += 1;
-		else break;
+		if (word === '--' || (prefix === 'env' && word === '-')) {
+			index += 1;
+			break;
+		}
+		if (!word.startsWith('-') || word === '-') break;
+		index += prefixOptionWidth(prefix, word);
+	}
+	// Assignments end env's option processing. A subsequent "--" is then a
+	// command name, not another option delimiter. Do not scan past that command.
+	if (prefix === 'env' || prefix === 'sudo') {
+		while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
+	}
+	return Math.min(index, words.length);
+}
+
+function commandIndex(words: readonly string[]): number {
+	let index = 0;
+	while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
+	while (index < words.length) {
+		const prefix = path.basename(words[index] ?? '');
+		if (!PREFIXES.has(prefix)) break;
+		index = afterPrefix(words, index + 1, prefix);
 	}
 	return index;
 }

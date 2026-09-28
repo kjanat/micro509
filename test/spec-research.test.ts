@@ -419,3 +419,50 @@ describe('spec command integration', () => {
 		expect(conflict.error?.code).toBe('SPEC_STATUS_OPTIONS');
 	});
 });
+
+describe('status relationship rendering', () => {
+	test.each([
+		{
+			name: 'non-empty relationships',
+			updates: ['RFC100', 'RFC101'],
+			obsoletes: ['RFC200'],
+			updated_by: ['RFC300'],
+			obsoleted_by: ['RFC400', 'RFC401'],
+		},
+		{ name: 'empty relationships', updates: [], obsoletes: [], updated_by: [], obsoleted_by: [] },
+	])('keeps all four directions in human and JSON output: $name', async (relations) => {
+		const directory = await mkdtemp(path.join(tmpdir(), 'spec-status-relations-'));
+		try {
+			const fetchedAt = new Date(Date.now() - 1000).toISOString();
+			// Synthetic relationships exercise every direction without depending on live RFC status.
+			for (const [url, payload] of [
+				['https://www.rfc-editor.org/rfc/rfc5280.json', { ...metadata, ...relations }],
+				['https://www.rfc-editor.org/errata.json', [report]],
+			] as const) {
+				await writeFile(
+					resourceCachePath(directory, url),
+					JSON.stringify({ version: 1, url, fetchedAt, payload }),
+				);
+			}
+			const argv = ['5280', '--offline', '--cache-dir', directory];
+			const human = await runCommand(statusCommand, argv);
+			const machine = await runCommand(statusCommand, [...argv, '--json']);
+			expect(human.exitCode).toBe(0);
+			expect(machine.exitCode).toBe(0);
+			const lines = human.stdout.join('').split('\n');
+			const document = object(array(json(machine.stdout)['documents'])[0]);
+			for (const [label, key, values] of [
+				['updates', 'updates', relations.updates],
+				['obsoletes', 'obsoletes', relations.obsoletes],
+				['updated by', 'updatedBy', relations.updated_by],
+				['obsoleted by', 'obsoletedBy', relations.obsoleted_by],
+			] as const) {
+				const expected = values.map((value) => value.slice(3));
+				expect(document[key]).toEqual(expected);
+				expect(lines).toContain(`  ${label}: ${expected.join(', ') || 'none recorded'}`);
+			}
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+});
