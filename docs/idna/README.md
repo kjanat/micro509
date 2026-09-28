@@ -14,11 +14,11 @@ latest Unicode version IANA publishes derived property values for.
 | `ucd-12.0.0/Scripts.txt`                | <https://www.unicode.org/Public/12.0.0/ucd/Scripts.txt>                          |
 | `ucd-12.0.0/UnicodeData.txt`            | <https://www.unicode.org/Public/12.0.0/ucd/UnicodeData.txt>                      |
 
-The IANA table is the RFC 5892 derived property value of every code point:
+The IANA table is the [RFC 5892][rfc5892] derived property value of every code point:
 PVALID, CONTEXTJ, CONTEXTO, DISALLOWED or UNASSIGNED. The Unicode Character
-Database files supply the properties the RFC 5892 Appendix A contextual rules
-and the RFC 5893 Bidi rule read, and the `<wide>` and `<narrow>`
-decompositions the RFC 5895 mapping reads. The CSV's CRLF line endings are
+Database files supply the properties the [RFC 5892 Appendix A][rfc5892-appendix-A] contextual rules
+and the [RFC 5893][rfc5893] Bidi rule read, and the `<wide>` and `<narrow>`
+decompositions the [RFC 5895][rfc5895] mapping reads. The CSV's CRLF line endings are
 stored as LF.
 
 ## License
@@ -45,3 +45,8 @@ bun scripts/idna-tables.bun.ts
 
 `test/idna-tables.test.ts` re-derives every table from these files and fails
 if `src/internal/shared/idna-tables.ts` disagrees.
+
+[rfc5892]: https://www.rfc-editor.org/rfc/rfc5892.html
+[rfc5892-appendix-A]: https://www.rfc-editor.org/rfc/rfc5892.html#appendix-A
+[rfc5893]: https://www.rfc-editor.org/rfc/rfc5893.html
+[rfc5895]: https://www.rfc-editor.org/rfc/rfc5895.html

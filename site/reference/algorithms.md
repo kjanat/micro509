@@ -27,14 +27,14 @@ signatures through `micro509/crypto` (`signData` / `verifySignature`).
 
 ## Encryption
 
-| Context              | Schemes                                                                   |
-| -------------------- | ------------------------------------------------------------------------- |
-| Encrypted PKCS#8     | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256                      |
-| Encrypted PFX        | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256                      |
-| Legacy encrypted PEM | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                                     |
-| PKCS#12 MAC          | PKCS#12 KDF + HMAC‑SHA‑256                                                |
-| PBMAC1 (RFC 9879)    | PBKDF2 HMAC‑SHA‑256/384/512 + HMAC‑SHA‑256/384/512; creation uses SHA‑256 |
-| RSA‑OAEP             | key encapsulation with SHA‑256/384/512 keys and optional label            |
+| Context                      | Schemes                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| Encrypted PKCS#8             | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256                      |
+| Encrypted PFX                | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256                      |
+| Legacy encrypted PEM         | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                                     |
+| PKCS#12 MAC                  | PKCS#12 KDF + HMAC‑SHA‑256                                                |
+| PBMAC1 ([RFC 9879][rfc9879]) | PBKDF2 HMAC‑SHA‑256/384/512 + HMAC‑SHA‑256/384/512; creation uses SHA‑256 |
+| RSA‑OAEP                     | key encapsulation with SHA‑256/384/512 keys and optional label            |
 
 ## Not supported
 
@@ -42,7 +42,10 @@ micro509 does not try to mirror every primitive some WebCrypto runtimes expose:
 
 - DSA
 - Ed448, X25519, X448 key operations. Certificates carrying them still parse,
-  and RFC 9295 key-usage rules are enforced for all four safe-curve OIDs
+  and [RFC 9295][rfc9295] key-usage rules are enforced for all four safe-curve OIDs
 - ECDH and other key agreement
 - Generic symmetric-crypto APIs
 - Brainpool curves
+
+[rfc9295]: https://www.rfc-editor.org/rfc/rfc9295.html
+[rfc9879]: https://www.rfc-editor.org/rfc/rfc9879.html
