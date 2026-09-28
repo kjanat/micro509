@@ -8,8 +8,10 @@ Authored support claims plus the standards corpus used to verify them.
 docs/
 ├── PKIX-SCOPE.md   # canonical support boundary and evidence links
 ├── SPEC-TOOLING.md # research CLI, output contracts and operational limits
+├── SPEC-TROUBLESHOOTING.md # source defects, scanned tables and bounded reads
 ├── rfc/           # unmodified RFC Editor text plus NIST PKITS text
-├── itu/           # local, gitignored ITU-T references; redistribution restricted
+├── rfc-html/      # local, gitignored RFC Editor HTML for section and page anchors
+├── itu/           # local, gitignored ITU-T text and retained PDF/DOCX originals
 ├── w3c/           # W3C WebCrypto and WHATWG Web IDL rendered to text
 ├── ms/            # local, gitignored Microsoft Open Specifications text
 ├── idna/          # frozen IANA IDNA2008 and Unicode 12.0.0 tables
@@ -21,26 +23,27 @@ JSDoc and regenerate it rather than editing generated pages.
 
 ## WHERE TO LOOK
 
-| Need                          | Location                                                      | Notes                                                                               |
-| ----------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Support claims and gaps       | `PKIX-SCOPE.md`                                               | Source of truth mirrored by README and site                                         |
-| Research procedure            | `.claude/skills/spec-lookup/SKILL.md`                         | Canonical policy, corpus restrictions and worked example; delegate to `spec-lookup` |
-| CLI reference                 | `SPEC-TOOLING.md`                                             | Commands, JSON contracts, citation mapping, cache and gate limitations              |
-| Reader and research commands  | `scripts/spec/`                                               | `bun spec list`, `census`, `status`, `headings`, `read`, `search`                   |
-| Spec fetcher                  | `scripts/fetch-spec.bun.ts`                                   | `bun spec fetch rfc/itu/w3c/ms`; all four legacy package aliases remain supported   |
-| RFC text                      | `rfc/rfc<number>.txt`                                         | Fetched verbatim from RFC Editor                                                    |
-| PKITS specification           | `rfc/pkits.txt`                                               | NIST fixture documentation and test policy                                          |
-| Microsoft Open Specifications | `ms/<DOC>/<DOC>-v<date>.txt`                                  | Current PDF through `pdftotext -layout`; versioned local text, never tracked        |
-| RFC status guard              | `test/rfc/rfc-status.test.ts`                                 | Live XML index with daily cache; owns explicit legacy citation pins                 |
-| Research regression tests     | `test/spec-research.test.ts`, `test/spec-ms-research.test.ts` | Local HTTP/cache tests and real CLI/MS integration                                  |
-| Reader and gate tests         | `test/spec-reader.test.ts`, `test/spec-lookup-gate.test.ts`   | Existing format parsers and supported routing, including MS                         |
-| Per-RFC conformance           | `test/rfc/*.test.ts`                                          | Section-quoted behavioral evidence                                                  |
-| PKITS execution               | `test/pkits.test.ts`                                          | Fixed-time path-validation harness                                                  |
+| Need                            | Location                                           | Notes                                                                               |
+| ------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Support claims and gaps         | `PKIX-SCOPE.md`                                    | Source of truth mirrored by README and site                                         |
+| Research procedure              | `.claude/skills/spec-lookup/SKILL.md`              | Canonical policy, corpus restrictions and worked example; delegate to `spec-lookup` |
+| CLI reference                   | `SPEC-TOOLING.md`                                  | Commands, JSON contracts, citation mapping, cache and gate limitations              |
+| Source and environment failures | `SPEC-TROUBLESHOOTING.md`                          | Scans, unresolved references, bundle identities, official hosts and bounded reads   |
+| Reader and research commands    | `scripts/spec/`                                    | `bun spec list`, `census`, `status`, `headings`, `read`, `search`                   |
+| Spec fetcher                    | `scripts/fetch-spec.bun.ts`                        | `bun spec fetch rfc/itu/w3c/ms`; all four legacy package aliases remain supported   |
+| RFC text and HTML               | `rfc/rfc<number>.txt`, `rfc-html/rfc<number>.html` | Both fetched verbatim from RFC Editor; only text is tracked/indexed                 |
+| PKITS specification             | `rfc/pkits.txt`                                    | NIST fixture documentation and test policy                                          |
+| Microsoft Open Specifications   | `ms/<DOC>/<DOC>-v<date>.txt`                       | Current PDF through `pdftotext -layout`; versioned local text, never tracked        |
+| RFC status guard                | `test/rfc/rfc-status.test.ts`                      | Live XML index with daily cache; owns explicit legacy citation pins                 |
+| Research regression tests       | `test/spec-*.test.ts`                              | Reader, routing, HTTP/cache, Microsoft integration and source-quality regressions   |
+| Per-RFC conformance             | `test/rfc/*.test.ts`                               | Section-quoted behavioral evidence                                                  |
+| PKITS execution                 | `test/pkits.test.ts`                               | Fixed-time path-validation harness                                                  |
 
 ## PROJECT BASELINES
 
 This table records the project's reference set, not a live currency guarantee.
-Use `bun spec status <rfc> ... --refresh` and inspect successor text before a
+Batch `bun spec status <rfc> ... --refresh` at the start of research and reuse
+the dated cache for subsequent lookups. Inspect successor text before a
 current-standards claim. `PKIX-SCOPE.md` still defines support; metadata does
 not change it. Inspect non-RFC status in the official source catalogues.
 
@@ -82,7 +85,7 @@ not change it. Inspect non-RFC status in the official source catalogues.
 - Removing frozen legacy RFCs solely because the RFC Editor marks them obsolete.
 - Silencing `rfc-status.test.ts` without a real normative pin.
 - Claiming complete RFC support without test-backed behavior.
-- Committing or unignoring `itu/**` or `ms/**`; keep their source local.
+- Committing or unignoring `itu/**`, `ms/**` or `rfc-html/**`; keep their source local.
 - Reproducing ITU text verbatim in tracked/public output.
 - Treating failed status retrieval as proof of no updates or errata.
 - Calling the hook a security sandbox or granting a read through a shell comment.

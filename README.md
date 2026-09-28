@@ -214,29 +214,29 @@ The core stays ESM-only and side-effect-free.
 
 ## Algorithm support
 
-| Area                           | Shipped support                                                            |
-| ------------------------------ | -------------------------------------------------------------------------- |
-| Certificate and CSR signatures | RSA PKCS#1 v1.5, RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, Ed25519       |
-| RSA key APIs                   | `scheme: 'pkcs1-v1_5'`, `'pss'`, `'oaep'` (encryption)                     |
-| ECDSA key APIs                 | `P-256`, `P-384`, `P-521`                                                  |
-| Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                       |
-| PFX MAC                        | SHA-256-only PKCS#12 MAC; RFC 9879 PBMAC1 with PBKDF2 HMAC-SHA-256/384/512 |
-| Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys          |
+| Area                           | Shipped support                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| Certificate and CSR signatures | RSA PKCS#1 v1.5, RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, Ed25519                  |
+| RSA key APIs                   | `scheme: 'pkcs1-v1_5'`, `'pss'`, `'oaep'` (encryption)                                |
+| ECDSA key APIs                 | `P-256`, `P-384`, `P-521`                                                             |
+| Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                                  |
+| PFX MAC                        | SHA-256-only PKCS#12 MAC; [RFC 9879][rfc9879] PBMAC1 with PBKDF2 HMAC-SHA-256/384/512 |
+| Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys                     |
 
 `micro509` focuses on algorithms that are broadly interoperable in modern X.509 and WebCrypto-backed runtimes.\
 It intentionally excludes niche, blockchain-specific, or key-agreement-only primitives from the core API unless they are needed for a PKI workflow the library explicitly supports.
 
 ## Standards status
 
-| Area                                        | Status   |
-| ------------------------------------------- | -------- |
-| RFC 5280 path validation                    | complete |
-| RFC 6960 + 9919 OCSP                        | complete |
-| RFC 9525 service identity                   | complete |
-| RFC 9618 policy validation                  | complete |
-| RFC 7468 PEM textual encodings              | complete |
-| RFC 8410 + 9295 safe-curve profiles         | complete |
-| PKCS containers: RFC 5652, 7292, 8018, 9879 | partial  |
+| Area                                                                                    | Status   |
+| --------------------------------------------------------------------------------------- | -------- |
+| [RFC 5280][rfc5280] path validation                                                     | complete |
+| [RFC 6960][rfc6960] + [9919][rfc9919] OCSP                                              | complete |
+| [RFC 9525][rfc9525] service identity                                                    | complete |
+| [RFC 9618][rfc9618] policy validation                                                   | complete |
+| [RFC 7468][rfc7468] PEM textual encodings                                               | complete |
+| [RFC 8410][rfc8410] + [9295][rfc9295] safe-curve profiles                               | complete |
+| PKCS containers: [RFC 5652][rfc5652], [7292][rfc7292], [8018][rfc8018], [9879][rfc9879] | partial  |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
 and the [API reference](https://micro509.kjanat.dev/api/) for the public module surface.
@@ -286,3 +286,15 @@ The full stable subpath list lives in the [API reference](https://micro509.kjana
 [vite-example]: ./examples/vite/README.md 'GitHub'
 [vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite 'Stackblitz'
 [a typed error code for every failure mode]: https://micro509.kjanat.dev/guide/verification#error-codes
+[rfc5280]: https://www.rfc-editor.org/rfc/rfc5280.html
+[rfc5652]: https://www.rfc-editor.org/rfc/rfc5652.html
+[rfc6960]: https://www.rfc-editor.org/rfc/rfc6960.html
+[rfc7292]: https://www.rfc-editor.org/rfc/rfc7292.html
+[rfc7468]: https://www.rfc-editor.org/rfc/rfc7468.html
+[rfc8018]: https://www.rfc-editor.org/rfc/rfc8018.html
+[rfc8410]: https://www.rfc-editor.org/rfc/rfc8410.html
+[rfc9295]: https://www.rfc-editor.org/rfc/rfc9295.html
+[rfc9525]: https://www.rfc-editor.org/rfc/rfc9525.html
+[rfc9618]: https://www.rfc-editor.org/rfc/rfc9618.html
+[rfc9879]: https://www.rfc-editor.org/rfc/rfc9879.html
+[rfc9919]: https://www.rfc-editor.org/rfc/rfc9919.html

@@ -10,7 +10,11 @@ import {
 	rfcRelations,
 	sectionLines,
 } from './corpus.ts';
+import { readWindow } from './read-window.ts';
 import { censusCommand, statusCommand } from './research-commands.ts';
+import type { RenderLine } from './search-runs.ts';
+import { runsOf } from './search-runs.ts';
+import { sourceDiagnostics } from './source-quality.ts';
 import { blocksOf, minimumIndent, renderBlocks, renderBody } from './text.ts';
 import type { DocKind, SourceLine, SpecDocument } from './types.ts';
 
@@ -96,7 +100,7 @@ function allDocuments(): readonly SpecDocument[] {
 }
 
 function sectionLabel(number: string, title: string): string {
-	return number === title ? title : `§${number}  ${title}`;
+	return number === title ? title : title === '' ? `§${number}` : `§${number}  ${title}`;
 }
 
 function describe(
@@ -236,7 +240,9 @@ export const headingsCommand = command('headings')
 	)
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
-		const headings = document.headings.filter((heading) => heading.depth <= flags.depth);
+		const headings = document.headings.filter(
+			(heading) => heading.depth <= flags.depth && !heading.inlineBody,
+		);
 		if (out.jsonMode) {
 			out.json({
 				doc: document.id,
@@ -267,6 +273,16 @@ export const readCommand = command('read')
 	.example('spec read 9608 4', 'Read section 4 of RFC 9608 by bare number')
 	.arg('doc', arg.string().describe('Document id from `spec list`, or a bare RFC number'))
 	.arg('section', arg.string().describe('Section number such as 5.1.2.5, or heading text'))
+	.flag(
+		'offset',
+		flag.number({ int: true, min: 0 }).default(0).describe('Skip this many section source lines'),
+	)
+	.flag(
+		'limit',
+		flag
+			.number({ int: true, min: 1 })
+			.describe('Maximum section source lines; omitted reads the whole section'),
+	)
 	.flag('raw', flag.boolean().describe('Keep the original line breaks and indentation'))
 	.flag(
 		'lines',
@@ -275,7 +291,25 @@ export const readCommand = command('read')
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
 		const heading = findHeading(document, args.section);
-		const body = sectionLines(document, heading);
+		const { lines: body, selection } = readWindow(
+			sectionLines(document, heading),
+			flags.offset,
+			flags.limit,
+		);
+		const diagnostics = sourceDiagnostics(body.map((line) => line.text).join('\n')).map(
+			(diagnostic) => ({
+				...diagnostic,
+				line: diagnostic.line === undefined ? undefined : body[diagnostic.line - 1]?.line,
+			}),
+		);
+		if (!out.jsonMode) {
+			if (selection.truncated)
+				out.warn(
+					`Partial section: ${selection.returnedLines}/${selection.totalLines} source lines; next offset ${selection.nextOffset ?? 'end'}`,
+				);
+			for (const diagnostic of diagnostics)
+				out.warn(`${diagnostic.code} L${diagnostic.line}: ${diagnostic.message}`);
+		}
 		const blocks = renderBlocks(blocksOf(body, document.seams), minimumIndent(body));
 		const rendered = flags.raw
 			? body.map((entry) => entry.text)
@@ -294,6 +328,8 @@ export const readCommand = command('read')
 				body: rendered.join('\n'),
 				blocks,
 				sourceLines: body,
+				selection,
+				diagnostics,
 			});
 			return;
 		}
@@ -376,13 +412,6 @@ function searchDocument(
 	return { hits, more: false };
 }
 
-type RenderLine = {
-	readonly line: number;
-	readonly text: string;
-	readonly match: boolean;
-	readonly label: string;
-};
-
 function record(
 	lines: Map<number, RenderLine>,
 	entry: ContextLine,
@@ -392,26 +421,6 @@ function record(
 	const existing = lines.get(entry.line);
 	if (existing !== undefined && (existing.match || !match)) return;
 	lines.set(entry.line, { line: entry.line, text: entry.text, match, label });
-}
-
-function runsOf(lines: readonly RenderLine[]): readonly (readonly RenderLine[])[] {
-	const runs: RenderLine[][] = [];
-	let current: RenderLine[] = [];
-	let label: string | undefined;
-	for (const entry of lines) {
-		const previous = current[current.length - 1];
-		const gap = previous !== undefined && entry.line - previous.line > 1;
-		const relabel = entry.match && label !== undefined && entry.label !== label;
-		if (gap || relabel) {
-			runs.push(current);
-			current = [];
-			label = undefined;
-		}
-		if (entry.match) label = entry.label;
-		current.push(entry);
-	}
-	if (current.length > 0) runs.push(current);
-	return runs;
 }
 
 type DocumentHits = {
@@ -460,7 +469,10 @@ function renderHits(out: Out, hits: readonly SearchHit[]): void {
 				out.log(label);
 				group = label;
 			}
+			let previousLine: number | undefined;
 			for (const entry of run) {
+				if (previousLine !== undefined && entry.line > previousLine + 1) out.log('  --');
+				previousLine = entry.line;
 				out.log(`${String(entry.line).padStart(6)}${entry.match ? ':' : '-'} ${entry.text}`);
 			}
 		}

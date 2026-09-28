@@ -1,3 +1,4 @@
+import { ituSourceStem, looksLikeClauseProse } from './itu-source.ts';
 import { cleanTitle, sourceLines, stripPageArtifacts } from './text.ts';
 import type { Heading, ItuMeta, ItuVariant, ParsedDocument, SourceLine } from './types.ts';
 
@@ -6,7 +7,7 @@ const ANNEX = /^\s*Annex ([A-Z])(?:(?:\t|\s{2,})\s*(\S.*))?$/;
 const ANNEX_BASE = 1000;
 const TOC_ROW = /\t\s*\d+\s*$/;
 const CHANGE_ITEM = /^(\d+)\)\s+(\S.*)$/;
-const T_REC = /^T-REC-(X\.\d+)-(\d{4})(\d{2})-\w+!([^!]*)!/;
+const T_REC = /^T-REC-([A-Z]\.\d+(?:\.\d+)?)-(\d{4})(\d{2})-\w+!([^!]*)!/;
 
 export function partsOf(value: string): readonly number[] | undefined {
 	const parts: number[] = [];
@@ -86,8 +87,9 @@ function markedHeadingsOf(lines: readonly SourceLine[]): readonly Heading[] {
 		const rest = cleanTitle(numbered?.[4] ?? text);
 		headings.push({
 			number: number ?? rest,
-			title: `${mark}${rest}${mark}`,
-			depth: level.length,
+			title: number !== undefined && looksLikeClauseProse(rest) ? '' : `${mark}${rest}${mark}`,
+			...(number !== undefined && looksLikeClauseProse(rest) ? { inlineBody: true } : {}),
+			depth: number === undefined || !/^\d/.test(number) ? level.length : number.split('.').length,
 			line: entry.line,
 			index,
 		});
@@ -140,7 +142,14 @@ function headingsOf(lines: readonly SourceLine[], variant: ItuVariant): readonly
 		if (parts === undefined) return;
 		candidates.push({
 			parts,
-			heading: { number, title: cleanTitle(title), depth: parts.length, line: entry.line, index },
+			heading: {
+				number,
+				title: looksLikeClauseProse(title) ? '' : cleanTitle(title),
+				depth: parts.length,
+				line: entry.line,
+				index,
+				...(looksLikeClauseProse(title) ? { inlineBody: true } : {}),
+			},
 		});
 	});
 	return longestChain(candidates);
@@ -164,8 +173,8 @@ function labelOf(variant: ItuVariant, variantNumber: number | undefined): string
 	return '';
 }
 
-export function ituMeta(stem: string, directory: string): ItuMeta {
-	const match = T_REC.exec(stem);
+export function ituMeta(stem: string, directory: string, source = ''): ItuMeta {
+	const match = T_REC.exec(ituSourceStem(stem, source));
 	if (match?.[1] === undefined) {
 		return {
 			kind: 'itu',
@@ -188,9 +197,9 @@ export function ituMeta(stem: string, directory: string): ItuMeta {
 	};
 }
 
-export function ituIdentifier(stem: string, directory: string): string {
+export function ituIdentifier(stem: string, directory: string, source = ''): string {
 	const slug = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-	const match = T_REC.exec(stem);
+	const match = T_REC.exec(ituSourceStem(stem, source));
 	if (match?.[1] === undefined) return `itu-${slug(directory)}-${slug(stem)}`;
 	const suffix = match[4] === undefined || match[4] === '' ? '' : `-${slug(match[4])}`;
 	return `itu-${slug(match[1])}-${match[2]}${suffix}`;
@@ -198,6 +207,6 @@ export function ituIdentifier(stem: string, directory: string): string {
 
 export function parseItu(source: string, stem: string, directory: string): ParsedDocument {
 	const { lines, seams } = stripPageArtifacts(sourceLines(source));
-	const meta = ituMeta(stem, directory);
+	const meta = ituMeta(stem, directory, source);
 	return { meta, lines, seams, headings: headingsOf(lines, meta.variant) };
 }

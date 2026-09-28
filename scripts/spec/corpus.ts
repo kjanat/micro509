@@ -62,14 +62,17 @@ function nestedReferences(
 	root: string,
 	folder: string,
 	kind: DocumentRef['kind'],
-	identify: (stem: string, directory: string) => string,
+	identify: (stem: string, directory: string, source?: string) => string,
 ): readonly DocumentRef[] {
 	const base = path.join(root, 'docs', folder);
 	const refs: DocumentRef[] = [];
 	for (const directory of subdirectories(base)) {
 		for (const name of textFiles(path.join(base, directory))) {
 			const stem = name.slice(0, -'.txt'.length);
-			refs.push(reference(identify(stem, directory), kind, path.join(base, directory, name)));
+			const absolute = path.join(base, directory, name);
+			const source =
+				kind === 'itu' && !stem.startsWith('T-REC-') ? readFileSync(absolute, 'utf8') : undefined;
+			refs.push(reference(identify(stem, directory, source), kind, absolute));
 		}
 	}
 	return refs.sort((left, right) => left.id.localeCompare(right.id));
@@ -167,7 +170,10 @@ export function sectionLines(document: SpecDocument, heading: Heading): readonly
 	const next = document.headings.find(
 		(candidate) => candidate.index > heading.index && candidate.depth <= heading.depth,
 	);
-	return document.lines.slice(heading.index + 1, next?.index ?? document.lines.length);
+	return document.lines.slice(
+		heading.index + (heading.inlineBody ? 0 : 1),
+		next?.index ?? document.lines.length,
+	);
 }
 
 export function enclosingHeading(document: SpecDocument, index: number): Heading | undefined {

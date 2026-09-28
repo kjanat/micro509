@@ -622,7 +622,20 @@ function searchRoots(
 // interpreted here, and an operand containing a reader path is not execution.
 const LAUNCHER_VALUES: ReadonlyMap<string, readonly string[]> = new Map([
 	['bun', ['--cwd', '--config', '--env-file', '--preload', '--require', '-r', '--tsconfig-override']],
-	['node', ['--require', '-r', '--import', '--loader', '--experimental-loader', '--env-file']],
+	['node', [
+		'--require', '-r', '--import', '--loader', '--experimental-loader',
+		'--conditions', '-C', '--env-file', '--env-file-if-exists', '--input-type',
+		'--title', '--inspect-port', '--debug-port', '--inspect-publish-uid',
+		'--diagnostic-dir', '--redirect-warnings', '--report-directory', '--report-dir',
+		'--report-filename', '--report-signal', '--cpu-prof-dir', '--cpu-prof-name',
+		'--cpu-prof-interval', '--heap-prof-dir', '--heap-prof-name', '--heap-prof-interval',
+		'--heapsnapshot-signal', '--heapsnapshot-near-heap-limit', '--max-old-space-size',
+		'--max-semi-space-size', '--stack-trace-limit', '--dns-result-order',
+		'--unhandled-rejections', '--icu-data-dir', '--openssl-config', '--tls-cipher-list',
+		'--trace-event-categories', '--trace-event-file-pattern', '--test-name-pattern',
+		'--test-skip-pattern', '--test-reporter', '--test-reporter-destination',
+		'--test-concurrency', '--test-timeout', '--test-shard', '--watch-path',
+	]],
 	['tsx', ['--tsconfig', '--require', '-r', '--import']],
 	['ts-node', ['--project', '-P', '--require', '-r', '--compiler', '-C']],
 	['deno', ['--config', '-c', '--import-map', '--env-file']],
@@ -715,6 +728,29 @@ function nextDirectory(segment: Segment, cwd: string): string {
 	return path.resolve(cwd, target);
 }
 
+// Index/path bookkeeping does not expose source text to the calling agent.
+// Interactive staging does print patches and must still go through delegation.
+function isGitMaintenance(segment: Segment): boolean {
+	const words = segment.words;
+	const start = commandIndex(words);
+	if (path.basename(words[start] ?? '') !== 'git') return false;
+	let index = start + 1;
+	const values = ['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'];
+	while (index < words.length && (words[index] ?? '').startsWith('-')) {
+		const word = words[index] ?? '';
+		if (word === '--') { index += 1; break; }
+		index += optionWidth(word, values);
+	}
+	const name = words[index];
+	if (name === 'status' || name === 'ls-files' || name === 'check-ignore') return true;
+	if (name !== 'add') return false;
+	for (const word of words.slice(index + 1)) {
+		if (word === '--') break;
+		if (/^--(?:patch|interactive|edit)(?:=|$)|^-[^-]*[pie]/.test(word)) return false;
+	}
+	return true;
+}
+
 function segmentReads(
 	segment: Segment,
 	previous: Segment | undefined,
@@ -722,6 +758,7 @@ function segmentReads(
 	cwd: string,
 	dirs: readonly string[],
 ): boolean {
+	if (isGitMaintenance(segment)) return false;
 	if (isReader(segment)) return true;
 	const exclusions = exclusionsOf(segment);
 	const skipped = new Set([...exclusions.map(({ index }) => index), ...patternIndices(segment)]);

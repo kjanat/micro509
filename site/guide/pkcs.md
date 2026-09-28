@@ -92,21 +92,21 @@ MAC:     ${macData?.verification} (${macData?.digestAlgorithmName})`);
 </LiveCode>
 
 `parsePfxDer` accepts BER for the PFX, the AuthenticatedSafe and each
-SafeContents, as RFC 7292 §4 allows, and verifies the MAC over the
+SafeContents, as [RFC 7292 §4][rfc7292-section-4] allows, and verifies the MAC over the
 AuthenticatedSafe octets as received. Certificates and private keys inside the
 bags must be DER.
 
 Both the MAC and the PBES2 key bags carry their own KDF iteration counts, and
 parsing refuses a count above its ceiling with `kdf_iterations_exceeded`. The
 PBES2 bags share one budget of 2,000,000 PBKDF2 rounds per file, matching
-encrypted PKCS#8. The RFC 7292 MAC allows 100,000. RFC 7292 Appendix B derives
+encrypted PKCS#8. The [RFC 7292][rfc7292] MAC allows 100,000. [RFC 7292 Appendix B][rfc7292-appendix-B] derives
 its key with one hash call per round, and each call is a separate WebCrypto
 digest, while PBKDF2 runs natively inside WebCrypto. A PBMAC1 MAC allows
 2,000,000 PBKDF2 rounds. `maxKdfIterations` in the options overrides each
 ceiling.
 
 `parsePkcs12MacData` without a password derives no key. It does not apply
-`maxKdfIterations`, and it returns `verification: 'unchecked'` for any RFC 7292
+`maxKdfIterations`, and it returns `verification: 'unchecked'` for any [RFC 7292][rfc7292]
 MAC count from 1 to `Number.MAX_SAFE_INTEGER` and any PBMAC1 count from 1
 to 4294967295. A PBKDF2 count above 4294967295, the most WebCrypto's PBKDF2
 accepts, fails as `malformed` in a PBES2 bag or a PBMAC1 MAC, with or without a
@@ -114,10 +114,10 @@ password.
 
 ### MAC algorithms
 
-The default MAC is the RFC 7292 MAC with SHA-256, keyed by the PKCS#12 KDF. Its
+The default MAC is the [RFC 7292][rfc7292] MAC with SHA-256, keyed by the PKCS#12 KDF. Its
 password must be a BMPString, so a password with a UTF-16 surrogate (an emoji,
 for example), U+FFFE or U+FFFF fails with `password_not_bmp_string`. Pass
-`mac: { type: 'pbmac1', password }` to `createPfx` for an RFC 9879 PBMAC1 MAC
+`mac: { type: 'pbmac1', password }` to `createPfx` for an [RFC 9879][rfc9879] PBMAC1 MAC
 instead. It uses PBKDF2-HMAC-SHA-256 with a 32-octet key and HMAC-SHA-256, and
 encodes the password as UTF-8, so any well-formed string works. Parsing detects
 the MAC type and reports it as `macData.type` (`'pkcs12-kdf'` or
@@ -263,7 +263,7 @@ der size:  ${signed.value.der.length} bytes`);
 
 ### Detached signatures
 
-Pass `detached: true` to omit the content from the SignedData (RFC 5652 §5.2):
+Pass `detached: true` to omit the content from the SignedData ([RFC 5652 §5.2][rfc5652-section-5.2]):
 the signature still covers it via the `messageDigest` signed attribute, but
 the verifier must supply the bytes externally. This is the shape git x509
 commit signing and S/MIME detached signatures use — git stores only the CMS
@@ -382,3 +382,9 @@ private keys: ${privateKeys.length}`);
 ```
 
 </LiveCode>
+
+[rfc5652-section-5.2]: https://www.rfc-editor.org/rfc/rfc5652.html#section-5.2
+[rfc7292]: https://www.rfc-editor.org/rfc/rfc7292.html
+[rfc7292-appendix-B]: https://www.rfc-editor.org/rfc/rfc7292.html#appendix-B
+[rfc7292-section-4]: https://www.rfc-editor.org/rfc/rfc7292.html#section-4
+[rfc9879]: https://www.rfc-editor.org/rfc/rfc9879.html

@@ -12,17 +12,19 @@ expect is rarely the only one that speaks, and it is often not the newest.
 This file is the canonical research procedure. The agent definition and the
 short delegation prompt refer here instead of keeping copies of these steps.
 `docs/SPEC-TOOLING.md` owns CLI behavior, output contracts and operational limits.
+`docs/SPEC-TROUBLESHOOTING.md` covers scanned tables, source defects, supplementary
+standards hosts, bounded reads and local environment restrictions.
 
 ## Corpus
 
-| Path                         | What it is                                                                                                                                                       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docs/rfc/rfc<n>.txt`        | Verbatim RFC Editor text. Refresh with `bun rfc <n>`.                                                                                                             |
-| `docs/rfc/pkits.txt`         | NIST PKITS specification. Its section prose states relying-party practice and the configurable local-policy escape hatches explicitly.                             |
-| `docs/itu/**/*.txt`          | ITU-T X.501, X.509 (plus corrigenda and amendments), X.520, X.660, X.680, X.690. Fetch with `bun itu <item id>`. Text converted from the Word item (`!MSW-E` in the file name) marks struck text `~~…~~`, underlined text `__…__` and headings `#`. Redistribution-restricted: read locally, paraphrase in tracked files and public text, never paste verbatim. |
-| `docs/w3c/<spec>/`           | W3C WebCrypto and WHATWG Web IDL. Refresh with `bun w3c <spec>`.                                                                                                  |
+| Path | What it is |
+| --- | --- |
+| `docs/rfc/rfc<n>.txt` | Verbatim RFC Editor text. Refresh with `bun rfc <n>`, which also writes the gitignored `docs/rfc-html/rfc<n>.html`. |
+| `docs/rfc/pkits.txt` | NIST PKITS specification. Its section prose states relying-party practice and the configurable local-policy escape hatches explicitly. |
+| `docs/itu/**/*.txt` | ITU-T Recommendations, including X.501/X.509/X.520/ASN.1 and T.51/T.52/T.61. Fetch with `bun itu <item id>`. Text converted from the Word item (`!MSW-E` in the file name) marks struck text `~~…~~`, underlined text `__…__` and headings `#`. The original PDF or DOCX is retained beside the conversion for visual checks. Redistribution-restricted: read locally, paraphrase in tracked files and public text, never paste verbatim. |
+| `docs/w3c/<spec>/` | W3C WebCrypto and WHATWG Web IDL. Refresh with `bun w3c <spec>`. |
 | `docs/ms/<doc>/<doc>-v<date>.txt` | Microsoft Open Specifications, such as MS-WCCE, converted from the current PDF. Fetch with `bun ms <doc>`. The license permits copies to develop implementations and quoting portions: read locally, quote only the sentences a claim needs, and never track the files. |
-| `docs/PKIX-SCOPE.md`         | The project's own support claims and design decisions. Check it so a spec-driven change does not silently contradict a documented decision.                       |
+| `docs/PKIX-SCOPE.md` | The project's own support claims and design decisions. Check it so a spec-driven change does not silently contradict a documented decision. |
 
 `docs/AGENTS.md` lists the project's baselines, not a live currency guarantee.
 `bun spec list` inventories the indexed text formats, not arbitrary Markdown,
@@ -39,9 +41,12 @@ without treating that set as exhaustive.
 1. **Check presence.** Run `bun spec list` and fetch missing candidates:
    - RFC: `bun spec fetch rfc <number>`.
    - ITU-T Recommendation, amendment or corrigendum:
-     `bun spec fetch itu <item-id>`. Get the ID from the official ITU
-     Recommendation catalogue, not a guessed edition. Word conversion retains
-     revision markers as described above; inspect them before citing text.
+     `bun spec fetch itu <item-id>`. Start at the official
+     `https://www.itu.int/rec/T-REC-<recommendation>` catalogue, follow the
+     selected edition to `/rec/<edition>/en`, then copy that page's PDF item
+     identifier. The catalogue's edition ID alone is not a download item ID.
+     Word conversion retains revision markers as described above; inspect them
+     before citing text. Read retained PDF pages when tables are image-only.
    - W3C or WHATWG: `bun spec fetch w3c <name>`; nested `--help` lists supported
      sources. Do not invent content for an unsupported source or treat an
      editors' draft as a Recommendation.
@@ -49,10 +54,12 @@ without treating that set as exhaustive.
      `bun spec fetch ms MS-WCCE`. Record the version and release date in the
      fetched text and check the official document page for relevant revisions.
    The legacy `bun rfc`, `bun itu`, `bun w3c` and `bun ms` aliases still work.
-2. **Check RFC currency.** Run
-   `bun spec status <rfc> ... --refresh --json` for candidates and every RFC
-   subsequently cited. Inspect all four Updates/Obsoletes directions, missing
-   vendored successors, errata and their published statuses, and timestamps.
+2. **Check RFC currency.** Batch the initial candidates into
+   `bun spec status <rfc> ... --refresh --json` once per research session.
+   For subsequently discovered RFCs use `bun spec status <rfc> ... --json`:
+   the CLI reuses the validated shared errata cache instead of downloading it
+   for every document. Inspect all four Updates/Obsoletes directions, missing
+   vendored successors, published errata statuses and observation timestamps.
    Fetch and read each potentially governing successor and check its status
    too. `status` reports direct edges, not a transitive normative decision.
 3. **Be explicit about unavailable evidence.** `--offline` reads cached
@@ -63,6 +70,10 @@ without treating that set as exhaustive.
 
 Reach the network only through the research CLI, its legacy fetch aliases,
 and `curl` for official source catalogues or evidence not exposed by the CLI.
+Official ISO-IR, ECMA and Unicode material can govern character-set questions;
+they are not excluded merely because they are outside the current text index.
+Use the source catalogue in `docs/SPEC-TROUBLESHOOTING.md`; record any external
+allowlist denial as missing evidence, never replace it with memory.
 Public standards responses are not secrets; do not redact their evidence.
 Fetched ITU-T and Microsoft documents stay local and gitignored. Fetching may
 write corpus files and the status cache, never source, tests or authored policy.
@@ -81,9 +92,13 @@ write corpus files and the status cache, never source, tests or authored policy.
 3. **Outline and read whole regions.** Use `bun spec headings <id> --depth 4`,
    then `bun spec read <id> <section> --lines`. Read parent scope, conditions,
    definitions, exceptions and referenced successor sections, not a hit line.
+   For a large section, `--offset 0 --limit 20 --raw --lines` provides a bounded
+   source window; continue using JSON `selection.nextOffset` until the required
+   region is read. Partial output is labelled and is not evidence of absence.
    `--raw --lines` and JSON source mappings verify the original wording.
    Raw `rg`/`cat` is a fallback for formats the reader cannot parse, not a
-   substitute for the full governing context.
+   substitute for the full governing context. Conversion diagnostics and
+   broken references require checking the original, not guessing a clause number.
 4. **Follow applicability, not just dates.** An updating RFC replaces only
    the provisions it addresses. An obsoleting RFC does not automatically undo
    an intentionally pinned legacy contract. Distinguish base text, profiles,
@@ -127,9 +142,11 @@ and tests only after receiving that evidence.
 
 The hook delegates supported corpus reads to protect the coding agent's
 context. It is a workflow guard, not a security sandbox. Metadata operations
-(`list`, `status`, `fetch` and help) remain available to callers. Shell comments,
-including `# spec-intent: ...`, do not authorize a read. Those operations do not
-waive the research procedure for standards conclusions.
+(`list`, `status`, `fetch` and help) remain available to callers. Non-interactive
+`git add`, `git status` and path listings are bookkeeping, not delegated reads;
+interactive patch output and chained corpus reads are still checked. Shell
+comments, including `# spec-intent: ...`, do not authorize a read. Those
+operations do not waive the research procedure for standards conclusions.
 
 ## Do not
 

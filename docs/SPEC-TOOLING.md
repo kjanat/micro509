@@ -3,7 +3,9 @@
 `bun spec` is the entry point for the local standards corpus and its evidence.
 The [spec-lookup skill](https://github.com/kjanat/micro509/blob/master/.claude/skills/spec-lookup/SKILL.md)
 owns the research procedure. This page owns CLI behavior, output contracts
-and operational limits; it is not a second research checklist.
+and operational limits; it is not a second research checklist. See
+[SPEC-TROUBLESHOOTING.md](SPEC-TROUBLESHOOTING.md) for source acquisition,
+scanned tables, bundle metadata and external hook limitations.
 
 Install the locked dependencies with `bun install --frozen-lockfile` first.
 Use `bun spec --help` or nested `--help` for syntax. Global JSON mode is `--json`.
@@ -15,6 +17,7 @@ directory below `docs/itu/`, `docs/w3c/` and `docs/ms/`. RFC reverse relations
 come from vendored headers, not live status. Microsoft entries include the
 document name, version and release date. It does not index arbitrary Markdown,
 IDNA tables or generated documentation: inspect `PKIX-SCOPE.md` separately.
+Local RFC HTML copies are retained in `docs/rfc-html/`, not independently indexed.
 
 ```sh
 bun spec list --json
@@ -38,11 +41,14 @@ proof that the corpus or vocabulary covers every relevant standard.
 is case-sensitive unless `-i` is supplied; `--limit` defaults to 200. When it
 truncates, later files may be unsearched. Use `census` for complete discovery,
 not an arbitrary larger excerpt limit. Neither replaces whole-section reading.
+Context across removed page furniture stays attached to its match and section;
+`--` separators mark gaps in the original source line numbers.
 
 ## RFC status and errata
 
 ```sh
 bun spec status 5280 3261 --refresh --json
+bun spec status 6960 --json
 bun spec status 5280 --offline --max-age 86400
 ```
 
@@ -66,13 +72,14 @@ Each envelope binds a version, URL, retrieval timestamp and validated payload.
 Writes use unique temporary files and atomic replacement. Corrupt, wrong-source,
 future-dated or structurally invalid envelopes are not usable.
 
-The default maximum age is 86,400 seconds. `--refresh` bypasses usable caches;
-`--max-age 0` requires a network observation outside offline mode. `--offline`
-makes no requests and may return valid stale evidence, explicitly labelled.
-`--offline --refresh` is an error. Missing offline evidence, HTTP failure or an
-invalid response produces an error, not an empty successful report. Online
-failure never silently falls back to stale evidence. Cache-write failure keeps
-the validated network result and reports a warning.
+The default maximum age is 86,400 seconds. Batch the first session lookup with
+`--refresh`; subsequent lookups can reuse the dated, shared errata cache.
+`--refresh` bypasses usable caches; `--max-age 0` requires a network observation
+outside offline mode. `--offline` makes no requests and may return valid stale
+evidence, explicitly labelled. `--offline --refresh` is an error. Missing offline
+evidence, HTTP failure or an invalid response produces an error, not an empty
+successful report. Online failure never silently falls back to stale evidence.
+Cache-write failure keeps the validated network result and reports a warning.
 
 Each resource carries `url`, `fetchedAt`, `source` (`network` or `cache`) and
 `fresh`; freshness describes cache age, not permanent currency. Top-level JSON
@@ -89,25 +96,36 @@ That test still owns the citation/vendoring gate and explicit legacy pins.
 bun spec headings rfc5280 --depth 4
 bun spec read rfc5280 5.1.2.5 --lines
 bun spec read rfc5280 5.1.2.5 --raw --lines
-bun spec read rfc5280 5.1.2.5 --json
+bun spec read rfc5280 4.1 --offset 0 --limit 20 --json
 ```
 
-`read` keeps the existing de-wrapped output. `--raw` preserves original line
-breaks and indentation after page furniture is removed. `--lines` labels each
-paragraph or preformatted block with its original source range; with `--raw`,
-it labels each retained line. This works for Microsoft sections too.
+`read` keeps whole sections, including subsections, as the default. `--raw`
+preserves original line breaks and indentation after page furniture is removed.
+`--lines` labels each paragraph or preformatted block with its original source
+range; with `--raw`, it labels each retained line. This works for Microsoft
+sections too. `--offset` (default 0) and optional `--limit` count retained source
+lines inside the selected section, not rendered output lines. A window may cut
+a paragraph; it is explicitly marked partial, not presented as a complete clause.
 
-JSON preserves `doc`, `path`, `section`, `raw` and `body`, adding `blocks` and
-`sourceLines`. A block carries `text`, `startLine`, `endLine` and the exact
-retained `sourceLines` that produced it. A paragraph spanning a page break can
-have non-contiguous source lines: removed headers are not evidence. Verify
-verbatim quotations against those lines, not normalized text. Record the edition
-or retrieval provenance for changing documents; ranges describe the local copy.
+JSON preserves `doc`, `path`, `section`, `raw` and `body`, adding `blocks`,
+`sourceLines`, `selection` and `diagnostics`. A block carries `text`, `startLine`,
+`endLine` and the exact retained `sourceLines` that produced it. `selection`
+contains `offset`, `totalLines`, `returnedLines`, `truncated` and `nextOffset`
+(null at the end). Follow that offset to continue without losing provenance.
+A paragraph spanning a page break can have non-contiguous source lines: removed
+headers are not evidence. Verify quotations against original lines, not normalized
+text. Ranges describe the local copy, so record its edition or retrieval provenance.
+
+Unresolved Word reference fields produce `BROKEN_REFERENCE` diagnostics with
+original line numbers. They are warnings about missing evidence, not repaired
+clause numbers. ITU numbered prose remains addressable by clause without being
+copied into outline titles; its first body line remains in `read` output.
 
 ## Fetching and compatibility
 
 ```sh
 bun spec fetch rfc 5280
+bun spec fetch itu 'T-REC-T.61-198811-S!!PDF-E'
 bun spec fetch itu 'T-REC-X.509-201910-I!!PDF-E'
 bun spec fetch w3c webcrypto-rec-2017
 bun spec fetch ms MS-WCCE
@@ -118,20 +136,30 @@ All four legacy aliases remain: `bun rfc`, `bun itu`, `bun w3c`, `bun ms`.
 The shared fetcher is import-safe; importing it never runs a second CLI.
 Corpus and converter-cache paths are rooted at the repository rather than the
 caller's CWD. JSON successes identify `kind`, `id`, repository-relative `path`
-and source `url`.
+and source `url`. The `id` is resolved through actual corpus discovery, including
+collision suffixes, rather than reconstructed from a source alias.
 
-RFCs are fetched verbatim. ITU fetching prefers the Word item, using the pinned,
-GitHub-verified pandoc release and existing Lua converter; PDF fallback requires
-`pdftotext`. Word output retains `~~struck~~`, `__underlined__` and `#` heading
-markers. W3C/WHATWG conversion uses `w3m`, requires source license links and
-retains source/retrieval/license provenance.
+RFCs are fetched verbatim as text and HTML. Both downloads must succeed before
+either is written. JSON's primary `path` identifies the text; `htmlPath` names
+the local gitignored HTML copy. Human output lists both paths.
 
-Microsoft fetching keeps the existing current-PDF download, PDF validation,
-`pdftotext -layout` conversion and required version extraction. It stores
-`docs/ms/<DOC>/<DOC>-v<date>.txt`; JSON identifies it as `ms-<name>-<date>`
-(for example `ms-wcce-20260824`), matching the corpus identifier. Keep Microsoft
-and ITU source local and gitignored under the project's existing rules. Fetching
-does not commit documents or modify library source or authored project policy.
+ITU fetching accepts recommendation series beyond X, including T.51/T.52/T.61.
+Find an edition on the recommendation catalogue, then follow that edition's
+`/en` page for the actual PDF item ID. Fetching prefers the Word item, using
+the pinned, GitHub-verified pandoc release and existing Lua converter; PDF
+fallback requires `pdftotext`. Word output retains `~~struck~~`, `__underlined__`
+and `#` heading markers. Original ITU PDF/DOCX files stay in the local gitignored
+corpus. JSON adds `sourcePath` and extraction `diagnostics`; inspect the original
+when sparse-page warnings or image-only tables make text incomplete. The tool
+neither performs OCR nor reconstructs missing cross-references.
+
+W3C/WHATWG conversion uses `w3m`, requires source license links and retains
+source/retrieval/license provenance. Microsoft fetching keeps the existing
+current-PDF download, validation, `pdftotext -layout` conversion and required
+version extraction. It stores `docs/ms/<DOC>/<DOC>-v<date>.txt`; JSON identifies
+it as `ms-<name>-<date>`, matching the corpus. Keep Microsoft and ITU source local
+and gitignored. Fetching does not commit documents, change library source or
+edit authored project policy.
 
 ## Agent gate
 
@@ -140,6 +168,8 @@ The hook delegates supported reads, outlines, excerpt search and census to the
 wrapped invocations and global flags; the agent exemption comes from the hook
 payload, never a shell comment. The former `# spec-intent: ...` escape is gone.
 Metadata, status, fetching and scoped source-code searches remain available.
+Non-interactive `git add docs/rfc` and Git status/path listing are bookkeeping,
+not prose reads. Interactive staging and chained reads are still checked.
 
 The gate is a workflow/context guard, not a security boundary against arbitrary
 interpreters, generated paths, unknown tools or agents that can edit the hook.
@@ -150,14 +180,16 @@ and metadata do not waive the skill's applicability and whole-section rules.
 ## Regression checks
 
 ```sh
-bun test test/spec-reader.test.ts test/spec-lookup-gate.test.ts test/spec-research.test.ts test/spec-ms-research.test.ts
+bun test test/spec-*.test.ts
 bun run typecheck:other
 bun run typecheck:regular
 ```
 
 The path-filtered, read-only `Spec tooling` workflow runs these suites and both
 typechecks. Research tests use real loopback HTTP servers and temporary files,
-not fetch/filesystem mocks or live RFC Editor availability. Microsoft integration
-runs the actual CLI in an isolated fixture corpus, tests source mappings and
-complete scans past the excerpt limit, and checks both fetch entry points.
-The existing reader and Microsoft gate cases remain in the regression set.
+not global fetch/filesystem mocks or live RFC Editor availability. Microsoft
+integration runs the actual CLI in an isolated fixture corpus, tests source
+mappings and complete scans past the excerpt limit, and checks fetch entry points.
+Maintenance regressions exercise source diagnostics, ITU identity and clause
+anchors, bounded reads, search contexts, Git bookkeeping, runtime option operands
+and root Markdown discovery in an isolated formatter project.

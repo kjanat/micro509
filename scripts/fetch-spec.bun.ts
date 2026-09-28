@@ -5,6 +5,8 @@ import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command, isMainModule } from 'dreamcli';
 import { repositoryRoot } from './spec/corpus.ts';
 import { reportFetched } from './spec/fetch-result.ts';
+import { ITU_ITEM } from './spec/itu-source.ts';
+import { sourceDiagnostics } from './spec/source-quality.ts';
 import { licenseLinks, provenance } from './spec/w3c.ts';
 
 const W3C_SPECS = {
@@ -32,8 +34,6 @@ const W3C_NAMES = [
 	'webcrypto-rec-2017',
 	'webidl',
 ] as const satisfies readonly (keyof typeof W3C_SPECS)[];
-
-const ITU_ITEM = /^T-REC-(X\.\d+)-\d{6}-[A-Z]!\w*!PDF-E$/;
 
 const MS_DOCUMENT = /^MS-[A-Z0-9]+$/;
 
@@ -205,23 +205,62 @@ async function fetchItuItem(id: string, out: Out): Promise<Uint8Array | undefine
 	return response.ok ? await response.bytes() : undefined;
 }
 
+const RFC_COPIES = [
+	{ extension: 'txt', directory: 'docs/rfc' },
+	{ extension: 'html', directory: 'docs/rfc-html' },
+] as const;
+
 const rfc = command('rfc')
-	.description('Refresh a vendored RFC text file from the RFC Editor')
+	.description('Refresh RFC text and its local HTML copy from the RFC Editor')
 	.arg('number', arg.number().int().min(1).env('RFC').describe('RFC number, e.g. 822'))
 	.action(async ({ args, out }) => {
-		const url = `https://www.rfc-editor.org/rfc/rfc${args.number}.txt`;
-		out.status(`fetching ${url}`);
-		const response = await fetch(url);
-		if (!response.ok) {
-			throw new CLIError(`rfc${args.number}: ${response.status} ${response.statusText}`, {
-				code: 'RFC_FETCH_FAILED',
-				suggest: 'Check the number against https://www.rfc-editor.org/',
-			});
-		}
-		const destination = path.join(repositoryRoot, 'docs', 'rfc', `rfc${args.number}.txt`);
-		await Bun.write(destination, await response.bytes());
-		reportFetched(out, destination, url);
+		const copies = await Promise.all(
+			RFC_COPIES.map(async ({ extension, directory }) => {
+				const url = `https://www.rfc-editor.org/rfc/rfc${args.number}.${extension}`;
+				out.status(`fetching ${url}`);
+				const response = await fetch(url);
+				if (!response.ok)
+					throw new CLIError(
+						`rfc${args.number}.${extension}: ${response.status} ${response.statusText}`,
+						{
+							code: 'RFC_FETCH_FAILED',
+							suggest: 'Check the number against https://www.rfc-editor.org/',
+						},
+					);
+				return {
+					destination: path.join(repositoryRoot, directory, `rfc${args.number}.${extension}`),
+					bytes: await response.bytes(),
+				};
+			}),
+		);
+		// Fetch both representations before replacing either existing copy.
+		for (const { destination, bytes } of copies) await Bun.write(destination, bytes);
+		reportFetched(
+			out,
+			path.join(repositoryRoot, 'docs/rfc', `rfc${args.number}.txt`),
+			`https://www.rfc-editor.org/rfc/rfc${args.number}.txt`,
+			repositoryRoot,
+			{ htmlPath: `docs/rfc-html/rfc${args.number}.html` },
+		);
 	});
+
+async function reportConversion(
+	out: Out,
+	destination: string,
+	url: string,
+	original: string,
+	pdf: boolean,
+): Promise<void> {
+	const diagnostics = sourceDiagnostics(await Bun.file(destination).text(), pdf);
+	const sourcePath = path.relative(repositoryRoot, original).split(path.sep).join('/');
+	for (const diagnostic of diagnostics)
+		out.warn(
+			`${diagnostic.code}${diagnostic.page === undefined ? ` L${diagnostic.line}` : ` page ${diagnostic.page}`}: ${diagnostic.message}`,
+		);
+	if (pdf)
+		out.warn(`PDF text can omit images and tables; inspect ${sourcePath} for visual evidence.`);
+	reportFetched(out, destination, url, repositoryRoot, { sourcePath, diagnostics });
+}
 
 const itu = command('itu')
 	.description('Vendor an ITU-T Recommendation as text, from its Word item when ITU publishes one')
@@ -231,7 +270,7 @@ const itu = command('itu')
 			.string()
 			.pattern(ITU_ITEM)
 			.env('ITU')
-			.describe('ITU item id, e.g. T-REC-X.509-201910-I!!PDF-E or T-REC-X.509-202110-I!Cor1!PDF-E'),
+			.describe('ITU item id, e.g. T-REC-T.61-198811-S!!PDF-E or T-REC-X.509-202110-I!Cor1!PDF-E'),
 	)
 	.action(async ({ args, out }) => {
 		const recommendation = ITU_ITEM.exec(args.id)?.[1];
@@ -241,47 +280,42 @@ const itu = command('itu')
 		const wordId = args.id.replace(/!PDF-E$/, '!MSW-E');
 		const directory = path.join(repositoryRoot, 'docs', 'itu', recommendation);
 		mkdirSync(directory, { recursive: true });
-		const scratch = mkdtempSync(path.join(tmpdir(), 'itu-'));
-		try {
-			const word = await fetchItuItem(wordId, out);
-			if (word !== undefined && startsWith(word, [0x50, 0x4b, 0x03, 0x04])) {
-				const docx = path.join(scratch, 'item.docx');
-				await Bun.write(docx, word);
-				const destination = path.join(directory, `${wordId}.txt`);
-				await run(
-					[await pandoc(out), 'lua', ITU_CONVERTER, docx, destination],
-					undefined,
-					'ITU_CONVERT_FAILED',
-				);
-				rmSync(path.join(directory, `${args.id}.txt`), { force: true });
-				reportFetched(out, destination, ituUrl(wordId));
-				return;
-			}
-			const pdftotext = tool(
-				'pdftotext',
-				'ITU_CONVERTER_MISSING',
-				'Install poppler, which provides pdftotext',
-			);
-			const bytes = await fetchItuItem(args.id, out);
-			if (bytes === undefined || !startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
-				throw new CLIError(`${args.id}: neither a Word document nor a PDF`, {
-					code: 'ITU_FETCH_FAILED',
-					suggest: `Find the item id on https://www.itu.int/rec/T-REC-${recommendation}`,
-				});
-			}
-			const pdf = path.join(scratch, 'item.pdf');
-			await Bun.write(pdf, bytes);
-			const destination = path.join(directory, `${args.id}.txt`);
+		const word = await fetchItuItem(wordId, out);
+		if (word !== undefined && startsWith(word, [0x50, 0x4b, 0x03, 0x04])) {
+			const docx = path.join(directory, `${wordId}.docx`);
+			await Bun.write(docx, word);
+			const destination = path.join(directory, `${wordId}.txt`);
 			await run(
-				[pdftotext, '-layout', '-enc', 'UTF-8', pdf, destination],
+				[await pandoc(out), 'lua', ITU_CONVERTER, docx, destination],
 				undefined,
 				'ITU_CONVERT_FAILED',
 			);
-			rmSync(path.join(directory, `${wordId}.txt`), { force: true });
-			reportFetched(out, destination, ituUrl(args.id));
-		} finally {
-			rmSync(scratch, { recursive: true, force: true });
+			rmSync(path.join(directory, `${args.id}.txt`), { force: true });
+			await reportConversion(out, destination, ituUrl(wordId), docx, false);
+			return;
 		}
+		const pdftotext = tool(
+			'pdftotext',
+			'ITU_CONVERTER_MISSING',
+			'Install poppler, which provides pdftotext',
+		);
+		const bytes = await fetchItuItem(args.id, out);
+		if (bytes === undefined || !startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
+			throw new CLIError(`${args.id}: neither a Word document nor a PDF`, {
+				code: 'ITU_FETCH_FAILED',
+				suggest: `Open https://www.itu.int/rec/T-REC-${recommendation}, then the edition's /en page to find its PDF item id`,
+			});
+		}
+		const pdf = path.join(directory, `${args.id}.pdf`);
+		await Bun.write(pdf, bytes);
+		const destination = path.join(directory, `${args.id}.txt`);
+		await run(
+			[pdftotext, '-layout', '-enc', 'UTF-8', pdf, destination],
+			undefined,
+			'ITU_CONVERT_FAILED',
+		);
+		rmSync(path.join(directory, `${wordId}.txt`), { force: true });
+		await reportConversion(out, destination, ituUrl(args.id), pdf, true);
 	});
 
 const w3c = command('w3c')

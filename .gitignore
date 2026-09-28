@@ -186,4 +186,5 @@ yarn.lock
 docs/itu/
 # Microsoft Open Specifications permit copies "in order to develop implementations", not redistribution.
 docs/ms/
+docs/rfc-html/
 !/.claude/workflows/*

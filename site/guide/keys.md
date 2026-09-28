@@ -308,7 +308,7 @@ round-trip: ${exported === pem}`);
 
 </LiveCode>
 
-Exported SEC1 keys always embed the RFC 5915 `parameters [0]` named curve
+Exported SEC1 keys always embed the [RFC 5915][rfc5915] `parameters [0]` named curve
 (matching OpenSSL), so `importSec1Pem(pem)` infers the curve when the
 algorithm argument is omitted. A minimal SEC1 encoding without the embedded
 curve still needs the explicit `{ kind: 'ecdsa', curve }`.
@@ -518,3 +518,5 @@ wrong label: ok=${wrongLabel.ok} (${wrongLabel.ok ? '' : wrongLabel.code})`);
 ```
 
 </LiveCode>
+
+[rfc5915]: https://www.rfc-editor.org/rfc/rfc5915.html
