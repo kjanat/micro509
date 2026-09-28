@@ -15,6 +15,7 @@ jobs:
     name: Test
     uses: $/.github/workflows/test.yml
     if: github.event_name == 'push'
+    with: { publish-openssl: true }
     permissions: { contents: read, id-token: write, packages: write, attestations: write }
 
   validate:

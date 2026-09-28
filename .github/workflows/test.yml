@@ -2,13 +2,19 @@
 # resolves to the caller ("Publish"), so a shared group would deadlock caller vs callee.
 ---
 name: Test
-on: { push: { branches: [master] }, pull_request: null, workflow_call: null }
+on:
+  push: { branches: [master] }
+  pull_request: null
+  workflow_call:
+    inputs:
+      publish-openssl: { description: Build and publish missing OpenSSL releases before testing, type: boolean, default: false, required: false }
 permissions: {}
 
 jobs:
   openssl:
     name: OpenSSL builds
     uses: $/.github/workflows/openssl.yml
+    if: inputs.publish-openssl
     with: { version: "4.0.2" }
     permissions: { contents: read, packages: write, id-token: write, attestations: write }
 
