@@ -20,6 +20,7 @@ RUN ./Configure -static --prefix=/usr/local --openssldir=/usr/local/ssl --libdir
 FROM scratch
 COPY --from=build /out/usr/local /usr/local
 ENV PATH=/usr/local/bin
+WORKDIR /w
 USER 65534:65534
 ENTRYPOINT ["/usr/local/bin/openssl"]
 CMD ["version", "-a"]

@@ -274,6 +274,13 @@ The full stable subpath list lives in the [API reference](https://micro509.kjana
 - Differential harness: [`test/differential.test.ts`](./test/differential.test.ts)
 - Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 
+## OpenSSL builds
+
+This repository also publishes statically linked OpenSSL builds to GHCR: a
+container image and tarballs for Linux, macOS and Windows, each with a build
+provenance attestation. They exist for micro509's own CI, and anyone can use
+them. See [`.github/openssl/README.md`](./.github/openssl/README.md).
+
 ## License
 
 [MIT](./LICENSE)

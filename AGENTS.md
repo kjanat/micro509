@@ -66,7 +66,7 @@ micro509/
 ├── examples/          # runnable consumers (browser, vite)
 ├── scripts/           # build, smoke, and doc-render helper scripts
 ├── .github/actions/   # reusable CI setup/release validation actions
-├── .github/openssl/   # static OpenSSL image for ghcr.io/kjanat/openssl
+├── .github/openssl/   # OpenSSL image Dockerfile + usage README for ghcr.io/kjanat/openssl{,-prebuilt}
 ├── comparisons/       # competitor notes
 ├── dist/              # generated build output
 └── .opencode/         # local agent workflow state

@@ -1,10 +1,11 @@
 name: OpenSSL
+run-name: ${{ inputs.version && format('OpenSSL + {0}', inputs.version) || 'OpenSSL' }}
 on:
   schedule: [cron: "23 5 * * *"]
   workflow_dispatch:
     inputs:
       version:
-        description: "Also publish this OpenSSL release, e.g. 3.5.5"
+        description: "Also publish this/these OpenSSL releases, comma-separated, e.g. 3.5.5,3.4.2"
         type: string
         default: ""
         required: false
@@ -19,6 +20,7 @@ permissions: { contents: read }
 env:
   IMAGE: ${{ format('ghcr.io/{0}/openssl', github.repository_owner) }}
   PREBUILT: ${{ format('ghcr.io/{0}/openssl-prebuilt', github.repository_owner) }}
+  USAGE: ${{ format('{0}/{1}/tree/HEAD/.github/openssl#readme', github.server_url, github.repository) }}
   FORCE: ${{ inputs.force || false }}
   BUILD: run${{ github.run_id }}.${{ github.run_attempt }}
 
@@ -45,6 +47,7 @@ jobs:
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: &GHToken "${{ github.token }}" }
       - id: resolve
         env:
+          GH_REPO: openssl/openssl
           GH_TOKEN: *GHToken
           VERSION: ${{ inputs.version }}
           FORCE: ${{ inputs.force || false }}
@@ -66,9 +69,10 @@ jobs:
           date="$(date -u +%Y%m%d)"
           printf 'latest=%s\nprerelease=%s\ndate=%s\n' "${latest}" "${prerelease}" "${date}" >> "${GITHUB_OUTPUT}"
 
+          IFS=', ' read -r -a requested <<< "${VERSION}"
           declare -A seen=()
           entries=()
-          for version in "${latest}" "${prerelease}" "${VERSION}"; do
+          for version in "${latest}" "${prerelease}" "${requested[@]}"; do
             if [[ -z "${version}" || -v "seen[${version}]" ]]; then continue; fi
             seen["${version}"]=1
             if [[ ! "${version}" =~ ${pattern} ]]; then
@@ -111,7 +115,7 @@ jobs:
           tags: type=raw,value=${{ matrix.release.version }}-${{ env.BUILD }}
           labels: &DockerMeta |
             org.opencontainers.image.title=openssl
-            org.opencontainers.image.description=OpenSSL ${{ matrix.release.version }}, statically linked, built from the upstream release tarball
+            org.opencontainers.image.description=OpenSSL ${{ matrix.release.version }}, statically linked, built from the upstream release tarball. Usage: ${{ env.USAGE }}
             org.opencontainers.image.version=${{ matrix.release.version }}
             org.opencontainers.image.licenses=Apache-2.0
           annotations: *DockerMeta
@@ -383,7 +387,7 @@ jobs:
             --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
             --annotation "org.opencontainers.image.version=${v}" \
             --annotation "org.opencontainers.image.title=openssl-prebuilt" \
-            --annotation "org.opencontainers.image.description=OpenSSL ${v} tarballs for linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64" \
+            --annotation "org.opencontainers.image.description=OpenSSL ${v} tarballs for linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64. Usage: ${USAGE}" \
             --annotation "org.opencontainers.image.licenses=Apache-2.0" \
             "${files[@]}"
           oras tag "${PREBUILT}:${v}-${BUILD}" "${v}-${date}"
