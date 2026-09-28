@@ -562,7 +562,7 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'service_identity_mismatch' });
 	});
 
-	it('matches SIP URI SANs whose scheme-defined host has no authority delimiter', async () => {
+	it('matches SIP URI SANs whose scheme-defined host has no authority delimiter and no userpart', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
 			extensions: {
@@ -580,7 +580,10 @@ describe('identity boundary', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
-				subjectAltNames: [{ type: 'uri', value: 'sip:user@voice.college.example:5060' }],
+				subjectAltNames: [
+					{ type: 'uri', value: 'sip:voice.college.example:5060' },
+					{ type: 'uri', value: 'sip:user@user-only.example' },
+				],
 			},
 		});
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
@@ -591,6 +594,12 @@ describe('identity boundary', () => {
 				serviceIdentity: { type: 'uri', value: 'sip:voice.college.example' },
 			}),
 		).toEqual({ ok: true, value: undefined });
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'sip:user-only.example' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 		expect(
 			matchServiceIdentity({
 				certificate,
@@ -1072,22 +1081,22 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 	);
 
 	it.each([
-		['sip:alice/phone@attacker.example', 'sip:alice/phone@victim.example', false],
-		['sip:alice?x@victim.example', 'sip:victim.example', true],
-		['sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', 'sip:victim.example', true],
-		['sip:%61lice:s%65cret@victim.example', 'sip:victim.example', true],
-		['sip:alice:@victim.example', 'sip:victim.example', true],
-		['sip:a@b@victim.example', 'sip:victim.example', false],
-		['sip:@victim.example', 'sip:victim.example', false],
-		['sip::pw@victim.example', 'sip:victim.example', false],
-		['sip:bad%zz@victim.example', 'sip:victim.example', false],
-		['sip:alice:%zz@victim.example', 'sip:victim.example', false],
-		['sip:alice:pw;x@victim.example', 'sip:victim.example', false],
-		['sip:al[ice@victim.example', 'sip:victim.example', false],
+		['sip:victim.example', 'sip:alice/phone@victim.example', true],
+		['sip:victim.example', 'sip:alice?x@victim.example', true],
+		['sip:victim.example', 'sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', true],
+		['sip:victim.example', 'sip:%61lice:s%65cret@victim.example', true],
+		['sip:victim.example', 'sip:alice:@victim.example', true],
+		['sip:victim.example', 'sip:a@b@victim.example', false],
+		['sip:victim.example', 'sip:@victim.example', false],
+		['sip:victim.example', 'sip::pw@victim.example', false],
+		['sip:victim.example', 'sip:bad%zz@victim.example', false],
+		['sip:victim.example', 'sip:alice:%zz@victim.example', false],
+		['sip:victim.example', 'sip:alice:pw;x@victim.example', false],
+		['sip:victim.example', 'sip:al[ice@victim.example', false],
 		['sip:victim.example:5060', 'sip:victim.example', true],
 		['sip:[2001:db8::1]:5060', 'sip:[2001:db8::1]', true],
 		['sip:victim.example:', 'sip:victim.example', false],
-		['sip:alice@victim.example:;transport=tcp', 'sip:victim.example', false],
+		['sip:victim.example:;transport=tcp', 'sip:victim.example', false],
 		['sip:[2001:db8::1]:', 'sip:[2001:db8::1]', false],
 		['sip:victim.example', 'sip:victim.example:', false],
 		['sip://victim.example', 'sip:victim.example', false],
@@ -1121,6 +1130,24 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 					value: reference,
 				}),
 			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['sip:alice@victim.example', 'sip:victim.example'],
+		['sip:alice@victim.example', 'sip:alice@victim.example'],
+		['sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', 'sip:victim.example'],
+		['sip:%61lice:s%65cret@victim.example', 'sip:victim.example'],
+		['sips:alice@victim.example', 'sips:victim.example'],
+	] as const)(
+		'does not take the presented SIP URI %s, which has a userpart, as a SIP domain identity for %s (RFC 5922 §7.1)',
+		async (presented, reference) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(false);
 		},
 	);
 

@@ -459,6 +459,11 @@ revocation })` report a certificate carrying `noRevAvail` or
   empty user part, a "/" in the hostport, or a ":" with no port digits after
   it makes the URI-ID invalid, and so does a `sip://` or `sips://` URI-ID,
   which §25.1 does not allow.
+- A presented SIP URI with a userinfo, such as `sip:alice@example.com`,
+  matched the URI-ID `sip:example.com`. It identifies a user, and RFC 5922
+  §7.1 forbids accepting it as a SIP domain identity, so it now matches
+  nothing. A reference identifier may still carry a userinfo, and only its
+  host is compared (RFC 5922 §7.3).
 - A URI's userinfo was dropped unread, so a presented
   `https://bad%zz@example.com` took the host `example.com`, matched the
   URI-ID `https://example.com`, and was evaluated against URI constraints.
