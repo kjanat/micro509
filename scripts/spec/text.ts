@@ -1,6 +1,6 @@
 import type { SourceLine } from './types.ts';
 
-const BYTE_ORDER_MARK = '﻿';
+const BYTE_ORDER_MARK = '\ufeff';
 const FORM_FEED = '\f';
 const REPLACEMENT = /�/g;
 
@@ -218,34 +218,56 @@ function continuesParagraph(paragraph: string, block: Block): boolean {
 	return !/^\s*\d+(\.\d+)*\.?\s/.test(block.lines[0]?.text ?? '');
 }
 
-export function renderBody(blocks: readonly Block[], dedent: number): readonly string[] {
-	const rendered: string[] = [];
+/** Source ranges are inclusive file lines, even when a paragraph crosses a page seam. */
+export interface RenderedBlock {
+	readonly startLine: number;
+	readonly endLine: number;
+	readonly sourceLines: readonly SourceLine[];
+	readonly text: string;
+}
+
+export function renderBlocks(blocks: readonly Block[], dedent: number): readonly RenderedBlock[] {
+	const rendered: RenderedBlock[] = [];
 	let paragraph = '';
 	let margin = '';
+	let sources: SourceLine[] = [];
+	const emit = (text: string, lines: readonly SourceLine[]): void => {
+		const first = lines[0];
+		const last = lines.at(-1);
+		if (first === undefined || last === undefined) return;
+		rendered.push({ startLine: first.line, endLine: last.line, sourceLines: lines, text });
+	};
 	const flush = (): void => {
 		if (paragraph === '') return;
-		if (rendered.length > 0) rendered.push('');
-		rendered.push(`${margin}${paragraph}`);
+		emit(`${margin}${paragraph}`, sources);
 		paragraph = '';
+		sources = [];
 	};
 	for (const block of blocks) {
 		if (!isProse(block)) {
 			flush();
-			if (rendered.length > 0) rendered.push('');
-			for (const entry of block.lines) rendered.push(entry.text.slice(dedent).trimEnd());
+			emit(block.lines.map((entry) => entry.text.slice(dedent).trimEnd()).join('\n'), block.lines);
 			continue;
 		}
 		const joined = joinWrapped(block.lines.map((entry) => entry.text));
 		if (continuesParagraph(paragraph, block)) {
 			paragraph = joinWrapped([paragraph, joined]);
+			sources.push(...block.lines);
 			continue;
 		}
 		flush();
 		paragraph = joined;
+		sources = [...block.lines];
 		margin = ' '.repeat(Math.max(0, indentOf(block.lines[0]?.text ?? '') - dedent));
 	}
 	flush();
 	return rendered;
+}
+
+export function renderBody(blocks: readonly Block[], dedent: number): readonly string[] {
+	return renderBlocks(blocks, dedent).flatMap((block, index) =>
+		index === 0 ? block.text.split('\n') : ['', ...block.text.split('\n')],
+	);
 }
 
 export function minimumIndent(lines: readonly SourceLine[]): number {

@@ -1,5 +1,6 @@
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command, flag, isMainModule } from 'dreamcli';
+import { fetchCommand } from '../fetch-spec.bun.ts';
 import {
 	discover,
 	enclosingHeading,
@@ -9,8 +10,15 @@ import {
 	rfcRelations,
 	sectionLines,
 } from './corpus.ts';
-import { blocksOf, minimumIndent, renderBody } from './text.ts';
+import { readWindow } from './read-window.ts';
+import { censusCommand, statusCommand } from './research-commands.ts';
+import type { RenderLine } from './search-runs.ts';
+import { runsOf } from './search-runs.ts';
+import { sourceDiagnostics } from './source-quality.ts';
+import { blocksOf, minimumIndent, renderBlocks, renderBody } from './text.ts';
 import type { DocKind, SourceLine, SpecDocument } from './types.ts';
+
+export { censusCommand, statusCommand } from './research-commands.ts';
 
 type ListedDocument =
 	| {
@@ -92,7 +100,7 @@ function allDocuments(): readonly SpecDocument[] {
 }
 
 function sectionLabel(number: string, title: string): string {
-	return number === title ? title : `§${number}  ${title}`;
+	return number === title ? title : title === '' ? `§${number}` : `§${number}  ${title}`;
 }
 
 function describe(
@@ -232,7 +240,9 @@ export const headingsCommand = command('headings')
 	)
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
-		const headings = document.headings.filter((heading) => heading.depth <= flags.depth);
+		const headings = document.headings.filter(
+			(heading) => heading.depth <= flags.depth && !heading.inlineBody,
+		);
 		if (out.jsonMode) {
 			out.json({
 				doc: document.id,
@@ -263,11 +273,44 @@ export const readCommand = command('read')
 	.example('spec read 9608 4', 'Read section 4 of RFC 9608 by bare number')
 	.arg('doc', arg.string().describe('Document id from `spec list`, or a bare RFC number'))
 	.arg('section', arg.string().describe('Section number such as 5.1.2.5, or heading text'))
+	.flag(
+		'offset',
+		flag.number({ int: true, min: 0 }).default(0).describe('Skip this many section source lines'),
+	)
+	.flag(
+		'limit',
+		flag
+			.number({ int: true, min: 1 })
+			.describe('Maximum section source lines; omitted reads the whole section'),
+	)
 	.flag('raw', flag.boolean().describe('Keep the original line breaks and indentation'))
+	.flag(
+		'lines',
+		flag.boolean().describe('Label paragraphs or raw lines with original source ranges'),
+	)
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
 		const heading = findHeading(document, args.section);
-		const body = sectionLines(document, heading);
+		const { lines: body, selection } = readWindow(
+			sectionLines(document, heading),
+			flags.offset,
+			flags.limit,
+		);
+		const diagnostics = sourceDiagnostics(body.map((line) => line.text).join('\n')).map(
+			(diagnostic) => ({
+				...diagnostic,
+				line: diagnostic.line === undefined ? undefined : body[diagnostic.line - 1]?.line,
+			}),
+		);
+		if (!out.jsonMode) {
+			if (selection.truncated)
+				out.warn(
+					`Partial section: ${selection.returnedLines}/${selection.totalLines} source lines; next offset ${selection.nextOffset ?? 'end'}`,
+				);
+			for (const diagnostic of diagnostics)
+				out.warn(`${diagnostic.code} L${diagnostic.line}: ${diagnostic.message}`);
+		}
+		const blocks = renderBlocks(blocksOf(body, document.seams), minimumIndent(body));
 		const rendered = flags.raw
 			? body.map((entry) => entry.text)
 			: renderBody(blocksOf(body, document.seams), minimumIndent(body));
@@ -283,12 +326,26 @@ export const readCommand = command('read')
 				},
 				raw: flags.raw,
 				body: rendered.join('\n'),
+				blocks,
+				sourceLines: body,
+				selection,
+				diagnostics,
 			});
 			return;
 		}
 		out.log(`${document.id} ${sectionLabel(heading.number, heading.title)}`);
 		out.log(`${document.relativePath}:${heading.line}`);
 		out.log('');
+		if (flags.lines) {
+			if (flags.raw) {
+				for (const line of body) out.log(`[L${line.line}] ${line.text}`);
+			} else {
+				for (const block of blocks) {
+					out.log(`[L${block.startLine}-L${block.endLine}] ${block.text}\n`);
+				}
+			}
+			return;
+		}
 		for (const line of rendered) out.log(line);
 	});
 
@@ -355,13 +412,6 @@ function searchDocument(
 	return { hits, more: false };
 }
 
-type RenderLine = {
-	readonly line: number;
-	readonly text: string;
-	readonly match: boolean;
-	readonly label: string;
-};
-
 function record(
 	lines: Map<number, RenderLine>,
 	entry: ContextLine,
@@ -371,26 +421,6 @@ function record(
 	const existing = lines.get(entry.line);
 	if (existing !== undefined && (existing.match || !match)) return;
 	lines.set(entry.line, { line: entry.line, text: entry.text, match, label });
-}
-
-function runsOf(lines: readonly RenderLine[]): readonly (readonly RenderLine[])[] {
-	const runs: RenderLine[][] = [];
-	let current: RenderLine[] = [];
-	let label: string | undefined;
-	for (const entry of lines) {
-		const previous = current[current.length - 1];
-		const gap = previous !== undefined && entry.line - previous.line > 1;
-		const relabel = entry.match && label !== undefined && entry.label !== label;
-		if (gap || relabel) {
-			runs.push(current);
-			current = [];
-			label = undefined;
-		}
-		if (entry.match) label = entry.label;
-		current.push(entry);
-	}
-	if (current.length > 0) runs.push(current);
-	return runs;
 }
 
 type DocumentHits = {
@@ -427,28 +457,39 @@ function mergeHits(hits: readonly SearchHit[]): readonly DocumentHits[] {
 	}));
 }
 
+function renderRunLines(out: Out, run: readonly RenderLine[]): void {
+	let previousLine: number | undefined;
+	for (const entry of run) {
+		if (previousLine !== undefined && entry.line > previousLine + 1) out.log('  --');
+		previousLine = entry.line;
+		out.log(`${String(entry.line).padStart(6)}${entry.match ? ':' : '-'} ${entry.text}`);
+	}
+}
+
+function renderRunHeader(out: Out, label: string, previous: string): string {
+	if (label === previous) {
+		out.log('  --');
+		return previous;
+	}
+	if (previous !== '') out.log('');
+	out.log(label);
+	return label;
+}
+
 function renderHits(out: Out, hits: readonly SearchHit[]): void {
 	let group = '';
 	for (const document of mergeHits(hits)) {
 		for (const run of runsOf(document.lines)) {
 			const label = run.find((entry) => entry.match)?.label ?? document.doc;
-			if (label === group) {
-				out.log('  --');
-			} else {
-				if (group !== '') out.log('');
-				out.log(label);
-				group = label;
-			}
-			for (const entry of run) {
-				out.log(`${String(entry.line).padStart(6)}${entry.match ? ':' : '-'} ${entry.text}`);
-			}
+			group = renderRunHeader(out, label, group);
+			renderRunLines(out, run);
 		}
 	}
 }
 
 export const searchCommand = command('search')
 	.description('Search the corpus and report the enclosing section of every match')
-	.example('spec search nextUpdate --context 2', 'Census a term across every document')
+	.example('spec search nextUpdate --context 2', 'Find excerpts; use census for complete discovery')
 	.example('spec search "MUST NOT" --doc rfc6960', 'Search one document')
 	.arg('terms', arg.string().variadic().describe('Pattern, matched as a regular expression'))
 	.flag('doc', flag.string().describe('Restrict the search to one document id'))
@@ -490,14 +531,18 @@ export const searchCommand = command('search')
 			return;
 		}
 		renderHits(out, hits);
-		if (truncated) out.status(`stopped at --limit ${flags.limit}`);
+		if (truncated)
+			out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
 	});
 
 export const specCli = cli('spec')
-	.description('Read the vendored standards corpus under docs/ by section')
+	.description('Read and research the vendored standards corpus under docs/')
 	.command(listCommand)
+	.command(statusCommand)
+	.command(censusCommand)
 	.command(headingsCommand)
 	.command(readCommand)
-	.command(searchCommand);
+	.command(searchCommand)
+	.command(fetchCommand);
 
 if (isMainModule(import.meta)) await specCli.run();

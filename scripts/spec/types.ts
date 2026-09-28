@@ -11,6 +11,8 @@ export interface Heading {
 	readonly depth: number;
 	readonly line: number;
 	readonly index: number;
+	/** A numbered clause whose first line is body text, not an outline title. */
+	readonly inlineBody?: boolean;
 }
 
 export interface RfcMeta {

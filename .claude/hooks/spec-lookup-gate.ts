@@ -30,7 +30,6 @@ type Relation = 'inside' | 'ancestor' | 'none';
 const CORPUS = ['rfc', 'itu', 'w3c', 'ms'] as const;
 const SPEC_RE = /docs\/(rfc|itu|w3c|ms)(\/|$|[^A-Za-z0-9_.-])/;
 const GLOB_META = /[*?[]/;
-const INTENT_RE = /#\s*spec-intent:\s*\S.{9,}/;
 const PROSE_CONSUMERS: ReadonlySet<string> = new Set(['git', 'gh', 'glab']);
 const METADATA: ReadonlySet<string> = new Set([
 	'ls',
@@ -62,17 +61,16 @@ const SEARCHERS: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'ugrep']);
 const GREPS: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep']);
 const PATTERN_FLAGS = /^(?:--regexp|--file)(?:=|$)|^-[A-Za-z]*[ef]/;
 const PATTERN_VALUE_FOLLOWS = /^(?:--regexp|--file|-[A-Za-z]*[ef])$/;
-const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings']);
+const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings', 'census']);
+const SPEC_RUNNERS: ReadonlySet<string> = new Set(['bun', 'node', 'deno', 'tsx', 'ts-node', 'run', 'runner', 'runner-run']);
 
 export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c,ms}/**';
 
-export const DENY_MESSAGE = `STOP. The authoritative spec corpus (docs/rfc, docs/itu, docs/w3c, docs/ms) is read only by the spec-lookup agent.
-
-Do not read, grep, or cat these files directly, and do not search a directory that contains them. Hand the question to the spec-lookup subagent, which censuses the whole docs/ tree, fetches missing or superseded documents, reads whole sections, and returns a cited answer:
+export const DENY_MESSAGE = `STOP. Delegate authoritative spec reads (docs/rfc, docs/itu, docs/w3c, docs/ms) to the spec-lookup agent.
 
   Agent(subagent_type: "spec-lookup", prompt: "<your exact spec question>")
 
-To search the rest of the repository, scope the search to a directory that does not contain docs/rfc, docs/itu, docs/w3c, or docs/ms.`;
+The canonical procedure is .claude/skills/spec-lookup/SKILL.md. Metadata-only maintenance (such as bun spec list or bun spec status) is allowed; shell comments do not grant an exemption. Scope source searches outside the corpus, or explicitly exclude every corpus directory. See docs/SPEC-TOOLING.md for the gate's boundaries.`;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -419,13 +417,54 @@ export function splitHeredocs(command: string): SplitCommand {
 	return { text: text.join('\n'), bodies };
 }
 
-function commandIndex(words: readonly string[]): number {
-	let index = 0;
+/** Required option operands for the command wrappers this gate recognizes. */
+const PREFIX_VALUE_OPTIONS: ReadonlyMap<string, readonly string[]> = new Map([
+	['nice', ['-n', '--adjustment']],
+	['env', ['-u', '--unset', '-C', '--chdir', '-a', '--argv0']],
+	['exec', ['-a']],
+	['time', ['-f', '--format', '-o', '--output']],
+	['sudo', ['-u', '--user', '-g', '--group', '-h', '--host', '-p', '--prompt', '-C', '--close-from', '-D', '--chdir', '-R', '--chroot', '-T', '--command-timeout', '-r', '--role', '-t', '--type']],
+	['xargs', ['-a', '--arg-file', '-d', '--delimiter', '-E', '-I', '-L', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']],
+	['parallel', ['-j', '--jobs', '-S', '--sshlogin', '--sshloginfile', '-a', '--arg-file', '--colsep', '--delay', '--timeout', '--joblog', '--results', '--workdir']],
+]);
+
+/** Attached operands occupy one word; a required separate operand occupies two. */
+function optionWidth(option: string, values: readonly string[]): number {
+	if (option.startsWith('--')) return values.includes(option) ? 2 : 1;
+	for (let index = 1; index < option.length; index += 1) {
+		if (values.includes(`-${option.charAt(index)}`)) {
+			return index === option.length - 1 ? 2 : 1;
+		}
+	}
+	return 1;
+}
+
+function afterPrefix(words: readonly string[], start: number, prefix: string): number {
+	let index = start;
 	while (index < words.length) {
 		const word = words[index] ?? '';
-		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) || word.startsWith('-')) index += 1;
-		else if (PREFIXES.has(path.basename(word))) index += 1;
-		else break;
+		if (word === '--' || (prefix === 'env' && word === '-')) {
+			index += 1;
+			break;
+		}
+		if (!word.startsWith('-') || word === '-') break;
+		index += optionWidth(word, PREFIX_VALUE_OPTIONS.get(prefix) ?? []);
+	}
+	// Assignments end env's option processing. A subsequent "--" is then a
+	// command name, not another option delimiter. Do not scan past that command.
+	if (prefix === 'env' || prefix === 'sudo') {
+		while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
+	}
+	return Math.min(index, words.length);
+}
+
+function commandIndex(words: readonly string[]): number {
+	let index = 0;
+	while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
+	while (index < words.length) {
+		const prefix = path.basename(words[index] ?? '');
+		if (!PREFIXES.has(prefix)) break;
+		index = afterPrefix(words, index + 1, prefix);
 	}
 	return index;
 }
@@ -579,15 +618,117 @@ function searchRoots(
 	return readsStdin(segment, previous) ? [] : [cwd];
 }
 
+// Only unwrap argv launchers. Command strings (eval, --call, env -S) are not
+// interpreted here, and an operand containing a reader path is not execution.
+const LAUNCHER_VALUES: ReadonlyMap<string, readonly string[]> = new Map([
+	['bun', ['--cwd', '--config', '--env-file', '--preload', '--require', '-r', '--tsconfig-override']],
+	['node', [
+		'--require', '-r', '--import', '--loader', '--experimental-loader',
+		'--conditions', '-C', '--env-file', '--env-file-if-exists', '--input-type',
+		'--title', '--inspect-port', '--debug-port', '--inspect-publish-uid',
+		'--diagnostic-dir', '--redirect-warnings', '--report-directory', '--report-dir',
+		'--report-filename', '--report-signal', '--cpu-prof-dir', '--cpu-prof-name',
+		'--cpu-prof-interval', '--heap-prof-dir', '--heap-prof-name', '--heap-prof-interval',
+		'--heapsnapshot-signal', '--heapsnapshot-near-heap-limit', '--max-old-space-size',
+		'--max-semi-space-size', '--stack-trace-limit', '--dns-result-order',
+		'--unhandled-rejections', '--icu-data-dir', '--openssl-config', '--tls-cipher-list',
+		'--trace-event-categories', '--trace-event-file-pattern', '--test-name-pattern',
+		'--test-skip-pattern', '--test-reporter', '--test-reporter-destination',
+		'--test-concurrency', '--test-timeout', '--test-shard', '--watch-path',
+	]],
+	['tsx', ['--tsconfig', '--require', '-r', '--import']],
+	['ts-node', ['--project', '-P', '--require', '-r', '--compiler', '-C']],
+	['deno', ['--config', '-c', '--import-map', '--env-file']],
+	['run', ['--cwd', '-C']],
+	['runner', ['--cwd', '-C']],
+	['runner-run', ['--cwd', '-C']],
+	['npx', ['--package', '-p', '--workspace', '-w', '--prefix', '--cache', '--registry']],
+	['npm', ['--package', '--workspace', '-w', '--prefix', '--cache', '--registry']],
+	['bunx', ['--package', '-p', '--cwd']],
+]);
+
+function launcherOperand(words: readonly string[], start: number, launcher: string): number {
+	const values = LAUNCHER_VALUES.get(launcher) ?? [];
+	let index = start;
+	while (index < words.length) {
+		const word = words[index] ?? '';
+		if (word === '--') return index + 1;
+		if (!word.startsWith('-') || word === '-') return index;
+		// These launch code strings rather than the following script operand.
+		if (/^--(?:eval|print|call)(?:=|$)|^-[epc]/.test(word) &&
+			!values.some((value) => word === value || (value.length === 2 && word.startsWith(value)))) {
+			return words.length;
+		}
+		index += optionWidth(word, values);
+	}
+	return index;
+}
+
+const PACKAGE_EXECUTORS: ReadonlySet<string> = new Set(['npx', 'bunx', 'npm']);
+const RUN_SUBCOMMAND_RUNNERS: ReadonlySet<string> = new Set([
+	'bun',
+	'deno',
+	'run',
+	'runner',
+	'runner-run',
+]);
+const SPEC_ALIAS_RUNNERS: ReadonlySet<string> = new Set(['bun', 'run', 'runner', 'runner-run']);
+const SPEC_ENTRYPOINT = /(?:^|\/)scripts\/spec\/main\.ts$/;
+
+function runnerName(executable: string): string {
+	return path.basename(executable).replace(/^(bun|node|tsx|ts-node)@.+$/, '$1');
+}
+
+function packageExecutable(words: readonly string[], start: number, runner: string): number | undefined {
+	const operand = launcherOperand(words, start + 1, runner);
+	if (runner === 'npx' || runner === 'bunx') return operand;
+	const name = words[operand];
+	if (runner === 'npm') {
+		return name === 'exec' || name === 'x' ? launcherOperand(words, operand + 1, 'npm') : undefined;
+	}
+	if (runner === 'bun' && name === 'x') return launcherOperand(words, operand + 1, 'bunx');
+	return undefined;
+}
+
+function directSpecEntrypoint(
+	words: readonly string[],
+	start: number,
+	runner: string,
+): number | undefined {
+	let operand = launcherOperand(words, start + 1, runner);
+	if (words[operand] === 'run' && RUN_SUBCOMMAND_RUNNERS.has(runner)) {
+		operand = launcherOperand(words, operand + 1, runner);
+	}
+	const entrypoint = words[operand] ?? '';
+	if (SPEC_ENTRYPOINT.test(entrypoint)) return operand;
+	return entrypoint === 'spec' && SPEC_ALIAS_RUNNERS.has(runner) ? operand : undefined;
+}
+
+function specEntrypoint(words: readonly string[]): number | undefined {
+	let start = commandIndex(words);
+	while (start < words.length) {
+		const executable = words[start] ?? '';
+		if (SPEC_ENTRYPOINT.test(executable)) return start;
+		const runner = runnerName(executable);
+		if (!SPEC_RUNNERS.has(runner) && !PACKAGE_EXECUTORS.has(runner)) return undefined;
+		const nested = packageExecutable(words, start, runner);
+		if (nested === undefined) return directSpecEntrypoint(words, start, runner);
+		start = nested;
+	}
+	return undefined;
+}
+
 function isReader(segment: Segment): boolean {
-	const words = segment.words;
-	return words.some((word, index) => {
-		const next = words[index + 1] ?? '';
-		if (/scripts\/spec\/main\.ts$/.test(word)) return READER_COMMANDS.has(next);
-		if (word !== 'spec') return false;
-		const before = path.basename(words[index - 1] ?? '');
-		return (before === 'bun' || before === 'run') && READER_COMMANDS.has(next);
-	});
+	const entrypoint = specEntrypoint(segment.words);
+	if (entrypoint === undefined) return false;
+	// spec has no root value flags: dreamcli dispatches its first non-flag
+	// operand (or the operand after --). Never inspect a leaf command's values.
+	for (let index = entrypoint + 1; index < segment.words.length; index += 1) {
+		const word = segment.words[index] ?? '';
+		if (word === '--') return READER_COMMANDS.has(segment.words[index + 1] ?? '');
+		if (!word.startsWith('-')) return READER_COMMANDS.has(word);
+	}
+	return false;
 }
 
 function isMetadataOnly(command: string, script: Script): boolean {
@@ -611,6 +752,29 @@ function nextDirectory(segment: Segment, cwd: string): string {
 	return path.resolve(cwd, target);
 }
 
+// Index/path bookkeeping does not expose source text to the calling agent.
+// Interactive staging does print patches and must still go through delegation.
+function isGitMaintenance(segment: Segment): boolean {
+	const words = segment.words;
+	const start = commandIndex(words);
+	if (path.basename(words[start] ?? '') !== 'git') return false;
+	let index = start + 1;
+	const values = ['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'];
+	while (index < words.length && (words[index] ?? '').startsWith('-')) {
+		const word = words[index] ?? '';
+		if (word === '--') { index += 1; break; }
+		index += optionWidth(word, values);
+	}
+	const name = words[index];
+	if (name === 'status' || name === 'ls-files' || name === 'check-ignore') return true;
+	if (name !== 'add') return false;
+	for (const word of words.slice(index + 1)) {
+		if (word === '--') break;
+		if (/^--(?:patch|interactive|edit)(?:=|$)|^-[^-]*[pie]/.test(word)) return false;
+	}
+	return true;
+}
+
 function segmentReads(
 	segment: Segment,
 	previous: Segment | undefined,
@@ -618,6 +782,7 @@ function segmentReads(
 	cwd: string,
 	dirs: readonly string[],
 ): boolean {
+	if (isGitMaintenance(segment)) return false;
 	if (isReader(segment)) return true;
 	const exclusions = exclusionsOf(segment);
 	const skipped = new Set([...exclusions.map(({ index }) => index), ...patternIndices(segment)]);
@@ -632,7 +797,6 @@ function segmentReads(
 }
 
 function decideBash(command: string, cwd: string, dirs: readonly string[]): Decision {
-	if (INTENT_RE.test(command)) return { kind: 'pass' };
 	const split = splitHeredocs(command);
 	const script = tokenize(split.text);
 	if (isMetadataOnly(command, script)) return { kind: 'pass' };
@@ -678,9 +842,7 @@ export function decide(payload: Payload, project: string): Decision {
 			return decideGrep(payload, dirs);
 		case 'Bash': {
 			const command = stringField(payload.input, 'command');
-			return command === undefined
-				? { kind: 'pass' }
-				: decideBash(command, payload.cwd, dirs);
+			return command === undefined ? { kind: 'pass' } : decideBash(command, payload.cwd, dirs);
 		}
 		default:
 			return { kind: 'pass' };

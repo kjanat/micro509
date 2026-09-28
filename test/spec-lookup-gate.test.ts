@@ -90,7 +90,7 @@ describe('Bash', () => {
 		['pass', "git commit -F - <<'EOF'\nfix docs/rfc parser\nEOF"],
 		['pass', 'git commit -m "$(cat <<\'EOF\'\nfix docs/rfc parser\nEOF\n)"'],
 		['pass', 'gh pr create --body-file - <<EOF\nmentions docs/rfc\nEOF'],
-		['pass', 'cat docs/rfc/rfc5280.txt # spec-intent: vendoring check before upgrade'],
+		['deny', 'cat docs/rfc/rfc5280.txt # spec-intent: vendoring check before upgrade'],
 		['pass', 'python3 - <<\'EOF\'\ns = """\nx = [a, b]\ny = \'(10/2019)\'\n"""\nEOF'],
 		['pass', 'echo "[a/[b/[c"'],
 		['pass', `curl -sSL https://www.itu.int/rec/x | rg -o 'href="[^"]*(\\.pdf|!PDF)[^"]*"'`],
@@ -215,5 +215,80 @@ describe('hook output', () => {
 	test('ignores input that is not a tool payload', () => {
 		expect(parsePayload('not json')).toBeUndefined();
 		expect(parsePayload('{"tool_name":"Read"}')).toBeUndefined();
+	});
+});
+
+describe('research command routing', () => {
+	test.each([
+		['deny', 'bun spec --json read rfc5280 4.1'],
+		['deny', 'bun run spec --json census REAL NR3'],
+		['deny', 'bun --cwd . run spec census REAL NR3'],
+		['deny', 'node scripts/spec/main.ts --json headings rfc5280'],
+		['deny', 'bun spec census REAL NR3 # spec-intent: just a maintenance scan'],
+		['deny', 'echo "# spec-intent: vendoring check"; cat docs/rfc/rfc5280.txt'],
+		['pass', 'bun spec status 5280 --offline'],
+		['pass', 'bun spec --json status 5280'],
+		['pass', 'bun spec fetch rfc 5280'],
+		['pass', 'bun spec fetch ms MS-WCCE'],
+		['pass', 'bun ms MS-WCCE'],
+		['pass', 'bun spec --help'],
+		['pass', 'echo "bun spec read rfc5280 4.1"'],
+		['deny', 'nice -n 5 bun spec read rfc5280 4.1'],
+		['deny', 'nice --adjustment 5 bun spec read rfc5280 4.1'],
+		['deny', 'nice --adjustment=5 bun spec --json read rfc5280 4.1'],
+		['deny', 'nice -n5 bun run spec --json census REAL NR3'],
+		['deny', 'nice -n -5 bun spec headings rfc5280'],
+		['deny', 'nice -- bun spec read rfc5280 4.1'],
+		['deny', 'env --chdir /tmp bun spec headings rfc5280'],
+		['deny', 'env --chdir=/tmp bun spec headings rfc5280'],
+		['deny', 'env -C /tmp bun spec search nextUpdate'],
+		['deny', 'env -C/tmp bun spec search nextUpdate'],
+		['deny', 'env -iu UNUSED bun spec --json read rfc5280 4.1'],
+		['deny', 'env --unset UNUSED bun spec read rfc5280 4.1'],
+		['deny', 'env --unset=UNUSED bun spec read rfc5280 4.1'],
+		['deny', 'env --argv0 spec-helper bun spec read rfc5280 4.1'],
+		['deny', 'CI=1 env -u UNUSED MODE=test nice -n 5 bun --cwd . run spec --json census REAL NR3'],
+		[
+			'deny',
+			'/usr/bin/nice -n 5 /usr/bin/env --unset UNUSED node scripts/spec/main.ts --json read rfc5280 4.1',
+		],
+		['deny', 'sudo -u root nice -n 5 bun spec read rfc5280 4.1'],
+		['deny', 'time -f %E bun spec read rfc5280 4.1'],
+		['deny', 'exec -a spec-helper bun spec read rfc5280 4.1'],
+		['deny', 'xargs -n 1 bun spec read rfc5280 4.1'],
+		['deny', 'parallel --jobs 2 bun spec read rfc5280 4.1'],
+		['deny', 'nice -n 5 rg nextUpdate'],
+		['deny', 'nice -n 5 bun spec read ms-wcce-20260824 3.1'],
+		['deny', 'env --unset UNUSED bun spec --json census MS-WCCE UPN'],
+		['pass', 'nice -n 5 rg nextUpdate src'],
+		['pass', 'nice -n 5 bun spec list'],
+		['pass', 'env --unset UNUSED bun spec --json status 5280 --offline'],
+		['pass', 'nice -n 5 bun spec fetch rfc 5280'],
+		['pass', 'nice -n 5 bun spec fetch ms MS-WCCE'],
+		['pass', 'nice -n 5 echo bun spec read rfc5280 4.1'],
+		['pass', 'env --unset bun echo spec read rfc5280 4.1'],
+		['pass', 'env --chdir /tmp echo bun spec headings rfc5280'],
+		['pass', 'echo "nice -n 5 bun spec read rfc5280 4.1"'],
+		['pass', 'nice -- -n 5 bun spec read rfc5280 4.1'],
+		['pass', 'env MODE=test -- bun spec read rfc5280 4.1'],
+		['pass', 'nice -n'],
+	] as const)('%s %s', (want, command) => {
+		expect(verdictOf(bash(command))).toBe(want);
+		expect(verdictOf(bash(command, 'spec-lookup'))).toBe('pass');
+	});
+
+	test('takes agent identity from the hook payload, never a shell comment', () => {
+		const payload = parsePayload(
+			JSON.stringify({
+				tool_name: 'Bash',
+				agent_type: 'spec-lookup',
+				cwd: projectRoot,
+				tool_input: { command: 'bun spec read ms-wcce-20260824 3.1' },
+			}),
+		);
+		expect(payload).toBeDefined();
+		if (payload === undefined) return;
+		expect(decide(payload, projectRoot).kind).toBe('pass');
+		expect(decide({ ...payload, agent: 'other' }, projectRoot).kind).toBe('deny');
 	});
 });
