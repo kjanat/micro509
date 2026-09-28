@@ -13,6 +13,8 @@ on:
         default: 100
         required: false
 
+permissions: {}
+
 jobs:
   stress:
     name: Randomized rerun suite

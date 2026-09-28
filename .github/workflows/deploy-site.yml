@@ -1,6 +1,7 @@
 name: Deploy Site
 
 on: { push: { branches: [master, vitepress] }, workflow_dispatch: null }
+permissions: {}
 
 jobs:
   build:

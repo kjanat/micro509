@@ -2,11 +2,20 @@
 # resolves to the caller ("Publish"), so a shared group would deadlock caller vs callee.
 ---
 name: Test
-on: { push: { branches: [master] }, pull_request: { branches-ignore: [master] }, workflow_call: null }
+on: { push: { branches: [master] }, pull_request: null, workflow_call: null }
+permissions: {}
 
 jobs:
+  openssl:
+    name: OpenSSL builds
+    uses: $/.github/workflows/openssl.yml
+    with: { version: "4.0.2" }
+    permissions: { contents: read, packages: write, id-token: write, attestations: write }
+
   test:
     name: Test
+    needs: openssl
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: read, id-token: write }
@@ -71,6 +80,8 @@ jobs:
 
   differential:
     name: OpenSSL differential
+    needs: openssl
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions: { contents: read }

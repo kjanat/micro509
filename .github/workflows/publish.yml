@@ -14,7 +14,8 @@ jobs:
   test:
     name: Test
     uses: $/.github/workflows/test.yml
-    permissions: { contents: read, id-token: write }
+    if: github.event_name == 'push'
+    permissions: { contents: read, id-token: write, packages: write, attestations: write }
 
   validate:
     name: Validate version
@@ -40,6 +41,7 @@ jobs:
   publish-jsr:
     name: JSR (${{ needs.validate.outputs.mode }})
     needs: [test, validate]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.test.result == 'success' || (needs.test.result == 'skipped' && github.event_name != 'push')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: read, id-token: write }
@@ -68,6 +70,7 @@ jobs:
   publish-npm:
     name: npm (${{ needs.validate.outputs.mode }})
     needs: [test, validate]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.test.result == 'success' || (needs.test.result == 'skipped' && github.event_name != 'push')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: read, id-token: write }
