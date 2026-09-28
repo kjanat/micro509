@@ -191,10 +191,11 @@ Current conformance evidence:
       as for dNSName.
 - [x] Read a URI SAN's host once, by RFC 3986, for URI constraints and URI-ID
       matching alike: the authority after `//`, past any userinfo and before
-      any port. A userinfo outside RFC 3986 §3.2.1, such as `bad%zz`, makes
-      the host invalid, and a reference identifier's userinfo follows the RFC
-      3987 §2.2 `iuserinfo` without the bidirectional formatting characters
-      of §4.1. A percent-encoded unreserved character decodes, so
+      any port. A userinfo outside RFC 3986 §3.2.1, such as `bad%zz`, or a
+      path, query or fragment outside §3.3 to §3.5, such as `/%zz`, makes the
+      host invalid. A reference identifier follows the RFC 3987 §2.2 IRI
+      grammar instead, without the bidirectional formatting characters of
+      §4.1. A percent-encoded unreserved character decodes, so
       `ldap://%62locked.example/` has the host `blocked.example` (RFC 3986
       §2.3 and §6.2.2.2, RFC 5280 §7.4 step 3). Other percent-encoded octets
       stay encoded: RFC 3986 §6 does not make a percent-encoded U-label equal
@@ -357,8 +358,13 @@ Current GeneralName matrix for `nameConstraints`:
       allows, which ends a userinfo of a non-empty user and an optional
       password, and ends at the first ";" or "?". The user part may hold "?",
       "/" and ";". A second "@", a user or password outside the §25.1
-      grammar, a "/" or escaped octet in the hostport, or a ":" with no port
-      digits after it makes the URI-ID invalid. An IP host matches by
+      grammar, a "/" or escaped octet in the hostport, a host that is neither
+      a §25.1 hostname nor an IP address, or a ":" with no port digits after
+      it makes the URI-ID invalid. So do uri-parameters or headers outside
+      their §25.1 grammar and a parameter name that appears twice, compared
+      without regard to case (§19.1.1, §19.1.4). Every "%" opens an escaped
+      octet, as the RFC 2396 rules §19.1.2 adopts require, although the
+      `token` production admits a raw "%". An IP host matches by
       its octets (RFC 9525 §6.4).
 - [x] Hold an SRV-ID, presented or reference, to the SRVName syntax of §7.
 

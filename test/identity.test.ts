@@ -1048,6 +1048,30 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 	);
 
 	it.each([
+		['https://example.com/a/b;c=d?q=1&r=/?#frag/?', 'https://example.com/', true],
+		['https://example.com/', 'https://example.com/pfad/\u{fc}?\u{e000}#\u{fc}', true],
+		['https://example.com/%zz', 'https://example.com/', false],
+		['https://example.com/?q=%zz', 'https://example.com/', false],
+		['https://example.com/#a#b', 'https://example.com/', false],
+		['https://example.com/a b', 'https://example.com/', false],
+		['https://example.com/a[b]', 'https://example.com/', false],
+		['https://example.com/', 'https://example.com/%zz', false],
+		['https://example.com/', 'https://example.com/\u{e000}', false],
+		['https://example.com/', 'https://example.com/a\u{200e}', false],
+		['https://example.com/', 'https://ex\u{202e}ample.com/', false],
+	] as const)(
+		'reads the host of %s against %s only when the rest follows RFC 3986 or RFC 3987',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
 		['sip:alice/phone@attacker.example', 'sip:alice/phone@victim.example', false],
 		['sip:alice?x@victim.example', 'sip:victim.example', true],
 		['sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', 'sip:victim.example', true],
@@ -1069,6 +1093,24 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 		['sip://victim.example', 'sip:victim.example', false],
 		['sips://victim.example/', 'sips:victim.example', false],
 		['sip:victim.example', 'sip://victim.example', false],
+		[
+			'sip:victim.example;lr;maddr=[2001:db8::1]?subject=&to=sip:bob%40x.example',
+			'sip:victim.example',
+			true,
+		],
+		['sip:victim.example;%zz', 'sip:victim.example', false],
+		['sip:victim.example;transport=%zz', 'sip:victim.example', false],
+		['sip:victim.example?bad%zz', 'sip:victim.example', false],
+		['sip:victim.example?a=%zz', 'sip:victim.example', false],
+		['sip:victim.example;', 'sip:victim.example', false],
+		['sip:victim.example;a=', 'sip:victim.example', false],
+		['sip:victim.example?', 'sip:victim.example', false],
+		['sip:victim.example?a=b&', 'sip:victim.example', false],
+		['sip:victim.example;lr;LR', 'sip:victim.example', false],
+		['sip:victim.example#x', 'sip:victim.example', false],
+		['sip:vic_tim.example', 'sip:vic_tim.example', false],
+		['sip:victim.123', 'sip:victim.123', false],
+		['sip:1.2.3.999', 'sip:1.2.3.999', false],
 		['sip:victim.example/path', 'sip:victim.example', false],
 	] as const)(
 		'reads the host of the SIP URI %s against %s by RFC 3261 §25.1',

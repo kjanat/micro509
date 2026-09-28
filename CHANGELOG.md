@@ -454,6 +454,14 @@ revocation })` report a certificate carrying `noRevAvail` or
   A userinfo outside RFC 3986 §3.2.1, or for `sip` and `sips` outside the
   RFC 3261 §25.1 user and password, now makes the host invalid. A reference
   identifier's userinfo follows RFC 3987 §2.2 `iuserinfo`.
+- The path, query and fragment of a URI-ID or URI SAN, and the parameters
+  and headers of a SIP URI-ID, were never read, so `https://example.com/%zz`
+  and `sip:victim.example;%zz` matched the URI-IDs `https://example.com/` and
+  `sip:victim.example`, and the first was evaluated against URI constraints.
+  They must now follow RFC 3986 §3.3 to §3.5, RFC 3987 §2.2 for a reference
+  identifier, and the RFC 3261 §25.1 uri-parameters and headers, with every
+  "%" opening an escaped octet and no SIP parameter name repeated. A SIP host
+  must be a §25.1 hostname or an IP address.
 - A URI name constraint that was not a DNS name, such as
   `https://blocked.example`, matched no host, so an excluded subtree excluded
   nothing. The builder refuses it with the new `invalid_uri_name_constraint`,

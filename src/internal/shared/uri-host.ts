@@ -23,12 +23,41 @@ export type UriHost =
 export type UriHostSource = 'presented' | 'reference';
 
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-const USERINFO = /^(?:[A-Za-z0-9._~!$&'()*+,;=:-]|%[0-9A-Fa-f]{2})*$/;
-/** RFC 3987 §2.2 iuserinfo, without the bidirectional formatting characters of §4.1. */
-const IUSERINFO =
-	/^(?:[A-Za-z0-9._~!$&'()*+,;=:-]|%[0-9A-Fa-f]{2}|(?![\u{200e}\u{200f}\u{202a}-\u{202e}])[\u{a0}-\u{d7ff}\u{f900}-\u{fdcf}\u{fdf0}-\u{ffef}\u{10000}-\u{1fffd}\u{20000}-\u{2fffd}\u{30000}-\u{3fffd}\u{40000}-\u{4fffd}\u{50000}-\u{5fffd}\u{60000}-\u{6fffd}\u{70000}-\u{7fffd}\u{80000}-\u{8fffd}\u{90000}-\u{9fffd}\u{a0000}-\u{afffd}\u{b0000}-\u{bfffd}\u{c0000}-\u{cfffd}\u{d0000}-\u{dfffd}\u{e1000}-\u{efffd}])*$/u;
-const REG_NAME = /^(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9A-Fa-f]{2})*$/;
-const IREG_NAME = /^(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9A-Fa-f]{2}|[^\0-\x7f])*$/u;
+const UNRESERVED = 'A-Za-z0-9._~\\-';
+const SUB_DELIMS = "!$&'()*+,;=";
+/** RFC 3987 §2.2 ucschar, without the bidirectional formatting characters §4.1 forbids. */
+const UCSCHAR =
+	'\\u{a0}-\\u{200d}\\u{2010}-\\u{2029}\\u{202f}-\\u{d7ff}\\u{f900}-\\u{fdcf}\\u{fdf0}-\\u{ffef}\\u{10000}-\\u{1fffd}\\u{20000}-\\u{2fffd}\\u{30000}-\\u{3fffd}\\u{40000}-\\u{4fffd}\\u{50000}-\\u{5fffd}\\u{60000}-\\u{6fffd}\\u{70000}-\\u{7fffd}\\u{80000}-\\u{8fffd}\\u{90000}-\\u{9fffd}\\u{a0000}-\\u{afffd}\\u{b0000}-\\u{bfffd}\\u{c0000}-\\u{cfffd}\\u{d0000}-\\u{dfffd}\\u{e1000}-\\u{efffd}';
+/** RFC 3987 §2.2 iprivate. */
+const IPRIVATE = '\\u{e000}-\\u{f8ff}\\u{f0000}-\\u{ffffd}\\u{100000}-\\u{10fffd}';
+
+/** The userinfo, reg-name, and text after the authority of an RFC 3986 URI or RFC 3987 IRI. */
+interface UriGrammar {
+	readonly userinfo: RegExp;
+	readonly regName: RegExp;
+	readonly afterAuthority: RegExp;
+}
+
+function uriGrammar(extra: string, queryExtra: string): UriGrammar {
+	const run = (characters: string): string => `(?:[${characters}]|%[0-9A-Fa-f]{2})*`;
+	const pchar = `${UNRESERVED}${SUB_DELIMS}:@${extra}`;
+	return {
+		userinfo: new RegExp(`^${run(`${UNRESERVED}${SUB_DELIMS}:${extra}`)}$`, 'u'),
+		regName: new RegExp(`^${run(`${UNRESERVED}${SUB_DELIMS}${extra}`)}$`, 'u'),
+		afterAuthority: new RegExp(
+			`^(?:/${run(pchar)})*(?:\\?${run(`${pchar}/?${queryExtra}`)})?(?:#${run(`${pchar}/?`)})?$`,
+			'u',
+		),
+	};
+}
+
+const URI_GRAMMAR = uriGrammar('', '');
+const IRI_GRAMMAR = uriGrammar(UCSCHAR, IPRIVATE);
+
+function grammarOf(source: UriHostSource): UriGrammar {
+	return source === 'reference' ? IRI_GRAMMAR : URI_GRAMMAR;
+}
+
 const IPV4_ADDRESS =
 	/^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 const PORT = /^(?::\d*)?$/;
@@ -43,17 +72,21 @@ const ABSENT: UriHost = { type: 'absent' };
 const INVALID: UriHost = { type: 'invalid' };
 
 /**
- * RFC 3986 §3.2: the host of the authority that `//` opens, after a userinfo
- * that §3.2.1 allows, or `absent` without an authority.
+ * RFC 3986 §3.2: the host of the authority that `//` opens, or `absent`
+ * without an authority. The userinfo, and the path, query and fragment after
+ * the authority, must follow RFC 3986 §3.2.1 and §3.3 to §3.5, or RFC 3987 §2.2
+ * for a reference identifier.
  */
 export function uriAuthorityHost(uri: string, source: UriHostSource): UriHost {
 	const scheme = SCHEME.exec(uri);
 	if (scheme === null) return INVALID;
 	const rest = uri.slice(scheme[0].length);
 	if (!rest.startsWith('//')) return ABSENT;
+	const grammar = grammarOf(source);
 	const authority = rest.slice(2).split(/[/?#]/, 1)[0] ?? '';
 	const at = authority.indexOf('@');
-	return at < 0 || (source === 'reference' ? IUSERINFO : USERINFO).test(authority.slice(0, at))
+	return grammar.afterAuthority.test(rest.slice(2 + authority.length)) &&
+		(at < 0 || grammar.userinfo.test(authority.slice(0, at)))
 		? hostportHost(authority.slice(at + 1), source)
 		: INVALID;
 }
@@ -87,7 +120,7 @@ function ipLiteralHost(literal: string): UriHost {
  * the rightmost label dropped.
  */
 function regNameHost(host: string, source: UriHostSource): UriHost {
-	if (!(source === 'reference' ? IREG_NAME : REG_NAME).test(host)) return INVALID;
+	if (!grammarOf(source).regName.test(host)) return INVALID;
 	const decoded = source === 'reference' ? decodeUtf8(host) : decodeUnreserved(host);
 	if (decoded === undefined) return INVALID;
 	if (isIpv4Address(decoded)) return { type: 'ip', bytes: parseIpAddressToBytes(decoded) };

@@ -459,6 +459,28 @@ describe('name constraint fixtures', () => {
 		}
 	});
 
+	it('reads a URI SAN host under URI constraints only when its path, query and fragment follow RFC 3986', async () => {
+		const rootNameConstraints: NameConstraintsInput = {
+			permittedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }],
+		};
+		const accepted = await verifyNameConstraintFixture({
+			rootNameConstraints,
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://www.example.com/a;b?c=/?#d' }],
+		});
+		expect(accepted).toMatchObject({ ok: true });
+		for (const value of [
+			'https://www.example.com/%zz',
+			'https://www.example.com/?%zz',
+			'https://www.example.com/#a#b',
+		]) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints,
+				leafSubjectAltNames: [{ type: 'uri', value }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
 	it('rejects the chain before matching a URI-ID whose host an excluded URI constraint covers', async () => {
 		const leafSubjectAltNames: LeafSubjectAltNames = [
 			{ type: 'uri', value: 'ldap://%62locked.example/' },

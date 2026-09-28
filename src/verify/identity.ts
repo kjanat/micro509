@@ -536,21 +536,54 @@ function tryParseUriServiceIdentity(
 const SIP_USERINFO =
 	/^(?:[A-Za-z0-9\-_.!~*'()&=+$,;?/]|%[0-9A-Fa-f]{2})+(?::(?:[A-Za-z0-9\-_.!~*'()&=+$,]|%[0-9A-Fa-f]{2})*)?$/;
 
+/** RFC 3261 §25.1 uri-parameters, each `pname [ "=" pvalue ]` of paramchar. */
+const SIP_PARAMETERS =
+	/^(?:;(?:[A-Za-z0-9\-_.!~*'()[\]/:&+$]|%[0-9A-Fa-f]{2})+(?:=(?:[A-Za-z0-9\-_.!~*'()[\]/:&+$]|%[0-9A-Fa-f]{2})+)?)*$/;
+
+/** RFC 3261 §25.1 headers, each `hname "=" hvalue` of hnv-unreserved and unreserved characters. */
+const SIP_HEADERS =
+	/^(?:\?(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})+=(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})*(?:&(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})+=(?:[A-Za-z0-9\-_.!~*'()[\]/?:+$]|%[0-9A-Fa-f]{2})*)*)?$/;
+
+/** RFC 3261 §25.1 hostname, whose toplabel opens with a letter. */
+const SIP_HOSTNAME = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z](?:[a-z0-9-]*[a-z0-9])?$/i;
+
 /**
- * RFC 3261 §25.1: the only "@" a SIP URI may hold ends its userinfo, and the
- * hostport after it ends at its parameters or headers, holds no escaped
- * octets, and gives a port at least one digit.
+ * RFC 3261 §25.1: the only "@" a SIP URI may hold ends its userinfo, and its
+ * hostport is a hostname or IP address with no escaped octets and a port of at
+ * least one digit. The uri-parameters and headers after it follow their
+ * grammar, with every "%" opening an escaped octet (§19.1.2), and no parameter
+ * name appears twice (§19.1.1).
  */
 function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
 	const at = schemeSpecific.indexOf('@');
 	const afterUserinfo = schemeSpecific.slice(at + 1);
 	const hostport = afterUserinfo.split(/[;?]/, 1)[0] ?? '';
-	return (at >= 0 && !SIP_USERINFO.test(schemeSpecific.slice(0, at))) ||
-		afterUserinfo.includes('@') ||
+	const rest = afterUserinfo.slice(hostport.length);
+	const headersStart = rest.includes('?') ? rest.indexOf('?') : rest.length;
+	const parameters = rest.slice(0, headersStart);
+	if (
+		(at >= 0 && !SIP_USERINFO.test(schemeSpecific.slice(0, at))) ||
+		!SIP_PARAMETERS.test(parameters) ||
+		!SIP_HEADERS.test(rest.slice(headersStart)) ||
+		hasRepeatedParameter(parameters) ||
 		hostport.includes('%') ||
 		hostport.endsWith(':')
-		? { type: 'invalid' }
-		: hostportHost(hostport, source);
+	) {
+		return { type: 'invalid' };
+	}
+	const host = hostportHost(hostport, source);
+	return host.type === 'ip' || (host.type === 'dns' && SIP_HOSTNAME.test(host.name))
+		? host
+		: { type: 'invalid' };
+}
+
+/** RFC 3261 §19.1.4 compares parameter names without regard to case. */
+function hasRepeatedParameter(parameters: string): boolean {
+	const names = parameters
+		.split(';')
+		.slice(1)
+		.map((parameter) => (parameter.split('=', 1)[0] ?? '').toLowerCase());
+	return new Set(names).size !== names.length;
 }
 
 /**
