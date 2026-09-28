@@ -2,7 +2,7 @@
 
 `bun spec` is the entry point for the standards corpus and its evidence.
 The research procedure lives in
-[the spec-lookup skill](../.claude/skills/spec-lookup/SKILL.md); this document
+[the spec-lookup skill](https://github.com/kjanat/micro509/blob/master/.claude/skills/spec-lookup/SKILL.md); this document
 owns command behavior, output contracts, and operational limits.
 
 ## A lookup from start to finish
@@ -90,10 +90,10 @@ wrong-source, future-dated or structurally invalid record is not usable.
 The default maximum age is 86,400 seconds. `--refresh` bypasses usable caches;
 `--max-age 0` requires a network observation outside offline mode. `--offline`
 never accesses the network and may return valid stale evidence, clearly marked.
-`--offline --refresh` is an error. No usable offline cache, failed HTTP request,
-or invalid response is an error, not an empty status result. Online failures
-never silently fall back to stale evidence. A cache write failure preserves
-the successfully validated network result and emits a warning.
+`--offline --refresh` is an error. A missing usable offline cache, a failed HTTP
+request, or an invalid response produces an error, not an empty status result.
+Online failures never silently fall back to stale evidence. A cache write
+failure preserves the successfully validated network result and emits a warning.
 
 Each metadata result and the shared errata result carry `url`, `fetchedAt`,
 `source` (`network` or `cache`) and `fresh`. `fresh` means the observation is
