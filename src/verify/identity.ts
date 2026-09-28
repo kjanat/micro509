@@ -539,8 +539,8 @@ const SIP_USERINFO =
 
 /**
  * RFC 3261 §25.1: the only "@" a SIP URI may hold ends its userinfo, and the
- * hostport after it ends at its parameters or headers and holds no escaped
- * octets.
+ * hostport after it ends at its parameters or headers, holds no escaped
+ * octets, and gives a port at least one digit.
  */
 function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
 	const at = schemeSpecific.indexOf('@');
@@ -548,7 +548,8 @@ function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
 	const hostport = afterUserinfo.split(/[;?]/, 1)[0] ?? '';
 	return (at >= 0 && !SIP_USERINFO.test(schemeSpecific.slice(0, at))) ||
 		afterUserinfo.includes('@') ||
-		hostport.includes('%')
+		hostport.includes('%') ||
+		hostport.endsWith(':')
 		? { type: 'invalid' }
 		: hostportHost(hostport, source);
 }

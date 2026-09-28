@@ -1060,6 +1060,12 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 		['sip:alice:%zz@victim.example', 'sip:victim.example', false],
 		['sip:alice:pw;x@victim.example', 'sip:victim.example', false],
 		['sip:al[ice@victim.example', 'sip:victim.example', false],
+		['sip:victim.example:5060', 'sip:victim.example', true],
+		['sip:[2001:db8::1]:5060', 'sip:[2001:db8::1]', true],
+		['sip:victim.example:', 'sip:victim.example', false],
+		['sip:alice@victim.example:;transport=tcp', 'sip:victim.example', false],
+		['sip:[2001:db8::1]:', 'sip:[2001:db8::1]', false],
+		['sip:victim.example', 'sip:victim.example:', false],
 		['sip:victim.example/path', 'sip:victim.example', false],
 	] as const)(
 		'reads the host of the SIP URI %s against %s by RFC 3261 §25.1',

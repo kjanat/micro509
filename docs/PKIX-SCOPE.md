@@ -355,8 +355,8 @@ Current GeneralName matrix for `nameConstraints`:
       allows, which ends a userinfo of a non-empty user and an optional
       password, and ends at the first ";" or "?". The user part may hold "?",
       "/" and ";". A second "@", a user or password outside the §25.1
-      grammar, or a "/" or escaped octet in the hostport makes the URI-ID
-      invalid. An IP host matches by
+      grammar, a "/" or escaped octet in the hostport, or a ":" with no port
+      digits after it makes the URI-ID invalid. An IP host matches by
       its octets (RFC 9525 §6.4).
 - [x] Hold an SRV-ID, presented or reference, to the SRVName syntax of §7.
 
