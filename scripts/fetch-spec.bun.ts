@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command, isMainModule } from 'dreamcli';
 import { repositoryRoot } from './spec/corpus.ts';
+import { reportFetched } from './spec/fetch-result.ts';
 import { licenseLinks, provenance } from './spec/w3c.ts';
 
 const W3C_SPECS = {
@@ -51,18 +52,6 @@ const PANDOC_ASSETS = new Map([
 const PANDOC_CACHE = path.join(repositoryRoot, 'node_modules', '.cache', 'pandoc', PANDOC.version);
 
 const ITU_CONVERTER = path.join(import.meta.dir, 'spec', 'itu.lua');
-
-function fetched(
-	out: Out,
-	kind: 'rfc' | 'itu' | 'w3c' | 'ms',
-	id: string,
-	destination: string,
-	url: string,
-): void {
-	const relativePath = path.relative(repositoryRoot, destination).split(path.sep).join('/');
-	if (out.jsonMode) out.json({ kind, id, path: relativePath, url });
-	else out.log(relativePath);
-}
 
 function tool(name: string, code: string, suggest: string): string {
 	const found = Bun.which(name);
@@ -231,7 +220,7 @@ const rfc = command('rfc')
 		}
 		const destination = path.join(repositoryRoot, 'docs', 'rfc', `rfc${args.number}.txt`);
 		await Bun.write(destination, await response.bytes());
-		fetched(out, 'rfc', `rfc${args.number}`, destination, url);
+		reportFetched(out, destination, url);
 	});
 
 const itu = command('itu')
@@ -265,7 +254,7 @@ const itu = command('itu')
 					'ITU_CONVERT_FAILED',
 				);
 				rmSync(path.join(directory, `${args.id}.txt`), { force: true });
-				fetched(out, 'itu', wordId, destination, ituUrl(wordId));
+				reportFetched(out, destination, ituUrl(wordId));
 				return;
 			}
 			const pdftotext = tool(
@@ -289,7 +278,7 @@ const itu = command('itu')
 				'ITU_CONVERT_FAILED',
 			);
 			rmSync(path.join(directory, `${wordId}.txt`), { force: true });
-			fetched(out, 'itu', args.id, destination, ituUrl(args.id));
+			reportFetched(out, destination, ituUrl(args.id));
 		} finally {
 			rmSync(scratch, { recursive: true, force: true });
 		}
@@ -324,7 +313,7 @@ const w3c = command('w3c')
 		);
 		const destination = path.join(repositoryRoot, 'docs', 'w3c', spec.file);
 		await Bun.write(destination, `${text.trimEnd()}\n${provenance(spec.url, licenses)}`);
-		fetched(out, 'w3c', args.spec, destination, spec.url);
+		reportFetched(out, destination, spec.url);
 	});
 
 const ms = command('ms')
@@ -371,7 +360,7 @@ const ms = command('ms')
 			mkdirSync(directory, { recursive: true });
 			const destination = path.join(directory, `${args.document}-v${version}.txt`);
 			await Bun.write(destination, text);
-			fetched(out, 'ms', `${args.document.toLowerCase()}-${version}`, destination, url);
+			reportFetched(out, destination, url);
 		} finally {
 			rmSync(scratch, { recursive: true, force: true });
 		}

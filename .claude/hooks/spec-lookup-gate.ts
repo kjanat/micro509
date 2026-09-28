@@ -429,8 +429,7 @@ const PREFIX_VALUE_OPTIONS: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /** Attached operands occupy one word; a required separate operand occupies two. */
-function prefixOptionWidth(prefix: string, option: string): number {
-	const values = PREFIX_VALUE_OPTIONS.get(prefix) ?? [];
+function optionWidth(option: string, values: readonly string[]): number {
 	if (option.startsWith('--')) return values.includes(option) ? 2 : 1;
 	for (let index = 1; index < option.length; index += 1) {
 		if (values.includes(`-${option.charAt(index)}`)) {
@@ -449,7 +448,7 @@ function afterPrefix(words: readonly string[], start: number, prefix: string): n
 			break;
 		}
 		if (!word.startsWith('-') || word === '-') break;
-		index += prefixOptionWidth(prefix, word);
+		index += optionWidth(word, PREFIX_VALUE_OPTIONS.get(prefix) ?? []);
 	}
 	// Assignments end env's option processing. A subsequent "--" is then a
 	// command name, not another option delimiter. Do not scan past that command.
@@ -619,19 +618,80 @@ function searchRoots(
 	return readsStdin(segment, previous) ? [] : [cwd];
 }
 
+// Only unwrap argv launchers. Command strings (eval, --call, env -S) are not
+// interpreted here, and an operand containing a reader path is not execution.
+const LAUNCHER_VALUES: ReadonlyMap<string, readonly string[]> = new Map([
+	['bun', ['--cwd', '--config', '--env-file', '--preload', '--require', '-r', '--tsconfig-override']],
+	['node', ['--require', '-r', '--import', '--loader', '--experimental-loader', '--env-file']],
+	['tsx', ['--tsconfig', '--require', '-r', '--import']],
+	['ts-node', ['--project', '-P', '--require', '-r', '--compiler', '-C']],
+	['deno', ['--config', '-c', '--import-map', '--env-file']],
+	['run', ['--cwd', '-C']],
+	['runner', ['--cwd', '-C']],
+	['runner-run', ['--cwd', '-C']],
+	['npx', ['--package', '-p', '--workspace', '-w', '--prefix', '--cache', '--registry']],
+	['npm', ['--package', '--workspace', '-w', '--prefix', '--cache', '--registry']],
+	['bunx', ['--package', '-p', '--cwd']],
+]);
+
+function launcherOperand(words: readonly string[], start: number, launcher: string): number {
+	const values = LAUNCHER_VALUES.get(launcher) ?? [];
+	let index = start;
+	while (index < words.length) {
+		const word = words[index] ?? '';
+		if (word === '--') return index + 1;
+		if (!word.startsWith('-') || word === '-') return index;
+		// These launch code strings rather than the following script operand.
+		if (/^--(?:eval|print|call)(?:=|$)|^-[epc]/.test(word) &&
+			!values.some((value) => word === value || (value.length === 2 && word.startsWith(value)))) {
+			return words.length;
+		}
+		index += optionWidth(word, values);
+	}
+	return index;
+}
+
+function specEntrypoint(words: readonly string[]): number | undefined {
+	let start = commandIndex(words);
+	while (start < words.length) {
+		const executable = words[start] ?? '';
+		if (/(?:^|\/)scripts\/spec\/main\.ts$/.test(executable)) return start;
+		// npx/bunx may name a versioned runtime package, e.g. tsx@4.
+		const runner = path.basename(executable).replace(/^(bun|node|tsx|ts-node)@.+$/, '$1');
+		if (!SPEC_RUNNERS.has(runner) && !['npx', 'bunx', 'npm'].includes(runner)) return undefined;
+		let operand = launcherOperand(words, start + 1, runner);
+		const name = words[operand];
+		if (runner === 'npx' || runner === 'bunx') {
+			start = operand;
+			continue;
+		}
+		if (runner === 'npm' || (runner === 'bun' && name === 'x')) {
+			if (name !== 'exec' && name !== 'x') return undefined;
+			start = launcherOperand(words, operand + 1, runner === 'bun' ? 'bunx' : 'npm');
+			continue;
+		}
+		if (name === 'run' && ['bun', 'deno', 'run', 'runner', 'runner-run'].includes(runner)) {
+			operand = launcherOperand(words, operand + 1, runner);
+		}
+		const entrypoint = words[operand] ?? '';
+		if (/(?:^|\/)scripts\/spec\/main\.ts$/.test(entrypoint)) return operand;
+		if (entrypoint === 'spec' && ['bun', 'run', 'runner', 'runner-run'].includes(runner)) return operand;
+		return undefined;
+	}
+	return undefined;
+}
+
 function isReader(segment: Segment): boolean {
-	const words = segment.words;
-	const start = commandIndex(words);
-	const runner = path.basename(words[start] ?? '');
-	return words.some((word, index) => {
-		const entrypoint = /(?:^|\/)scripts\/spec\/main\.ts$/.test(word);
-		if (!entrypoint && !(word === 'spec' && SPEC_RUNNERS.has(runner))) return false;
-		if (index < start) return false;
-		// Global flags may precede the subcommand. Check the remaining argv, not
-		// just the adjacent token; command text in an echo is not an invocation.
-		if (entrypoint && index !== start && !SPEC_RUNNERS.has(runner)) return false;
-		return words.slice(index + 1).some((argument) => READER_COMMANDS.has(argument));
-	});
+	const entrypoint = specEntrypoint(segment.words);
+	if (entrypoint === undefined) return false;
+	// spec has no root value flags: dreamcli dispatches its first non-flag
+	// operand (or the operand after --). Never inspect a leaf command's values.
+	for (let index = entrypoint + 1; index < segment.words.length; index += 1) {
+		const word = segment.words[index] ?? '';
+		if (word === '--') return READER_COMMANDS.has(segment.words[index + 1] ?? '');
+		if (!word.startsWith('-')) return READER_COMMANDS.has(word);
+	}
+	return false;
 }
 
 function isMetadataOnly(command: string, script: Script): boolean {

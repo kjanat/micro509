@@ -43,6 +43,6 @@ jobs:
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: bun install --frozen-lockfile
       - name: Reader, gate, research and MS integration regressions
-        run: bun test test/spec-reader.test.ts test/spec-lookup-gate.test.ts test/spec-research.test.ts test/spec-ms-research.test.ts
+        run: bun test test/spec-*.test.ts
       - name: Tooling and test types
         run: run -pK typecheck:other typecheck:regular
