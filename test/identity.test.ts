@@ -1026,11 +1026,40 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 	);
 
 	it.each([
+		['https://us%65r:pw@example.com/', 'https://example.com/', true],
+		['https://@example.com/', 'https://example.com/', true],
+		['https://example.com/', 'https://j\u{f6}rg@example.com/', true],
+		['https://bad%zz@example.com/', 'https://example.com/', false],
+		['https://bad%@example.com/', 'https://example.com/', false],
+		['https://a b@example.com/', 'https://example.com/', false],
+		['https://a[b@example.com/', 'https://example.com/', false],
+		['https://example.com/', 'https://bad%zz@example.com/', false],
+		['https://example.com/', 'https://a\u{200e}b@example.com/', false],
+	] as const)(
+		'reads the host of %s against %s only after an RFC 3986 §3.2.1 userinfo',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
 		['sip:alice/phone@attacker.example', 'sip:alice/phone@victim.example', false],
 		['sip:alice?x@victim.example', 'sip:victim.example', true],
 		['sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', 'sip:victim.example', true],
+		['sip:%61lice:s%65cret@victim.example', 'sip:victim.example', true],
+		['sip:alice:@victim.example', 'sip:victim.example', true],
 		['sip:a@b@victim.example', 'sip:victim.example', false],
 		['sip:@victim.example', 'sip:victim.example', false],
+		['sip::pw@victim.example', 'sip:victim.example', false],
+		['sip:bad%zz@victim.example', 'sip:victim.example', false],
+		['sip:alice:%zz@victim.example', 'sip:victim.example', false],
+		['sip:alice:pw;x@victim.example', 'sip:victim.example', false],
+		['sip:al[ice@victim.example', 'sip:victim.example', false],
 		['sip:victim.example/path', 'sip:victim.example', false],
 	] as const)(
 		'reads the host of the SIP URI %s against %s by RFC 3261 §25.1',

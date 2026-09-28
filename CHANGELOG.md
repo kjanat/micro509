@@ -444,6 +444,12 @@ revocation })` report a certificate carrying `noRevAvail` or
   matched `sip:alice/phone@victim.example`. The host now follows the one "@"
   RFC 3261 §25.1 allows and ends at the first ";" or "?". A second "@", an
   empty user part, or a "/" in the hostport makes the URI-ID invalid.
+- A URI's userinfo was dropped unread, so a presented
+  `https://bad%zz@example.com` took the host `example.com`, matched the
+  URI-ID `https://example.com`, and was evaluated against URI constraints.
+  A userinfo outside RFC 3986 §3.2.1, or for `sip` and `sips` outside the
+  RFC 3261 §25.1 user and password, now makes the host invalid. A reference
+  identifier's userinfo follows RFC 3987 §2.2 `iuserinfo`.
 - A URI name constraint that was not a DNS name, such as
   `https://blocked.example`, matched no host, so an excluded subtree excluded
   nothing. The builder refuses it with the new `invalid_uri_name_constraint`,

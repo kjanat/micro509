@@ -23,6 +23,10 @@ export type UriHost =
 export type UriHostSource = 'presented' | 'reference';
 
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const USERINFO = /^(?:[A-Za-z0-9._~!$&'()*+,;=:-]|%[0-9A-Fa-f]{2})*$/;
+/** RFC 3987 §2.2 iuserinfo, without the bidirectional formatting characters of §4.1. */
+const IUSERINFO =
+	/^(?:[A-Za-z0-9._~!$&'()*+,;=:-]|%[0-9A-Fa-f]{2}|(?![\u{200e}\u{200f}\u{202a}-\u{202e}])[\u{a0}-\u{d7ff}\u{f900}-\u{fdcf}\u{fdf0}-\u{ffef}\u{10000}-\u{1fffd}\u{20000}-\u{2fffd}\u{30000}-\u{3fffd}\u{40000}-\u{4fffd}\u{50000}-\u{5fffd}\u{60000}-\u{6fffd}\u{70000}-\u{7fffd}\u{80000}-\u{8fffd}\u{90000}-\u{9fffd}\u{a0000}-\u{afffd}\u{b0000}-\u{bfffd}\u{c0000}-\u{cfffd}\u{d0000}-\u{dfffd}\u{e1000}-\u{efffd}])*$/u;
 const REG_NAME = /^(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9A-Fa-f]{2})*$/;
 const IREG_NAME = /^(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9A-Fa-f]{2}|[^\0-\x7f])*$/u;
 const IPV4_ADDRESS =
@@ -38,14 +42,20 @@ export function isIpv4Address(host: string): boolean {
 const ABSENT: UriHost = { type: 'absent' };
 const INVALID: UriHost = { type: 'invalid' };
 
-/** RFC 3986 §3.2: the host of the authority that `//` opens, or `absent` without one. */
+/**
+ * RFC 3986 §3.2: the host of the authority that `//` opens, after a userinfo
+ * that §3.2.1 allows, or `absent` without an authority.
+ */
 export function uriAuthorityHost(uri: string, source: UriHostSource): UriHost {
 	const scheme = SCHEME.exec(uri);
 	if (scheme === null) return INVALID;
 	const rest = uri.slice(scheme[0].length);
 	if (!rest.startsWith('//')) return ABSENT;
 	const authority = rest.slice(2).split(/[/?#]/, 1)[0] ?? '';
-	return hostportHost(authority.slice(authority.indexOf('@') + 1), source);
+	const at = authority.indexOf('@');
+	return at < 0 || (source === 'reference' ? IUSERINFO : USERINFO).test(authority.slice(0, at))
+		? hostportHost(authority.slice(at + 1), source)
+		: INVALID;
 }
 
 /** RFC 3986 §3.2.2 and §3.2.3: the host of `host [ ":" port ]`. */
