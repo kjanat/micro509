@@ -10,10 +10,8 @@ import { reportFetched } from '../scripts/spec/fetch-result.ts';
 import { isRecord } from '../scripts/spec/resource.ts';
 
 function verdict(command: string, agent?: string): string {
-	return decide(
-		{ tool: 'Bash', agent, cwd: repositoryRoot, input: { command } },
-		repositoryRoot,
-	).kind;
+	return decide({ tool: 'Bash', agent, cwd: repositoryRoot, input: { command } }, repositoryRoot)
+		.kind;
 }
 
 describe('reader command boundaries', () => {
@@ -130,7 +128,12 @@ describe('fetch identifiers round-trip through corpus discovery', () => {
 		await withCorpus(async (root) => {
 			const destination = await written(root, relative);
 			const result = await reported(root, destination);
-			expect(result).toEqual({ kind, id, path: `docs/${relative}`, url: 'https://example.test/source' });
+			expect(result).toEqual({
+				kind,
+				id,
+				path: `docs/${relative}`,
+				url: 'https://example.test/source',
+			});
 			const reportedId = result['id'];
 			if (typeof reportedId !== 'string') throw new Error('expected fetch id');
 			expect(resolveReference(discover(root), reportedId).path).toBe(destination);
@@ -150,7 +153,9 @@ describe('fetch identifiers round-trip through corpus discovery', () => {
 	test('keeps human output as a repository-relative path', async () => {
 		await withCorpus(async (root) => {
 			const destination = await written(root, 'w3c/WebIDL/webidl.txt');
-			const cmd = command('report').action(({ out }) => reportFetched(out, destination, 'https://example.test/source', root));
+			const cmd = command('report').action(({ out }) =>
+				reportFetched(out, destination, 'https://example.test/source', root),
+			);
 			const result = await runCommand(cmd, []);
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout.join('').trim()).toBe('docs/w3c/WebIDL/webidl.txt');
@@ -160,7 +165,9 @@ describe('fetch identifiers round-trip through corpus discovery', () => {
 	test('does not report an invented id for an unindexed destination', async () => {
 		await withCorpus(async (root) => {
 			const destination = await written(root, 'not-indexed.txt');
-			const cmd = command('report').action(({ out }) => reportFetched(out, destination, 'https://example.test/source', root));
+			const cmd = command('report').action(({ out }) =>
+				reportFetched(out, destination, 'https://example.test/source', root),
+			);
 			const result = await runCommand(cmd, ['--json']);
 			expect(result.error?.code).toBe('SPEC_FETCH_UNINDEXED');
 		});
