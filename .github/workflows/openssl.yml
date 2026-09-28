@@ -25,6 +25,7 @@ jobs:
     permissions: { contents: read, packages: read }
     outputs:
       releases: ${{ steps.resolve.outputs.releases }}
+      publishes: ${{ steps.resolve.outputs.publishes }}
       latest: ${{ steps.resolve.outputs.latest }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
     steps:
@@ -76,7 +77,7 @@ jobs:
             fi
             entries+=("$(jq -cn --arg version "${version}" --arg sha256 "${digest#sha256:}" '{version: $version, sha256: $sha256}')")
           done
-          printf '%s\n' "${entries[@]}" | jq -rs '"releases=\(tojson)"' >> "${GITHUB_OUTPUT}"
+          printf '%s\n' "${entries[@]}" | jq -rs '"releases=\(tojson)", "publishes=\(["none"] + . | tojson)"' >> "${GITHUB_OUTPUT}"
 
   image:
     name: Image ${{ matrix.release.version }}
@@ -265,7 +266,7 @@ jobs:
           retention-days: 1
 
   publish:
-    name: Tarballs ${{ matrix.release.version }}
+    name: Tarballs ${{ matrix.release.version || 'none' }}
     needs: [resolve, image, tarball]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-26.04
@@ -273,17 +274,24 @@ jobs:
     permissions: { contents: read, packages: write, id-token: write, attestations: write }
     strategy:
       fail-fast: false
-      matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" }
+      matrix:
+        release: ${{ fromJSON(needs.resolve.outputs.publishes) }}
+        exclude:
+          - release: none
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - if: matrix.release
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: openssl-${{ matrix.release.version }}-*
           merge-multiple: true
           path: ${{ runner.temp }}/dist
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      - if: matrix.release
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with: { subject-path: "${{ runner.temp }}/dist/*.tar.gz" }
-      - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+      - if: matrix.release
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
       - name: Push to GHCR
+        if: matrix.release
         working-directory: ${{ runner.temp }}/dist
         env:
           GH_TOKEN: ${{ github.token }}
