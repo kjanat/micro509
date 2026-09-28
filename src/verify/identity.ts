@@ -552,7 +552,8 @@ const SIP_HOSTNAME = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z](?:[a-z0-9-]*[
  * hostport is a hostname or IP address with no escaped octets and a port of at
  * least one digit. The uri-parameters and headers after it follow their
  * grammar, with every "%" opening an escaped octet (§19.1.2), and no parameter
- * name appears twice (§19.1.1).
+ * name appears twice (§19.1.1). RFC 5922 §7.1 forbids accepting a presented
+ * SIP URI with a userpart as a SIP domain identity.
  */
 function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
 	const at = schemeSpecific.indexOf('@');
@@ -562,6 +563,7 @@ function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
 	const headersStart = rest.includes('?') ? rest.indexOf('?') : rest.length;
 	const parameters = rest.slice(0, headersStart);
 	if (
+		(at >= 0 && source === 'presented') ||
 		(at >= 0 && !SIP_USERINFO.test(schemeSpecific.slice(0, at))) ||
 		!SIP_PARAMETERS.test(parameters) ||
 		!SIP_HEADERS.test(rest.slice(headersStart)) ||

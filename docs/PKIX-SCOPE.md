@@ -364,8 +364,11 @@ Current GeneralName matrix for `nameConstraints`:
       their §25.1 grammar and a parameter name that appears twice, compared
       without regard to case (§19.1.1, §19.1.4). Every "%" opens an escaped
       octet, as the RFC 2396 rules §19.1.2 adopts require, although the
-      `token` production admits a raw "%". An IP host matches by
-      its octets (RFC 9525 §6.4).
+      `token` production admits a raw "%". A presented SIP URI with a
+      userinfo identifies a user, and RFC 5922 §7.1 forbids accepting it as a
+      SIP domain identity, so it matches nothing. A reference identifier may
+      carry one, and only its host is compared (RFC 5922 §7.3, RFC 9525
+      §6.1.1). An IP host matches by its octets (RFC 9525 §6.4).
 - [x] Hold an SRV-ID, presented or reference, to the SRVName syntax of §7.
 
 Focused RFC 9525 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
