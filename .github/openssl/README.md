@@ -1,6 +1,6 @@
 # OpenSSL builds
 
-Statically linked OpenSSL, built from the upstream release tarballs by [`openssl.yml`]. A daily run builds the newest OpenSSL release and the newest pre-release.
+Statically linked OpenSSL, built from the upstream release tarballs by [`openssl.yml`]. A daily run builds the newest OpenSSL release, the newest beta and the newest alpha.
 
 ## Which one to use
 
@@ -17,7 +17,8 @@ Both packages have the same tags.
 | Tag                      | Points at                                    |
 | ------------------------ | -------------------------------------------- |
 | `latest`                 | the newest OpenSSL release                   |
-| `beta`                   | the newest OpenSSL pre-release               |
+| `beta`                   | the newest OpenSSL beta                      |
+| `alpha`                  | the newest OpenSSL alpha                     |
 | `4.0.2`                  | the newest build of OpenSSL 4.0.2            |
 | `4.0.2-20260928`         | the newest build of 4.0.2 made on 2026-09-28 |
 | `4.0.2-run36446405032.1` | the build made by that workflow run, forever |
