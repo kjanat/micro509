@@ -30,7 +30,6 @@ type Relation = 'inside' | 'ancestor' | 'none';
 const CORPUS = ['rfc', 'itu', 'w3c'] as const;
 const SPEC_RE = /docs\/(rfc|itu|w3c)(\/|$|[^A-Za-z0-9_.-])/;
 const GLOB_META = /[*?[]/;
-const INTENT_RE = /#\s*spec-intent:\s*\S.{9,}/;
 const PROSE_CONSUMERS: ReadonlySet<string> = new Set(['git', 'gh', 'glab']);
 const METADATA: ReadonlySet<string> = new Set([
 	'ls',
@@ -62,17 +61,16 @@ const SEARCHERS: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'ugrep']);
 const GREPS: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep']);
 const PATTERN_FLAGS = /^(?:--regexp|--file)(?:=|$)|^-[A-Za-z]*[ef]/;
 const PATTERN_VALUE_FOLLOWS = /^(?:--regexp|--file|-[A-Za-z]*[ef])$/;
-const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings']);
+const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings', 'census']);
+const SPEC_RUNNERS: ReadonlySet<string> = new Set(['bun', 'node', 'deno', 'tsx', 'ts-node', 'run', 'runner', 'runner-run']);
 
 export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c}/**';
 
-export const DENY_MESSAGE = `STOP. The authoritative spec corpus (docs/rfc, docs/itu, docs/w3c) is read only by the spec-lookup agent.
-
-Do not read, grep, or cat these files directly, and do not search a directory that contains them. Hand the question to the spec-lookup subagent, which censuses the whole docs/ tree, fetches missing or superseded documents, reads whole sections, and returns a cited answer:
+export const DENY_MESSAGE = `STOP. Delegate authoritative spec reads (docs/rfc, docs/itu, docs/w3c) to the spec-lookup agent.
 
   Agent(subagent_type: "spec-lookup", prompt: "<your exact spec question>")
 
-To search the rest of the repository, scope the search to a directory that does not contain docs/rfc, docs/itu, or docs/w3c.`;
+The canonical procedure is .claude/skills/spec-lookup/SKILL.md. Metadata-only maintenance (such as bun spec list or bun spec status) is allowed; shell comments do not grant an exemption. Scope source searches outside the corpus, or explicitly exclude every corpus directory. See docs/SPEC-TOOLING.md for the gate's boundaries.`;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -581,12 +579,16 @@ function searchRoots(
 
 function isReader(segment: Segment): boolean {
 	const words = segment.words;
+	const start = commandIndex(words);
+	const runner = path.basename(words[start] ?? '');
 	return words.some((word, index) => {
-		const next = words[index + 1] ?? '';
-		if (/scripts\/spec\/main\.ts$/.test(word)) return READER_COMMANDS.has(next);
-		if (word !== 'spec') return false;
-		const before = path.basename(words[index - 1] ?? '');
-		return (before === 'bun' || before === 'run') && READER_COMMANDS.has(next);
+		const entrypoint = /(?:^|\/)scripts\/spec\/main\.ts$/.test(word);
+		if (!entrypoint && !(word === 'spec' && SPEC_RUNNERS.has(runner))) return false;
+		if (index < start) return false;
+		// Global flags may precede the subcommand. Check the remaining argv, not
+		// just the adjacent token; command text in an echo is not an invocation.
+		if (entrypoint && index !== start && !SPEC_RUNNERS.has(runner)) return false;
+		return words.slice(index + 1).some((argument) => READER_COMMANDS.has(argument));
 	});
 }
 
@@ -632,7 +634,6 @@ function segmentReads(
 }
 
 function decideBash(command: string, cwd: string, dirs: readonly string[]): Decision {
-	if (INTENT_RE.test(command)) return { kind: 'pass' };
 	const split = splitHeredocs(command);
 	const script = tokenize(split.text);
 	if (isMetadataOnly(command, script)) return { kind: 'pass' };
@@ -678,9 +679,7 @@ export function decide(payload: Payload, project: string): Decision {
 			return decideGrep(payload, dirs);
 		case 'Bash': {
 			const command = stringField(payload.input, 'command');
-			return command === undefined
-				? { kind: 'pass' }
-				: decideBash(command, payload.cwd, dirs);
+			return command === undefined ? { kind: 'pass' } : decideBash(command, payload.cwd, dirs);
 		}
 		default:
 			return { kind: 'pass' };

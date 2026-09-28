@@ -88,7 +88,7 @@ describe('Bash', () => {
 		['pass', "git commit -F - <<'EOF'\nfix docs/rfc parser\nEOF"],
 		['pass', 'git commit -m "$(cat <<\'EOF\'\nfix docs/rfc parser\nEOF\n)"'],
 		['pass', 'gh pr create --body-file - <<EOF\nmentions docs/rfc\nEOF'],
-		['pass', 'cat docs/rfc/rfc5280.txt # spec-intent: vendoring check before upgrade'],
+		['deny', 'cat docs/rfc/rfc5280.txt # spec-intent: vendoring check before upgrade'],
 		['pass', 'python3 - <<\'EOF\'\ns = """\nx = [a, b]\ny = \'(10/2019)\'\n"""\nEOF'],
 		['pass', 'echo "[a/[b/[c"'],
 		['pass', `curl -sSL https://www.itu.int/rec/x | rg -o 'href="[^"]*(\\.pdf|!PDF)[^"]*"'`],
@@ -140,6 +140,17 @@ describe('Bash', () => {
 		['deny', 'xargs -0 rg nextUpdate'],
 		['deny', 'bun spec read rfc5280 4.1'],
 		['deny', 'bun scripts/spec/main.ts search nextUpdate'],
+		['deny', 'bun spec --json read rfc5280 4.1'],
+		['deny', 'bun run spec --json census REAL NR3'],
+		['deny', 'bun --cwd . run spec census REAL NR3'],
+		['deny', 'node scripts/spec/main.ts --json headings rfc5280'],
+		['deny', 'bun spec census REAL NR3 # spec-intent: just a maintenance scan'],
+		['deny', 'echo "# spec-intent: vendoring check"; cat docs/rfc/rfc5280.txt'],
+		['pass', 'bun spec status 5280 --offline'],
+		['pass', 'bun spec --json status 5280'],
+		['pass', 'bun spec fetch rfc 5280'],
+		['pass', 'bun spec --help'],
+		['pass', 'echo "bun spec read rfc5280 4.1"'],
 	] as const)('%s %s', (want, command) => {
 		expect(verdictOf(bash(command))).toBe(want);
 	});
@@ -147,6 +158,18 @@ describe('Bash', () => {
 	test('lets the spec-lookup agent read the corpus', () => {
 		expect(verdictOf(bash('cat docs/rfc/rfc5280.txt', 'spec-lookup'))).toBe('pass');
 		expect(verdictOf(bash('rg nextUpdate', 'spec-lookup'))).toBe('pass');
+		expect(verdictOf(bash('bun spec --json census REAL NR3', 'spec-lookup'))).toBe('pass');
+	});
+
+	test('takes agent identity from the hook payload, never a shell comment', () => {
+		const payload = parsePayload(JSON.stringify({
+			tool_name: 'Bash', agent_type: 'spec-lookup', cwd: projectRoot,
+			tool_input: { command: 'bun spec read rfc5280 4.1' },
+		}));
+		expect(payload).toBeDefined();
+		if (payload === undefined) return;
+		expect(decide(payload, projectRoot).kind).toBe('pass');
+		expect(decide({ ...payload, agent: 'other' }, projectRoot).kind).toBe('deny');
 	});
 });
 
@@ -159,13 +182,11 @@ describe('tokenize', () => {
 			{ words: ['e'], piped: false },
 		]);
 	});
-
 	test('keeps quoted words whole and escaped separators literal', () => {
 		expect(tokenize(`printf '%s;%s' "a b" c\\;`).segments).toEqual([
 			{ words: ['printf', '%s;%s', 'a b', 'c;'], piped: false },
 		]);
 	});
-
 	test('splits command substitutions into their own segments', () => {
 		const script = tokenize('echo "x $(cat f) y"');
 		expect(script.substitutions).toBe(true);
@@ -176,35 +197,26 @@ describe('tokenize', () => {
 describe('splitHeredocs', () => {
 	test('drops prose bodies and keeps executable ones', () => {
 		expect(splitHeredocs("git commit -F - <<'EOF'\nbody\nEOF\nls")).toEqual({
-			text: "git commit -F - <<'EOF'\nls",
-			bodies: [],
+			text: "git commit -F - <<'EOF'\nls", bodies: [],
 		});
 		expect(splitHeredocs('bash <<EOF\ncat x\nEOF')).toEqual({
-			text: 'bash <<EOF',
-			bodies: ['cat x'],
+			text: 'bash <<EOF', bodies: ['cat x'],
 		});
 	});
 });
 
 describe('hook output', () => {
 	test('parses a payload and renders a deny decision', () => {
-		const payload = parsePayload(
-			JSON.stringify({
-				tool_name: 'Read',
-				cwd: projectRoot,
-				tool_input: { file_path: rfc5280 },
-			}),
-		);
+		const payload = parsePayload(JSON.stringify({
+			tool_name: 'Read', cwd: projectRoot, tool_input: { file_path: rfc5280 },
+		}));
 		expect(payload).toBeDefined();
 		if (payload === undefined) return;
-		const output = render(decide(payload, projectRoot));
-		expect(output).toContain('"permissionDecision":"deny"');
+		expect(render(decide(payload, projectRoot))).toContain('"permissionDecision":"deny"');
 	});
-
 	test('renders nothing for a pass', () => {
 		expect(render({ kind: 'pass' })).toBeUndefined();
 	});
-
 	test('ignores input that is not a tool payload', () => {
 		expect(parsePayload('not json')).toBeUndefined();
 		expect(parsePayload('{"tool_name":"Read"}')).toBeUndefined();

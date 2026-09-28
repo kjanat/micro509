@@ -1,0 +1,48 @@
+name: Spec tooling
+on:
+  pull_request:
+    paths:
+      - .claude/**
+      - .github/workflows/spec-tooling.yml
+      - .github/actions/setup-ts/**
+      - scripts/spec/**
+      - scripts/fetch-spec.bun.ts
+      - test/spec-*.test.ts
+      - docs/AGENTS.md
+      - docs/SPEC-TOOLING.md
+      - package.json
+      - bun.lock
+      - tsconfig*.json
+  push:
+    branches: [master]
+    paths:
+      - .claude/**
+      - .github/workflows/spec-tooling.yml
+      - .github/actions/setup-ts/**
+      - scripts/spec/**
+      - scripts/fetch-spec.bun.ts
+      - test/spec-*.test.ts
+      - docs/AGENTS.md
+      - docs/SPEC-TOOLING.md
+      - package.json
+      - bun.lock
+      - tsconfig*.json
+permissions: { contents: read }
+concurrency:
+  group: spec-tooling-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    name: Spec tooling regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: $/.github/actions/setup-ts
+        with: { install-bun: true, install-node: true, install-deno: true }
+      - run: bun install --frozen-lockfile
+      - name: Reader, gate and research regressions
+        run: bun test test/spec-reader.test.ts test/spec-lookup-gate.test.ts test/spec-research.test.ts
+      - name: Tooling and test types
+        run: run -pK typecheck:other typecheck:regular

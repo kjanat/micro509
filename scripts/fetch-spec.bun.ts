@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Out } from 'dreamcli';
-import { arg, CLIError, cli, command } from 'dreamcli';
+import { arg, CLIError, cli, command, isMainModule } from 'dreamcli';
+import { repositoryRoot } from './spec/corpus.ts';
 import { licenseLinks, provenance } from './spec/w3c.ts';
 
 const W3C_SPECS = {
@@ -32,9 +33,7 @@ const W3C_NAMES = [
 ] as const satisfies readonly (keyof typeof W3C_SPECS)[];
 
 const ITU_ITEM = /^T-REC-(X\.\d+)-\d{6}-[A-Z]!\w*!PDF-E$/;
-
 const PANDOC = { repository: 'jgm/pandoc', version: '3.11' } as const;
-
 const PANDOC_ASSETS = new Map([
 	['linux-x64', 'linux-amd64.tar.gz'],
 	['linux-arm64', 'linux-arm64.tar.gz'],
@@ -42,10 +41,14 @@ const PANDOC_ASSETS = new Map([
 	['darwin-x64', 'x86_64-macOS.zip'],
 	['win32-x64', 'windows-x86_64.zip'],
 ]);
-
-const PANDOC_CACHE = path.join('node_modules', '.cache', 'pandoc', PANDOC.version);
-
+const PANDOC_CACHE = path.join(repositoryRoot, 'node_modules', '.cache', 'pandoc', PANDOC.version);
 const ITU_CONVERTER = path.join(import.meta.dir, 'spec', 'itu.lua');
+
+function fetched(out: Out, kind: 'rfc' | 'itu' | 'w3c', id: string, destination: string, url: string): void {
+	const relativePath = path.relative(repositoryRoot, destination).split(path.sep).join('/');
+	if (out.jsonMode) out.json({ kind, id, path: relativePath, url });
+	else out.log(relativePath);
+}
 
 function tool(name: string, code: string, suggest: string): string {
 	const found = Bun.which(name);
@@ -53,11 +56,7 @@ function tool(name: string, code: string, suggest: string): string {
 	return found;
 }
 
-async function run(
-	argv: readonly string[],
-	stdin: Uint8Array | undefined,
-	code: string,
-): Promise<string> {
+async function run(argv: readonly string[], stdin: Uint8Array | undefined, code: string): Promise<string> {
 	const child = Bun.spawn([...argv], { stdin: stdin ?? 'ignore', stdout: 'pipe', stderr: 'pipe' });
 	const [output, errors, exitCode] = await Promise.all([
 		new Response(child.stdout).text(),
@@ -65,12 +64,7 @@ async function run(
 		child.exited,
 	]);
 	if (exitCode !== 0) {
-		throw new CLIError(
-			`${path.basename(argv[0] ?? '')} exited with ${exitCode}: ${errors.trim()}`,
-			{
-				code,
-			},
-		);
+		throw new CLIError(`${path.basename(argv[0] ?? '')} exited with ${exitCode}: ${errors.trim()}`, { code });
 	}
 	return output;
 }
@@ -87,9 +81,7 @@ async function retry(argv: readonly string[], code: string, out: Out): Promise<s
 		} catch (error) {
 			if (attempt === 4) throw error;
 			const reason = error instanceof Error ? error.message : String(error);
-			out.warn(
-				`GitHub release request failed (${reason}); retrying in ${delay}s (attempt ${attempt + 1}/4)`,
-			);
+			out.warn(`GitHub release request failed (${reason}); retrying in ${delay}s (attempt ${attempt + 1}/4)`);
 			await Bun.sleep(delay * 1000);
 			delay *= 2;
 		}
@@ -119,29 +111,15 @@ async function pandoc(out: Out): Promise<string> {
 	if (cached !== undefined) return cached;
 	const suffix = PANDOC_ASSETS.get(`${process.platform}-${process.arch}`);
 	if (suffix === undefined) {
-		throw new CLIError(
-			`no pandoc ${PANDOC.version} build for ${process.platform}-${process.arch}`,
-			{
-				code: 'PANDOC_UNSUPPORTED_PLATFORM',
-			},
-		);
+		throw new CLIError(`no pandoc ${PANDOC.version} build for ${process.platform}-${process.arch}`, { code: 'PANDOC_UNSUPPORTED_PLATFORM' });
 	}
-	const gh = tool(
-		'gh',
-		'PANDOC_GH_MISSING',
-		'Install the GitHub CLI, which downloads and verifies pandoc',
-	);
-	const release = releaseOf(
-		await retry(
-			[gh, 'release', 'view', '--repo', PANDOC.repository, '--json', 'tagName,url'],
-			'PANDOC_RELEASE_FAILED',
-			out,
-		),
-	);
+	const gh = tool('gh', 'PANDOC_GH_MISSING', 'Install the GitHub CLI, which downloads and verifies pandoc');
+	const release = releaseOf(await retry(
+		[gh, 'release', 'view', '--repo', PANDOC.repository, '--json', 'tagName,url'],
+		'PANDOC_RELEASE_FAILED', out,
+	));
 	if (release !== undefined && release.tag !== PANDOC.version) {
-		out.warn(
-			`pandoc ${PANDOC.version} is not the latest release ${release.tag}; see ${release.url}`,
-		);
+		out.warn(`pandoc ${PANDOC.version} is not the latest release ${release.tag}; see ${release.url}`);
 	}
 	const asset = `pandoc-${PANDOC.version}-${suffix}`;
 	const scratch = mkdtempSync(path.join(tmpdir(), 'pandoc-'));
@@ -149,26 +127,12 @@ async function pandoc(out: Out): Promise<string> {
 		const archive = path.join(scratch, asset);
 		out.status(`downloading ${PANDOC.repository} ${asset}`);
 		await retry(
-			[
-				gh,
-				'release',
-				'download',
-				PANDOC.version,
-				'--repo',
-				PANDOC.repository,
-				'--pattern',
-				asset,
-				'--output',
-				archive,
-				'--clobber',
-			],
-			'PANDOC_DOWNLOAD_FAILED',
-			out,
+			[gh, 'release', 'download', PANDOC.version, '--repo', PANDOC.repository, '--pattern', asset, '--output', archive, '--clobber'],
+			'PANDOC_DOWNLOAD_FAILED', out,
 		);
 		await retry(
 			[gh, 'release', 'verify-asset', PANDOC.version, archive, '--repo', PANDOC.repository],
-			'PANDOC_UNVERIFIED',
-			out,
+			'PANDOC_UNVERIFIED', out,
 		);
 		const staging = `${PANDOC_CACHE}.partial`;
 		rmSync(staging, { recursive: true, force: true });
@@ -188,8 +152,12 @@ async function pandoc(out: Out): Promise<string> {
 	return installed;
 }
 
+function ituUrl(id: string): string {
+	return `https://www.itu.int/rec/dologin.asp?lang=e&id=${id}&type=items`;
+}
+
 async function fetchItuItem(id: string, out: Out): Promise<Uint8Array | undefined> {
-	const url = `https://www.itu.int/rec/dologin.asp?lang=e&id=${id}&type=items`;
+	const url = ituUrl(id);
 	out.status(`fetching ${url}`);
 	const response = await fetch(url);
 	return response.ok ? await response.bytes() : undefined;
@@ -204,32 +172,24 @@ const rfc = command('rfc')
 		const response = await fetch(url);
 		if (!response.ok) {
 			throw new CLIError(`rfc${args.number}: ${response.status} ${response.statusText}`, {
-				code: 'RFC_FETCH_FAILED',
-				suggest: 'Check the number against https://www.rfc-editor.org/',
+				code: 'RFC_FETCH_FAILED', suggest: 'Check the number against https://www.rfc-editor.org/',
 			});
 		}
-		const destination = `docs/rfc/rfc${args.number}.txt`;
+		const destination = path.join(repositoryRoot, 'docs', 'rfc', `rfc${args.number}.txt`);
 		await Bun.write(destination, await response.bytes());
-		out.log(destination);
+		fetched(out, 'rfc', `rfc${args.number}`, destination, url);
 	});
 
 const itu = command('itu')
 	.description('Vendor an ITU-T Recommendation as text, from its Word item when ITU publishes one')
-	.arg(
-		'id',
-		arg
-			.string()
-			.pattern(ITU_ITEM)
-			.env('ITU')
-			.describe('ITU item id, e.g. T-REC-X.509-201910-I!!PDF-E or T-REC-X.509-202110-I!Cor1!PDF-E'),
-	)
+	.arg('id', arg.string().pattern(ITU_ITEM).env('ITU').describe('ITU item id, e.g. T-REC-X.509-201910-I!!PDF-E or T-REC-X.509-202110-I!Cor1!PDF-E'))
 	.action(async ({ args, out }) => {
 		const recommendation = ITU_ITEM.exec(args.id)?.[1];
 		if (recommendation === undefined) {
 			throw new CLIError(`not an ITU item id: ${args.id}`, { code: 'ITU_ID_INVALID' });
 		}
 		const wordId = args.id.replace(/!PDF-E$/, '!MSW-E');
-		const directory = path.join('docs', 'itu', recommendation);
+		const directory = path.join(repositoryRoot, 'docs', 'itu', recommendation);
 		mkdirSync(directory, { recursive: true });
 		const scratch = mkdtempSync(path.join(tmpdir(), 'itu-'));
 		try {
@@ -238,37 +198,24 @@ const itu = command('itu')
 				const docx = path.join(scratch, 'item.docx');
 				await Bun.write(docx, word);
 				const destination = path.join(directory, `${wordId}.txt`);
-				await run(
-					[await pandoc(out), 'lua', ITU_CONVERTER, docx, destination],
-					undefined,
-					'ITU_CONVERT_FAILED',
-				);
+				await run([await pandoc(out), 'lua', ITU_CONVERTER, docx, destination], undefined, 'ITU_CONVERT_FAILED');
 				rmSync(path.join(directory, `${args.id}.txt`), { force: true });
-				out.log(destination);
+				fetched(out, 'itu', wordId, destination, ituUrl(wordId));
 				return;
 			}
-			const pdftotext = tool(
-				'pdftotext',
-				'ITU_CONVERTER_MISSING',
-				'Install poppler, which provides pdftotext',
-			);
+			const pdftotext = tool('pdftotext', 'ITU_CONVERTER_MISSING', 'Install poppler, which provides pdftotext');
 			const bytes = await fetchItuItem(args.id, out);
 			if (bytes === undefined || !startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
 				throw new CLIError(`${args.id}: neither a Word document nor a PDF`, {
-					code: 'ITU_FETCH_FAILED',
-					suggest: `Find the item id on https://www.itu.int/rec/T-REC-${recommendation}`,
+					code: 'ITU_FETCH_FAILED', suggest: `Find the item id on https://www.itu.int/rec/T-REC-${recommendation}`,
 				});
 			}
 			const pdf = path.join(scratch, 'item.pdf');
 			await Bun.write(pdf, bytes);
 			const destination = path.join(directory, `${args.id}.txt`);
-			await run(
-				[pdftotext, '-layout', '-enc', 'UTF-8', pdf, destination],
-				undefined,
-				'ITU_CONVERT_FAILED',
-			);
+			await run([pdftotext, '-layout', '-enc', 'UTF-8', pdf, destination], undefined, 'ITU_CONVERT_FAILED');
 			rmSync(path.join(directory, `${wordId}.txt`), { force: true });
-			out.log(destination);
+			fetched(out, 'itu', args.id, destination, ituUrl(args.id));
 		} finally {
 			rmSync(scratch, { recursive: true, force: true });
 		}
@@ -283,32 +230,31 @@ const w3c = command('w3c')
 		out.status(`fetching ${spec.url}`);
 		const response = await fetch(spec.url);
 		if (!response.ok) {
-			throw new CLIError(`${args.spec}: ${response.status} ${response.statusText}`, {
-				code: 'W3C_FETCH_FAILED',
-				suggest: `Check ${spec.url}`,
-			});
+			throw new CLIError(`${args.spec}: ${response.status} ${response.statusText}`, { code: 'W3C_FETCH_FAILED', suggest: `Check ${spec.url}` });
 		}
 		const html = await response.bytes();
 		const licenses = licenseLinks(new TextDecoder().decode(html), response.url);
 		if (licenses.length === 0) {
-			throw new CLIError(`${args.spec}: no license link found in ${spec.url}`, {
-				code: 'W3C_LICENSE_MISSING',
-				suggest: 'Vendor only text whose license the page links',
-			});
+			throw new CLIError(`${args.spec}: no license link found in ${spec.url}`, { code: 'W3C_LICENSE_MISSING', suggest: 'Vendor only text whose license the page links' });
 		}
-		const text = await run(
-			[w3m, '-T', 'text/html', '-I', 'UTF-8', '-O', 'UTF-8', '-cols', '80', '-dump'],
-			html,
-			'W3C_CONVERT_FAILED',
-		);
-		const destination = `docs/w3c/${spec.file}`;
+		const text = await run([w3m, '-T', 'text/html', '-I', 'UTF-8', '-O', 'UTF-8', '-cols', '80', '-dump'], html, 'W3C_CONVERT_FAILED');
+		const destination = path.join(repositoryRoot, 'docs', 'w3c', spec.file);
 		await Bun.write(destination, `${text.trimEnd()}\n${provenance(spec.url, licenses)}`);
-		out.log(destination);
+		fetched(out, 'w3c', args.spec, destination, spec.url);
 	});
 
-cli('fetch-spec')
-	.description('Vendor standards text into docs/')
+export const fetchCommand = command('fetch')
+	.description('Fetch RFC, ITU-T, W3C or WHATWG text into the repository corpus')
 	.command(rfc)
 	.command(itu)
-	.command(w3c)
-	.run();
+	.command(w3c);
+
+// Keep bun rfc / bun itu / bun w3c compatible without executing on import.
+if (isMainModule(import.meta)) {
+	await cli('fetch-spec')
+		.description('Vendor standards text into docs/')
+		.command(rfc)
+		.command(itu)
+		.command(w3c)
+		.run();
+}
