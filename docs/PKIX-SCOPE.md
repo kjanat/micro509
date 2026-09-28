@@ -114,7 +114,9 @@ Current conformance evidence:
       A decoded value that preparation refuses, such as one holding a
       private-use character, makes its comparison Undefined as well. In a
       directoryName name constraint an Undefined comparison fails an excluded
-      subtree and does not satisfy a permitted one. Issuer/subject chaining and
+      subtree and does not satisfy a permitted one. A multi-valued RDN is
+      Undefined when no one-to-one pairing of its attributes matches every
+      pair but one does with Undefined pairs allowed. Issuer/subject chaining and
       CRL and OCSP issuer matching treat it as no match.
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.

@@ -105,39 +105,46 @@ function relativeDistinguishedNameMatch(
 	if (left.attributes.length !== right.attributes.length) {
 		return 'mismatch';
 	}
-	const used = Array.from({ length: right.attributes.length }, () => false);
-	let undetermined = false;
-	for (const leftAttribute of left.attributes) {
-		const pick = pickAttributePartner(leftAttribute, right.attributes, used);
-		if (pick === undefined) {
-			return 'mismatch';
-		}
-		used[pick.index] = true;
-		undetermined ||= pick.match === 'undetermined';
+	const matches = left.attributes.map((leftAttribute) =>
+		right.attributes.map((rightAttribute) =>
+			nameAttributeValueMatch(leftAttribute, rightAttribute),
+		),
+	);
+	if (pairsEveryAttribute(matches, (match) => match === 'match')) {
+		return 'match';
 	}
-	return undetermined ? 'undetermined' : 'match';
+	return pairsEveryAttribute(matches, (match) => match !== 'mismatch')
+		? 'undetermined'
+		: 'mismatch';
 }
 
-function pickAttributePartner(
-	attribute: ParsedNameAttribute,
-	candidates: readonly ParsedNameAttribute[],
-	used: readonly boolean[],
-): { readonly index: number; readonly match: NameMatch } | undefined {
-	let open: number | undefined;
-	for (let index = 0; index < candidates.length; index += 1) {
-		const candidate = candidates[index];
-		if (candidate === undefined || used[index] === true) {
-			continue;
+/** Whether every left attribute pairs with a distinct right one through an accepted comparison. */
+function pairsEveryAttribute(
+	matches: readonly (readonly NameMatch[])[],
+	accepts: (match: NameMatch) => boolean,
+): boolean {
+	const partners: (number | undefined)[] = matches.map(() => undefined);
+	const augment = (left: number, visited: boolean[]): boolean => {
+		const row = matches[left] ?? [];
+		for (let right = 0; right < row.length; right += 1) {
+			if (visited[right] === true || !accepts(row[right] ?? 'mismatch')) {
+				continue;
+			}
+			visited[right] = true;
+			const partner = partners[right];
+			if (partner === undefined || augment(partner, visited)) {
+				partners[right] = left;
+				return true;
+			}
 		}
-		const match = nameAttributeValueMatch(attribute, candidate);
-		if (match === 'match') {
-			return { index, match };
-		}
-		if (match === 'undetermined' && open === undefined) {
-			open = index;
-		}
-	}
-	return open === undefined ? undefined : { index: open, match: 'undetermined' };
+		return false;
+	};
+	return matches.every((_, left) =>
+		augment(
+			left,
+			matches.map(() => false),
+		),
+	);
 }
 
 /** Compares two AttributeTypeAndValue pairs using RFC 5280 [§7.1](https://datatracker.ietf.org/doc/html/rfc5280#section-7.1) string-prep for DirectoryString tags. */

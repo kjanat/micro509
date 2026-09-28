@@ -511,6 +511,48 @@ describe('name constraint fixtures', () => {
 		}
 	});
 
+	it('pairs a multi-valued RDN in full before calling it a mismatch', async () => {
+		const excluded = buildDirectoryNameDerHex([
+			[
+				{ oid: OIDS.organizationName, value: 'bbbb', encoding: 'utf8' },
+				{ oid: OIDS.organizationName, value: 'cccc', encoding: 'utf8' },
+			],
+		]);
+		const rootNameConstraints: NameConstraintsInput = {
+			excludedSubtrees: [{ base: { type: 'directoryName', derHex: excluded } }],
+		};
+		const undetermined = await verifyNameConstraintFixture({
+			rootNameConstraints,
+			leafSubjectAltNames: [
+				{
+					type: 'directoryName',
+					derHex: buildDirectoryNameDerHex([
+						[
+							{ oid: OIDS.organizationName, value: '\uE000', encoding: 'utf8' },
+							{ oid: OIDS.organizationName, value: 'BBBB', encoding: 'printable' },
+						],
+					]),
+				},
+			],
+		});
+		expect(undetermined).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		const mismatch = await verifyNameConstraintFixture({
+			rootNameConstraints,
+			leafSubjectAltNames: [
+				{
+					type: 'directoryName',
+					derHex: buildDirectoryNameDerHex([
+						[
+							{ oid: OIDS.organizationName, value: 'dddd', encoding: 'utf8' },
+							{ oid: OIDS.organizationName, value: 'BBBB', encoding: 'printable' },
+						],
+					]),
+				},
+			],
+		});
+		expect(mismatch).toMatchObject({ ok: true });
+	});
+
 	it('matches rfc822Name local-part case-sensitively and host case-insensitively', async () => {
 		const localMismatch = await verifyNameConstraintFixture({
 			rootNameConstraints: legacyMailboxNameConstraints('permitted', 'admin@example.com'),

@@ -417,7 +417,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   such as one over a value holding a private-use character, counted as a
   mismatch, so an excluded subtree did not exclude the name. Such a comparison
   is now Undefined. It fails an excluded subtree and does not satisfy a
-  permitted one.
+  permitted one. A multi-valued RDN matches when some one-to-one pairing of
+  its attributes matches every pair, and is Undefined when no such pairing
+  exists but one does with Undefined pairs allowed, whatever order its
+  attributes take.
 - URI name constraints and URI-ID matching read a URI SAN's host differently.
   The constraint took the WHATWG URL hostname, which left
   `ldap://%62locked.example/` percent-encoded and kept the trailing dot of
