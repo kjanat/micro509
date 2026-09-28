@@ -173,7 +173,7 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 }
 
 /** Verifies that `certificate` was signed by `issuer`'s public key. */
-export async function verifyCertificateSignature(
+export function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
 ): Promise<VerifyCertificateSignatureResult> {
@@ -861,7 +861,7 @@ function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnc
 }
 
 /** Verifies that `certificate` was signed by a bare trust anchor's key. */
-export async function verifyTrustAnchorSignature(
+export function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
 ): Promise<VerifyCertificateSignatureResult> {
