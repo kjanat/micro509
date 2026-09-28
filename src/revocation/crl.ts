@@ -53,7 +53,10 @@ import {
 	signBytes,
 } from '#micro509/internal/crypto/signing';
 import { base64Encode } from '#micro509/internal/shared/base64';
-import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
+import {
+	compareDistinguishedNames,
+	compareRelativeDistinguishedNames,
+} from '#micro509/internal/shared/dn';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -2133,36 +2136,6 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	}
 	for (let index = 0; index < left.length; index += 1) {
 		if (left[index] !== right[index]) {
-			return false;
-		}
-	}
-	return true;
-}
-
-/** Set-equality comparison for RDN attribute sets (order-independent, RFC 4518 string prep). */
-function compareRelativeDistinguishedNames(
-	left: ParsedRelativeDistinguishedName,
-	right: ParsedRelativeDistinguishedName,
-): boolean {
-	if (left.attributes.length !== right.attributes.length) {
-		return false;
-	}
-	const matched = Array.from({ length: right.attributes.length }, () => false);
-	for (const leftAttribute of left.attributes) {
-		let found = false;
-		for (let index = 0; index < right.attributes.length; index += 1) {
-			const rightAttribute = right.attributes[index];
-			if (rightAttribute === undefined || matched[index]) {
-				continue;
-			}
-			if (!compareNameAttributeValue(leftAttribute, rightAttribute)) {
-				continue;
-			}
-			matched[index] = true;
-			found = true;
-			break;
-		}
-		if (!found) {
 			return false;
 		}
 	}

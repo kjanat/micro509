@@ -98,6 +98,10 @@ export function compareRelativeDistinguishedNames(
 	return relativeDistinguishedNameMatch(left, right) === 'match';
 }
 
+/**
+ * `match` when the two RDNs' attributes pair one to one with every pair
+ * matching, else `undetermined` when they pair with Undefined pairs allowed.
+ */
 function relativeDistinguishedNameMatch(
 	left: ParsedRelativeDistinguishedName,
 	right: ParsedRelativeDistinguishedName,
@@ -105,46 +109,68 @@ function relativeDistinguishedNameMatch(
 	if (left.attributes.length !== right.attributes.length) {
 		return 'mismatch';
 	}
-	const matches = left.attributes.map((leftAttribute) =>
-		right.attributes.map((rightAttribute) =>
-			nameAttributeValueMatch(leftAttribute, rightAttribute),
-		),
-	);
-	if (pairsEveryAttribute(matches, (match) => match === 'match')) {
-		return 'match';
+	const leftClasses = comparisonClasses(left.attributes);
+	const rightClasses = comparisonClasses(right.attributes);
+	if (leftClasses === undefined || rightClasses === undefined) {
+		return 'mismatch';
 	}
-	return pairsEveryAttribute(matches, (match) => match !== 'mismatch')
-		? 'undetermined'
-		: 'mismatch';
+	let undetermined = false;
+	for (const [comparisonClass, leftClass] of leftClasses) {
+		const rightClass = rightClasses.get(comparisonClass);
+		if (rightClass === undefined || rightClass.size !== leftClass.size) {
+			return 'mismatch';
+		}
+		if (
+			unpairedKeys(leftClass, rightClass) > rightClass.unprepared ||
+			unpairedKeys(rightClass, leftClass) > leftClass.unprepared
+		) {
+			return 'mismatch';
+		}
+		undetermined ||= leftClass.unprepared > 0 || rightClass.unprepared > 0;
+	}
+	return undetermined ? 'undetermined' : 'match';
 }
 
-/** Whether every left attribute pairs with a distinct right one through an accepted comparison. */
-function pairsEveryAttribute(
-	matches: readonly (readonly NameMatch[])[],
-	accepts: (match: NameMatch) => boolean,
-): boolean {
-	const partners: (number | undefined)[] = matches.map(() => undefined);
-	const augment = (left: number, visited: boolean[]): boolean => {
-		const row = matches[left] ?? [];
-		for (let right = 0; right < row.length; right += 1) {
-			if (visited[right] === true || !accepts(row[right] ?? 'mismatch')) {
-				continue;
-			}
-			visited[right] = true;
-			const partner = partners[right];
-			if (partner === undefined || augment(partner, visited)) {
-				partners[right] = left;
-				return true;
-			}
+/** The attributes of one comparison class in an RDN. */
+interface ComparisonClass {
+	readonly keys: Map<string, number>;
+	unprepared: number;
+	size: number;
+}
+
+/** An RDN's attributes by comparison class, or `undefined` when one of them is incomparable. */
+function comparisonClasses(
+	attributes: readonly ParsedNameAttribute[],
+): Map<string, ComparisonClass> | undefined {
+	const classes = new Map<string, ComparisonClass>();
+	for (const attribute of attributes) {
+		const comparison = attributeComparison(attribute);
+		if (comparison.type === 'incomparable') {
+			return undefined;
 		}
-		return false;
-	};
-	return matches.every((_, left) =>
-		augment(
-			left,
-			matches.map(() => false),
-		),
-	);
+		const comparisonClass = classes.get(comparison.comparisonClass) ?? {
+			keys: new Map<string, number>(),
+			unprepared: 0,
+			size: 0,
+		};
+		comparisonClass.size += 1;
+		if (comparison.type === 'unprepared') {
+			comparisonClass.unprepared += 1;
+		} else {
+			comparisonClass.keys.set(comparison.key, (comparisonClass.keys.get(comparison.key) ?? 0) + 1);
+		}
+		classes.set(comparison.comparisonClass, comparisonClass);
+	}
+	return classes;
+}
+
+/** How many keyed attributes of `from` find no equal key left in `to`. */
+function unpairedKeys(from: ComparisonClass, to: ComparisonClass): number {
+	let unpaired = 0;
+	for (const [key, count] of from.keys) {
+		unpaired += Math.max(0, count - (to.keys.get(key) ?? 0));
+	}
+	return unpaired;
 }
 
 /** Compares two AttributeTypeAndValue pairs using RFC 5280 [§7.1](https://datatracker.ietf.org/doc/html/rfc5280#section-7.1) string-prep for DirectoryString tags. */
@@ -156,72 +182,76 @@ export function compareNameAttributeValue(
 }
 
 function nameAttributeValueMatch(left: ParsedNameAttribute, right: ParsedNameAttribute): NameMatch {
-	if (left.oid !== right.oid) {
+	const leftComparison = attributeComparison(left);
+	const rightComparison = attributeComparison(right);
+	if (
+		leftComparison.type === 'incomparable' ||
+		rightComparison.type === 'incomparable' ||
+		leftComparison.comparisonClass !== rightComparison.comparisonClass
+	) {
 		return 'mismatch';
 	}
-	if (left.oid === OIDS.domainComponent) {
+	if (leftComparison.type === 'keyed' && rightComparison.type === 'keyed') {
+		return leftComparison.key === rightComparison.key ? 'match' : 'mismatch';
+	}
+	return 'undetermined';
+}
+
+/**
+ * How an attribute value takes part in matching. Two attributes match when
+ * they share a comparison class and a key, a value string preparation refuses
+ * is Undefined against every value of its class, and an incomparable value
+ * matches nothing.
+ */
+type AttributeComparison =
+	| { readonly type: 'keyed'; readonly comparisonClass: string; readonly key: string }
+	| { readonly type: 'unprepared'; readonly comparisonClass: string }
+	| { readonly type: 'incomparable' };
+
+const INCOMPARABLE: AttributeComparison = { type: 'incomparable' };
+
+function attributeComparison(attribute: ParsedNameAttribute): AttributeComparison {
+	if (attribute.oid === OIDS.domainComponent) {
 		// RFC 5280 §7.3 / RFC 4519 caseIgnoreIA5Match: domainComponent is
 		// IA5String, prepared and compared case-insensitively with insignificant
 		// spaces collapsed.
-		let undetermined = false;
-		const equal = compareIa5AttributeValue(left, right, (leftValue, rightValue) => {
-			const preparedLeft = prepareNameCompareString(leftValue);
-			const preparedRight = prepareNameCompareString(rightValue);
-			if (preparedLeft === undefined || preparedRight === undefined) {
-				undetermined = true;
-				return false;
-			}
-			return preparedLeft === preparedRight;
-		});
-		if (equal) {
-			return 'match';
-		}
-		return undetermined ? 'undetermined' : 'mismatch';
+		return attribute.valueTag === 0x16 && isAscii(attribute.value)
+			? preparedComparison(`${attribute.oid} ia5`, attribute.value)
+			: INCOMPARABLE;
 	}
 	// RFC 5280 §4.1.2.6 and RFC 2985 §6.1 pkcs9CaseIgnoreMatch: emailAddress is
 	// IA5String, matched character by character without regard to case and
 	// without the RFC 4518 space collapsing a DirectoryString attribute gets.
 	// Under any other tag the value falls through to the general comparison.
 	if (
-		left.oid === OIDS.emailAddress &&
-		compareIa5AttributeValue(
-			left,
-			right,
-			(leftValue, rightValue) => leftValue.toLowerCase() === rightValue.toLowerCase(),
-		)
+		attribute.oid === OIDS.emailAddress &&
+		attribute.valueTag === 0x16 &&
+		isAscii(attribute.value)
 	) {
-		return 'match';
+		return {
+			type: 'keyed',
+			comparisonClass: `${attribute.oid} exact`,
+			key: `ia5 ${attribute.value.toLowerCase()}`,
+		};
 	}
-	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
-		const preparedLeft = prepareNameCompareString(left.value);
-		const preparedRight = prepareNameCompareString(right.value);
-		if (preparedLeft === undefined || preparedRight === undefined) {
-			return 'undetermined';
-		}
-		return preparedLeft === preparedRight ? 'match' : 'mismatch';
+	if (isDirectoryStringTag(attribute.valueTag)) {
+		return preparedComparison(`${attribute.oid} directory`, attribute.value);
 	}
-	return left.valueTag === right.valueTag && left.value === right.value ? 'match' : 'mismatch';
+	return {
+		type: 'keyed',
+		comparisonClass: `${attribute.oid} exact`,
+		key: `${attribute.valueTag} ${attribute.value}`,
+	};
+}
+
+function preparedComparison(comparisonClass: string, value: string): AttributeComparison {
+	const prepared = prepareNameCompareString(value);
+	return prepared === undefined
+		? { type: 'unprepared', comparisonClass }
+		: { type: 'keyed', comparisonClass, key: prepared };
 }
 
 // Helpers
-
-/**
- * Applies `matches` to two IA5String attribute values. A value under any other
- * tag, or a non-ASCII value, is malformed and does not match.
- */
-function compareIa5AttributeValue(
-	left: ParsedNameAttribute,
-	right: ParsedNameAttribute,
-	matches: (left: string, right: string) => boolean,
-): boolean {
-	if (left.valueTag !== 0x16 || right.valueTag !== 0x16) {
-		return false;
-	}
-	if (!isAscii(left.value) || !isAscii(right.value)) {
-		return false;
-	}
-	return matches(left.value, right.value);
-}
 
 /**
  * True for the DirectoryString alternatives compared after RFC 4518

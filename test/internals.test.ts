@@ -82,7 +82,12 @@ import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 } from '#micro509/internal/crypto/signing';
-import { canonicalDnKey } from '#micro509/internal/shared/dn';
+import type { NameMatch } from '#micro509/internal/shared/dn';
+import {
+	canonicalDnKey,
+	compareDistinguishedNames,
+	directoryNameSubtreeMatch,
+} from '#micro509/internal/shared/dn';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
@@ -118,6 +123,7 @@ import {
 	getAuthorityInfoAccessMethodOid,
 	getExtendedKeyUsageOid,
 } from '#micro509/x509';
+import type { ParsedName, ParsedNameAttribute } from '#micro509/x509/parse';
 import { parseCrlDistributionPoints, parseNameConstraints } from '#micro509/x509/parse';
 import {
 	childrenOf,
@@ -1104,6 +1110,109 @@ describe('ip helpers', () => {
 		expect(
 			canonicalDnKey({ derHex: '', rdns: [singleAttributeValue], attributes: [], values: {} }),
 		).not.toBe(canonicalDnKey({ derHex: '', rdns: [splitAttributes], attributes: [], values: {} }));
+	});
+
+	it('matches a multi-valued RDN as an exhaustive search over its pairings does', () => {
+		const privateUse = String.fromCodePoint(0xe000);
+		const pool: readonly ParsedNameAttribute[] = [
+			{ oid: OIDS.commonName, valueTag: 0x0c, value: 'Alpha' },
+			{ oid: OIDS.commonName, valueTag: 0x13, value: 'alpha' },
+			{ oid: OIDS.commonName, valueTag: 0x0c, value: 'Beta' },
+			{ oid: OIDS.commonName, valueTag: 0x0c, value: `a${privateUse}` },
+			{ oid: OIDS.commonName, valueTag: 0x1e, value: `b${privateUse}` },
+			{ oid: OIDS.commonName, valueTag: 0x16, value: 'alpha' },
+			{ oid: OIDS.organizationName, valueTag: 0x0c, value: 'Alpha' },
+			{ oid: OIDS.organizationName, valueTag: 0x0c, value: privateUse },
+			{ oid: OIDS.domainComponent, valueTag: 0x16, value: 'Example' },
+			{ oid: OIDS.domainComponent, valueTag: 0x16, value: 'example' },
+			{ oid: OIDS.domainComponent, valueTag: 0x0c, value: 'example' },
+			{ oid: OIDS.emailAddress, valueTag: 0x16, value: 'A@x.example' },
+			{ oid: OIDS.emailAddress, valueTag: 0x16, value: 'a@x.example' },
+			{ oid: OIDS.emailAddress, valueTag: 0x0c, value: 'a@x.example' },
+		];
+		const name = (...rdns: (readonly ParsedNameAttribute[])[]): ParsedName => ({
+			derHex: '',
+			rdns: rdns.map((attributes) => ({ derHex: '', attributes, values: {} })),
+			attributes: [],
+			values: {},
+		});
+		const pairMatch = (left: ParsedNameAttribute, right: ParsedNameAttribute): NameMatch =>
+			directoryNameSubtreeMatch(name([left]), name([right]));
+		const orders: number[][][] = [[[]]];
+		for (let size = 1; size <= 5; size += 1) {
+			orders.push(
+				(orders[size - 1] ?? []).flatMap((rest) =>
+					Array.from({ length: size }, (_, index) => [
+						...rest.slice(0, index),
+						size - 1,
+						...rest.slice(index),
+					]),
+				),
+			);
+		}
+		const exhaustive = (
+			left: readonly ParsedNameAttribute[],
+			right: readonly ParsedNameAttribute[],
+		): NameMatch => {
+			const matrix = left.map((attribute) => right.map((partner) => pairMatch(attribute, partner)));
+			let best: NameMatch = 'mismatch';
+			for (const order of orders[right.length] ?? []) {
+				const pairs = matrix.map((row, index) => row[order[index] ?? 0] ?? 'mismatch');
+				if (pairs.every((pair) => pair === 'match')) return 'match';
+				if (pairs.every((pair) => pair !== 'mismatch')) best = 'undetermined';
+			}
+			return best;
+		};
+		let seed = 0x5eed;
+		const next = (bound: number): number => {
+			seed = (seed * 1103515245 + 12345) % 2 ** 31;
+			return seed % bound;
+		};
+		const draw = (size: number): ParsedNameAttribute[] =>
+			Array.from({ length: size }, () => pool[next(pool.length)] ?? pool[0]).filter(
+				(attribute) => attribute !== undefined,
+			);
+		const outcomes = new Set<NameMatch>();
+		for (let round = 0; round < 1500; round += 1) {
+			const size = 1 + next(5);
+			const left = draw(size);
+			const right =
+				next(2) === 0
+					? draw(size)
+					: left
+							.map((attribute) =>
+								next(3) === 0 ? (pool[next(pool.length)] ?? attribute) : attribute,
+							)
+							.reverse();
+			const expected = exhaustive(left, right);
+			outcomes.add(expected);
+			expect({ left, right, match: directoryNameSubtreeMatch(name(left), name(right)) }).toEqual({
+				left,
+				right,
+				match: expected,
+			});
+		}
+		expect([...outcomes].sort()).toEqual(['match', 'mismatch', 'undetermined']);
+	});
+
+	it('compares a multi-valued RDN of thousands of repeated attributes in linear time', () => {
+		const attribute: ParsedNameAttribute = { oid: OIDS.commonName, valueTag: 0x0c, value: 'Same' };
+		const rdn = (attributes: readonly ParsedNameAttribute[]): ParsedName => ({
+			derHex: '',
+			rdns: [{ derHex: '', attributes, values: {} }],
+			attributes: [],
+			values: {},
+		});
+		const repeated = Array.from({ length: 2000 }, () => attribute);
+		const upper = repeated.map(() => ({ ...attribute, valueTag: 0x13, value: 'SAME' }));
+		expect(compareDistinguishedNames(rdn(repeated), rdn(upper))).toBe(true);
+		expect(
+			compareDistinguishedNames(
+				rdn(repeated),
+				rdn([...upper.slice(1), { ...attribute, value: 'Other' }]),
+			),
+		).toBe(false);
+		expect(directoryNameSubtreeMatch(rdn(repeated), rdn(upper))).toBe('match');
 	});
 });
 
