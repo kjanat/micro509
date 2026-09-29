@@ -1,0 +1,12 @@
+{
+	"name": "@micro509/tsc-bridge",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Experimental JS access to the native TypeScript compiler.",
+	"type": "module",
+	"exports": "./index.ts",
+	"scripts": {
+		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
+		"test": "node --test test/smoke.mts"
+	}
+}
