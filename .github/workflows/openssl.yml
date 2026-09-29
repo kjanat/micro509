@@ -213,8 +213,8 @@ jobs:
           { platform: darwin-arm64,  runner: macos-15 },
           { platform: darwin-x64,    runner: macos-15-intel },
           { platform: linux-arm64,   runner: ubuntu-26.04-arm },
-          { platform: windows-arm64, runner: windows-11-vs2026-arm, msvc-arch: arm64, configure-target: VC-WIN64-CLANGASM-ARM, tool: clang-cl },
-          { platform: windows-x64,   runner: windows-2025-vs2026,   msvc-arch: x64,   configure-target: VC-WIN64A,             tool: nasm },
+          { platform: windows-arm64, runner: windows-11-vs2026-arm, msvc-arch: arm64, configure-targets: [VC-WIN64-CLANGASM-ARM, VC-WIN64-ARM], tool: clang-cl },
+          { platform: windows-x64,   runner: windows-2025-vs2026,   msvc-arch: x64,   configure-targets: [VC-WIN64A],                           tool: nasm },
         ]
     env:
       VERSION: *MatrixRelease
@@ -282,7 +282,10 @@ jobs:
           }
 
           if ($IsWindows) {
-            $root = 'C:/openssl'
+            $root   = 'C:/openssl'
+            $known  = & perl Configure LIST
+            $target = $matrix.'configure-targets' | Where-Object { $_ -in $known } | Select-Object -First 1
+            if (-not $target) { throw "OpenSSL $env:VERSION has none of $($matrix.'configure-targets' -join ', ')" }
 
             if ($matrix.tool -eq 'nasm') {
               $nasm = $env:NASM | ConvertFrom-Json
@@ -299,7 +302,7 @@ jobs:
 
             Get-Command perl, nmake, cl, $matrix.tool | Format-Table Name, Source
             if (Select-String Configure -Pattern static-vcruntime -Quiet) { $options += 'enable-static-vcruntime' }
-            & perl Configure $matrix.'configure-target' --prefix=$root --openssldir=$root/ssl @options
+            & perl Configure $target --prefix=$root --openssldir=$root/ssl @options
             & nmake build_sw
             & nmake install_sw install_ssldirs
             & dumpbin /dependents "$root/bin/openssl.exe"
@@ -343,7 +346,13 @@ jobs:
         run: |
           ls -l
           files=()
-          for file in *.tar.gz; do files+=("${file}:application/vnd.oci.image.layer.v1.tar+gzip"); done
+          platforms=()
+          for file in *.tar.gz; do
+            files+=("${file}:application/vnd.oci.image.layer.v1.tar+gzip")
+            platform="${file#"openssl-${v}-"}"
+            platforms+=("${platform%.tar.gz}")
+          done
+          printf -v listed '%s, ' "${platforms[@]}"
           oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin <<< "${GH_TOKEN}"
           oras push "${PREBUILT}:${v}-${BUILD}" --no-tty \
             --artifact-type application/vnd.kjanat.openssl.prebuilt.v1 \
@@ -351,7 +360,7 @@ jobs:
             --annotation "org.opencontainers.image.version=${v}" \
             --annotation "dev.kjanat.openssl.upstream.tag=openssl-${v}" \
             --annotation "org.opencontainers.image.title=openssl-prebuilt" \
-            --annotation "org.opencontainers.image.description=OpenSSL ${v} tarballs for linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64. Usage: ${USAGE}" \
+            --annotation "org.opencontainers.image.description=OpenSSL ${v} tarballs for ${listed%, }. Usage: ${USAGE}" \
             --annotation "org.opencontainers.image.licenses=Apache-2.0" \
             "${files[@]}"
           oras tag "${PREBUILT}:${v}-${BUILD}" "${v}-${date}"
