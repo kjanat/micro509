@@ -1,9 +1,12 @@
 {
-	"name": "@micro509/tsc-bridge",
+	"name": "@kjanat/tsc-bridge",
 	"version": "0.0.0",
 	"private": true,
 	"description": "Experimental JS access to the native TypeScript compiler.",
 	"type": "module",
+	"imports": {
+		"#bridge": "./index.ts"
+	},
 	"exports": "./index.ts",
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",

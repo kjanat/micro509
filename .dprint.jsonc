@@ -80,6 +80,11 @@
 				"exts": ["toml"],
 				"cacheKeyFiles": ["tombi.toml"],
 				"setupCommand": "bun install"
+			},
+			{
+				"cwd": "tsc/bridge",
+				"command": "gofmt -s",
+				"exts": ["go"]
 			}
 		]
 	},

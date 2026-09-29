@@ -26,7 +26,7 @@ The executable is ignored by Git. On Windows, use `bin/tsc-bridge.exe`.
 ## Use from the repository root
 
 ```ts
-import { createTscBridge } from './tsc/index.ts';
+import { createTscBridge } from '@kjanat/tsc-bridge';
 
 const compiler = createTscBridge();
 try {

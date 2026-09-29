@@ -110,6 +110,17 @@
         "wrangler": "catalog:cloudflare",
       },
     },
+    "tsc/bridge": {
+      "name": "@kjanat/tsc-bridge",
+      "version": "0.0.0",
+    },
+    "tsc/wasm": {
+      "name": "@kjanat/tsc-wasm",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kjanat/tsc-bridge": "workspace:*",
+      },
+    },
   },
   "trustedDependencies": [
     "deno",
@@ -403,6 +414,10 @@
     "@jsr/std__io": ["@jsr/std__io@0.225.3", "https://npm.jsr.io/~/11/@jsr/std__io/0.225.3.tgz", { "dependencies": { "@jsr/std__bytes": "^1.0.6" } }, "sha512-IDXY253ipW6FV34CJVxO+3ubfvSEEzw9N2W303KnLe9K/Y9+v/ID1dQYf9VsCCOFMpFtCmOLqzIZsRqv6yQnWw=="],
 
     "@jsr/std__path": ["@jsr/std__path@1.1.6", "https://npm.jsr.io/~/11/@jsr/std__path/1.1.6.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.14" } }, "sha512-H1Cmg6z8jFyIsQbVV+vZB4eOx4k6Qg8lyUM6l7nZysj5MZumg89kb0M1bsPBTGQis3fw6mJFkJELo5+AK6oCFA=="],
+
+    "@kjanat/tsc-bridge": ["@kjanat/tsc-bridge@workspace:tsc/bridge"],
+
+    "@kjanat/tsc-wasm": ["@kjanat/tsc-wasm@workspace:tsc/wasm"],
 
     "@loaderkit/resolve": ["@loaderkit/resolve@1.0.6", "", { "dependencies": { "@braidai/lang": "^1.0.0" } }, "sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg=="],
 

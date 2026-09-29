@@ -1,6 +1,9 @@
 [install]
 linker = "hoisted"
 
+[install.scopes]
+jsr = "https://npm.jsr.io"
+
 [test]
 concurrentTestGlob         = "**/*{differential,fuzz}*.test.ts"
 coveragePathIgnorePatterns = ["test/**", "dist/**", "packages/**", "scripts/**", ".claude/**"]

@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { createTscBridge } from '../index.ts';
+import { createTscBridge } from '#bridge';
 
 test('native transpilation, queued requests, syntax diagnostics, and clean shutdown', async () => {
 	const bridge = createTscBridge();
