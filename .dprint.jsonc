@@ -11,9 +11,9 @@
 		"module.sortImportDeclarations": "maintain",
 		"module.sortExportDeclarations": "maintain",
 		"exportDeclaration.sortNamedExports": "maintain",
-		"exportDeclaration.sortTypeOnlyExports": "maintain",
+		"exportDeclaration.sortTypeOnlyExports": "none",
 		"importDeclaration.sortNamedImports": "maintain",
-		"importDeclaration.sortTypeOnlyImports": "maintain"
+		"importDeclaration.sortTypeOnlyImports": "none"
 	},
 	"json": {
 		"jsonTrailingCommaFiles": [

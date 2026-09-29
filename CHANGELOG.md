@@ -629,10 +629,13 @@ revocation })` report a certificate carrying `noRevAvail` or
   npm on every fresh setup, so the registry chose the code that ran. `tombi`
   is now a catalog-pinned devDependency; the exec plugin runs
   `node_modules/.bin/tombi` and its setup command is `bun install`.
-- The OpenSSL differential job ran against whatever OpenSSL the runner image
-  shipped. It now pins `ubuntu-26.04` and fails unless `openssl version`
-  reports 3.5.5, so an oracle change surfaces as a version assertion instead
-  of as verdict or formatting drift.
+- The OpenSSL differential tests ran against whatever OpenSSL the runner image
+  shipped. CI now installs a pinned OpenSSL 4.0.2 from
+  `ghcr.io/kjanat/openssl-prebuilt`, verifies its build provenance
+  attestation, and fails unless `openssl version` reports 4.0.2, so an oracle
+  change surfaces as a version assertion instead of as verdict or formatting
+  drift. Usage of the public builds is documented in
+  [`.github/openssl`](https://github.com/kjanat/micro509/tree/master/.github/openssl#readme).
 
 ## [0.14.0] - 2026-07-29
 
