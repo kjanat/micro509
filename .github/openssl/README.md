@@ -38,7 +38,7 @@ jobs:
       - run: openssl version
 ```
 
-The action runs on Linux, macOS and Windows runners, x64 and arm64. It downloads the runner's tarball, verifies its build provenance attestation, puts `openssl` on `PATH` and sets `OPENSSL_CONF`. The `openssl-path` output holds the path to the binary.
+The action runs on Linux, macOS and Windows runners, x64 and arm64. It downloads the runner's tarball, verifies its build provenance attestation, puts `openssl` on `PATH` and sets `OPENSSL_CONF`. The `openssl-path` output holds the path to the binary. Builds from a fork need `repository` and `source-ref`, which default to `kjanat/micro509` and `refs/heads/master`.
 
 ## Container image
 

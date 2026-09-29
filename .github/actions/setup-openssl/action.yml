@@ -5,6 +5,7 @@ inputs:
   version: { description: "OpenSSL release to install, e.g. 4.0.2 or 4.1.0-beta1", required: false, default: "4.0.2" }
   artifact: { description: OCI repository holding the per-platform tarballs, required: false, default: ghcr.io/kjanat/openssl-prebuilt }
   repository: { description: Repository whose openssl.yml workflow signed the build, required: false, default: kjanat/micro509 }
+  source-ref: { description: Git ref the build must have been published from, required: false, default: refs/heads/master }
   token: { description: Token used to read the build's attestation, required: false, default: "${{ github.token }}" }
 
 outputs:
@@ -22,6 +23,7 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         ARTIFACT: ${{ inputs.artifact }}
         REPOSITORY: ${{ inputs.repository }}
+        SOURCE_REF: ${{ inputs.source-ref }}
         VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
@@ -61,7 +63,7 @@ runs:
         retry gh attestation verify "${root}/${archive}" \
           --repo "${REPOSITORY}" \
           --signer-workflow "${REPOSITORY}/.github/workflows/openssl.yml" \
-          --source-ref refs/heads/master \
+          --source-ref "${SOURCE_REF}" \
           --deny-self-hosted-runners
         (cd "${root}" && tar -xzf "${archive}")
 
