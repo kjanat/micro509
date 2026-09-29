@@ -39,8 +39,8 @@ jobs:
       releases:   ${{ steps.resolve.outputs.releases }}
       publishes:  ${{ steps.resolve.outputs.publishes }}
       latest:     ${{ steps.resolve.outputs.latest }}
-      alpha: ${{ steps.resolve.outputs.alpha }}
-      beta: ${{ steps.resolve.outputs.beta }}
+      alpha:      ${{ steps.resolve.outputs.alpha }}
+      beta:       ${{ steps.resolve.outputs.beta }}
       date:       ${{ steps.resolve.outputs.date }}
     steps:
       - id: resolve
@@ -212,11 +212,11 @@ jobs:
         platform: [linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64]
         # pretty-yaml-ignore
         include: [
-          { platform: darwin-arm64,  runner: macos-15 },
-          { platform: darwin-x64,    runner: macos-15-intel },
+          { platform: darwin-arm64,  runner: macos-15         },
+          { platform: darwin-x64,    runner: macos-15-intel   },
           { platform: linux-arm64,   runner: ubuntu-26.04-arm },
           { platform: windows-arm64, runner: windows-11-vs2026-arm, msvc-arch: arm64, configure-targets: [VC-WIN64-CLANGASM-ARM, VC-WIN64-ARM], tool: clang-cl },
-          { platform: windows-x64,   runner: windows-2025-vs2026,   msvc-arch: x64,   configure-targets: [VC-WIN64A],                           tool: nasm },
+          { platform: windows-x64,   runner: windows-2025-vs2026,   msvc-arch: x64,   configure-targets: [VC-WIN64A],                           tool: nasm     },
         ]
     env:
       VERSION: *MatrixRelease
@@ -336,11 +336,8 @@ jobs:
               pattern: openssl-${{ matrix.release.version }}-*
               merge-multiple: true
               path: &PublishArtefact ${{ runner.temp }}/dist
-          - if: *Release
-            uses: *Oras
-      - if: *Release
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with: { subject-path: "${{ runner.temp }}/dist/*.tar.gz" }
+          - { if: *Release, uses: *Oras }
+      - { if: *Release, uses: *Attest, with: { subject-path: "${{ runner.temp }}/dist/*.tar.gz" } }
       - name: Push to GHCR
         if: *Release
         working-directory: *PublishArtefact
@@ -378,11 +375,12 @@ jobs:
     steps:
       - name: Point latest, alpha and beta
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        # pretty-yaml-ignore
         env:
-          TOKEN: ${{ github.token }}
+          TOKEN:  ${{ github.token }}
           LATEST: ${{ needs.resolve.outputs.latest }}
-          ALPHA: ${{ needs.resolve.outputs.alpha }}
-          BETA: ${{ needs.resolve.outputs.beta }}
+          ALPHA:  ${{ needs.resolve.outputs.alpha  }}
+          BETA:   ${{ needs.resolve.outputs.beta   }}
         with:
           script: |
             const { IMAGE, PREBUILT, TOKEN, LATEST, ALPHA, BETA } = process.env;
