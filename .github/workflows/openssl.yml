@@ -107,7 +107,7 @@ jobs:
     runs-on: *Ubuntu
     timeout-minutes: 30
     permissions: &WritePkgAttestIdToken { contents: read, packages: write, id-token: write, attestations: write }
-    strategy: { fail-fast: false, matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" } }
+    strategy: { fail-fast: true, matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" } }
     steps:
       - &SafeCheckout { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
       - parallel:
@@ -204,7 +204,7 @@ jobs:
     timeout-minutes: 45
     permissions: { contents: read }
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         release: ${{ fromJSON(needs.resolve.outputs.releases) }}
         platform: [linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64]
@@ -325,7 +325,7 @@ jobs:
     runs-on: *Ubuntu
     timeout-minutes: 10
     permissions: *WritePkgAttestIdToken
-    strategy: { fail-fast: false, matrix: { release: "${{ fromJSON(needs.resolve.outputs.publishes) }}", exclude: [release: none] } }
+    strategy: { fail-fast: true, matrix: { release: "${{ fromJSON(needs.resolve.outputs.publishes) }}", exclude: [release: none] } }
     steps:
       - parallel:
           - if: &Release matrix.release
