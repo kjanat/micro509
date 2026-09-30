@@ -22,8 +22,7 @@
 import proc from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Diagnostic } from '@kjanat/tsc-bridge';
-import { checkProjectSync } from '@kjanat/tsc-bridge';
+import { checkProjectSync, formatDiagnostic } from '@kjanat/tsc-bridge';
 import type { Plugin } from 'vitepress';
 
 export interface DocExamplesOptions {
@@ -105,19 +104,6 @@ function emit(examples: readonly Example[], options: DocExamplesOptions): void {
 	);
 }
 
-function located(diagnostic: Diagnostic, root: string): string {
-	const message = `error TS${diagnostic.code}: ${diagnostic.messageText}`;
-	if (diagnostic.fileName === undefined) return message;
-	const before = fs
-		.readFileSync(diagnostic.fileName)
-		.subarray(0, diagnostic.start)
-		.toString('utf8')
-		.split('\n');
-	const line = before.length;
-	const column = (before.at(-1)?.length ?? 0) + 1;
-	return `${path.relative(root, diagnostic.fileName)}(${line},${column}): ${message}`;
-}
-
 function typecheck(options: DocExamplesOptions): Failure | undefined {
 	try {
 		const errors = checkProjectSync(path.join(options.outDir, 'tsconfig.json'), {
@@ -126,7 +112,7 @@ function typecheck(options: DocExamplesOptions): Failure | undefined {
 		if (errors.length === 0) return undefined;
 		return {
 			check: 'tsc',
-			output: errors.map((diagnostic) => located(diagnostic, options.root)).join('\n'),
+			output: errors.map((diagnostic) => formatDiagnostic(diagnostic, options.root)).join('\n'),
 		};
 	} catch (error) {
 		return { check: 'tsc', output: error instanceof Error ? error.message : String(error) };

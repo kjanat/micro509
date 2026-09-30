@@ -80,6 +80,7 @@
       "devDependencies": {
         "@cloudflare/vite-plugin": "catalog:cloudflare",
         "@kjanat/tsc-bridge": "workspace:*",
+        "@kjanat/tsc-vue-mapper": "workspace:*",
         "@micro509/vitepress-api-docs": "workspace:*",
         "@micro509/vitepress-doc-examples": "workspace:*",
         "@micro509/vitepress-github-links": "workspace:*",
@@ -94,12 +95,10 @@
         "micro509": "workspace:*",
         "runner-run": "catalog:",
         "typescript": "catalog:ts7",
-        "typescript-native-bridge": "catalog:ts",
         "vite-robots-txt": "catalog:site",
         "vite-svg-to-ico": "catalog:site",
         "vitepress": "catalog:site",
         "vue": "catalog:",
-        "vue-tsc": "catalog:ts",
         "wrangler": "catalog:cloudflare",
       },
     },
@@ -116,6 +115,19 @@
     "tsc/protocol": {
       "name": "@kjanat/tsc-protocol",
       "version": "0.0.0",
+    },
+    "tsc/vue-mapper": {
+      "name": "@kjanat/tsc-vue-mapper",
+      "version": "0.0.0",
+      "dependencies": {
+        "@vue/language-core": "catalog:ts",
+        "typescript": "catalog:ts6",
+      },
+      "devDependencies": {
+        "@kjanat/tsc-bridge": "workspace:*",
+        "@kjanat/tsc-wasm": "workspace:*",
+        "@volar/typescript": "catalog:ts",
+      },
     },
     "tsc/wasm": {
       "name": "@kjanat/tsc-wasm",
@@ -175,12 +187,12 @@
       "@types/bun": "^1.4.2",
       "@types/deno": "^2.7.0",
       "@types/node": "^26.6.3",
+      "@volar/typescript": "2.4.28",
+      "@vue/language-core": "^3.3.11",
       "@vue/tsconfig": "^0.9.1",
       "typescript": "npm:typescript@>=6,<7",
       "typescript-6": "npm:@typescript/typescript6@^6",
       "typescript-7": "npm:typescript@>=7",
-      "typescript-native-bridge": "6.0.3-bridge.18.tsgo.7.0.2",
-      "vue-tsc": "^3.3.11",
     },
     "ts6": {
       "typescript": "npm:@typescript/typescript6@^6",
@@ -432,6 +444,8 @@
 
     "@kjanat/tsc-protocol": ["@kjanat/tsc-protocol@workspace:tsc/protocol"],
 
+    "@kjanat/tsc-vue-mapper": ["@kjanat/tsc-vue-mapper@workspace:tsc/vue-mapper"],
+
     "@kjanat/tsc-wasm": ["@kjanat/tsc-wasm@workspace:tsc/wasm"],
 
     "@loaderkit/resolve": ["@loaderkit/resolve@1.0.6", "", { "dependencies": { "@braidai/lang": "^1.0.0" } }, "sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg=="],
@@ -580,19 +594,7 @@
 
     "@types/web-bluetooth": ["@types/web-bluetooth@0.0.21", "", {}, "sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA=="],
 
-    "@typescript-native-bridge/darwin-arm64": ["@typescript-native-bridge/darwin-arm64@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-cuLVc0OVh1u4xyo9fQcJAxMca3MJqEJs3TSN0QhGPbYv5T4gYBiHSe69HWL7A27PyaSFuPMTgzN9RqoqlYALAw=="],
-
-    "@typescript-native-bridge/darwin-x64": ["@typescript-native-bridge/darwin-x64@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "darwin", "cpu": "x64" }, "sha512-Wj/DkI9BcWESykr2DhWqxxwhQBzaKaRcoRGxa67gD/VkJWpVkbbeLyxobjnNDF7e6xnGleHKAm/3fPKzfbqMWg=="],
-
-    "@typescript-native-bridge/linux-arm": ["@typescript-native-bridge/linux-arm@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "linux", "cpu": "arm" }, "sha512-PuvMjc/pq41L28jUMpODJdknKSEqL1MfBT2mg8QiB1SAGTzuGd38Zsy1h6a+eGHqKU8M4laEZEHdkM39U54pTw=="],
-
-    "@typescript-native-bridge/linux-arm64": ["@typescript-native-bridge/linux-arm64@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "linux", "cpu": "arm64" }, "sha512-4oxA689R+Ht1ikOCAGCIqIdZSk7orbNiSGV0eqGw7h9Q6+xrqYlnvcPtETayqLp6Q9gzEP3wCraDV9y+tSrA3Q=="],
-
-    "@typescript-native-bridge/linux-x64": ["@typescript-native-bridge/linux-x64@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "linux", "cpu": "x64" }, "sha512-XWAX1N0n1lV6pfMT0Bu7m12SN2iyMNCuNXD5LvjMzErzFR22goNNMG+91jm5HeCSNnZzLA6nvrHXv84/XAVi0g=="],
-
-    "@typescript-native-bridge/win32-arm64": ["@typescript-native-bridge/win32-arm64@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "win32", "cpu": "arm64" }, "sha512-agYZUX12eAPBFXP5mihuOQ1liH5Yrdt98uGe2kMY2+slinsFOdf1gjoGCHIykCZ8862Xtz92SkmIr9o2VDZRPw=="],
-
-    "@typescript-native-bridge/win32-x64": ["@typescript-native-bridge/win32-x64@6.0.3-bridge.18.tsgo.7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-nJu277PWZIb4/bmWN9ZREgZG+BwEVRcnnfVwpD5QI0n32G9ZgU7x0Q4PpvvxLmZz9xB4XcBAyoV3grw4RtRRNQ=="],
+    "@typescript/old": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@typescript/typescript-aix-ppc64": ["@typescript/typescript-aix-ppc64@7.0.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ=="],
 
@@ -958,8 +960,6 @@
 
     "typescript": ["typescript@7.0.2", "", { "optionalDependencies": { "@typescript/typescript-aix-ppc64": "7.0.2", "@typescript/typescript-darwin-arm64": "7.0.2", "@typescript/typescript-darwin-x64": "7.0.2", "@typescript/typescript-freebsd-arm64": "7.0.2", "@typescript/typescript-freebsd-x64": "7.0.2", "@typescript/typescript-linux-arm": "7.0.2", "@typescript/typescript-linux-arm64": "7.0.2", "@typescript/typescript-linux-loong64": "7.0.2", "@typescript/typescript-linux-mips64el": "7.0.2", "@typescript/typescript-linux-ppc64": "7.0.2", "@typescript/typescript-linux-riscv64": "7.0.2", "@typescript/typescript-linux-s390x": "7.0.2", "@typescript/typescript-linux-x64": "7.0.2", "@typescript/typescript-netbsd-arm64": "7.0.2", "@typescript/typescript-netbsd-x64": "7.0.2", "@typescript/typescript-openbsd-arm64": "7.0.2", "@typescript/typescript-openbsd-x64": "7.0.2", "@typescript/typescript-sunos-x64": "7.0.2", "@typescript/typescript-win32-arm64": "7.0.2", "@typescript/typescript-win32-x64": "7.0.2" }, "bin": { "tsc": "bin/tsc" } }, "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA=="],
 
-    "typescript-native-bridge": ["typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2", "", { "optionalDependencies": { "@typescript-native-bridge/darwin-arm64": "6.0.3-bridge.18.tsgo.7.0.2", "@typescript-native-bridge/darwin-x64": "6.0.3-bridge.18.tsgo.7.0.2", "@typescript-native-bridge/linux-arm": "6.0.3-bridge.18.tsgo.7.0.2", "@typescript-native-bridge/linux-arm64": "6.0.3-bridge.18.tsgo.7.0.2", "@typescript-native-bridge/linux-x64": "6.0.3-bridge.18.tsgo.7.0.2", "@typescript-native-bridge/win32-arm64": "6.0.3-bridge.18.tsgo.7.0.2", "@typescript-native-bridge/win32-x64": "6.0.3-bridge.18.tsgo.7.0.2" }, "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-otfFv4X9MRIBjwFAcPJYtr+S79xd/eE0nJjJ5CoU4KfYDh7+ve5nDfuu1tiGETPYUUnlPvWxGKDNqdv2w34ECg=="],
-
     "unconfig-core": ["unconfig-core@7.5.0", "", { "dependencies": { "@quansync/fs": "^1.0.0", "quansync": "^1.0.0" } }, "sha512-Su3FauozOGP44ZmKdHy2oE6LPjk51M/TRRjHv2HNCWiDvfvCoxC2lno6jevMA91MYAdCdwP05QnWdWpSbncX/w=="],
 
     "undici": ["undici@7.29.1", "", {}, "sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q=="],
@@ -1002,8 +1002,6 @@
 
     "vue": ["vue@3.5.43", "", { "dependencies": { "@vue/compiler-dom": "3.5.43", "@vue/compiler-sfc": "3.5.43", "@vue/runtime-dom": "3.5.43", "@vue/server-renderer": "3.5.43", "@vue/shared": "3.5.43" }, "peerDependencies": { "typescript": "*" }, "optionalPeers": ["typescript"] }, "sha512-o5qZoksdnjIKvW1srZ3ab7pcDNYAerBjRe54D0LBLfRdCYFrSgBHVXokMas35czQc0//lmx4/tuY4ZNQ+Rf2Ng=="],
 
-    "vue-tsc": ["vue-tsc@3.3.11", "", { "dependencies": { "@volar/typescript": "2.4.28", "@vue/language-core": "3.3.11" }, "peerDependencies": { "typescript": ">=5.0.0" }, "bin": { "vue-tsc": "bin/vue-tsc.js" } }, "sha512-gOb0B9rtU2+f1dszwPqSH5kAieIF9ReeLhD3kSRNHv5WZZUQz/JdVXW0RTdqhNTMlQkqKzrTTviqKr/4FYZraQ=="],
-
     "webpack-virtual-modules": ["webpack-virtual-modules@0.6.2", "", {}, "sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ=="],
 
     "workerd": ["workerd@1.20260926.1", "", { "optionalDependencies": { "@cloudflare/workerd-darwin-64": "1.20260926.1", "@cloudflare/workerd-darwin-arm64": "1.20260926.1", "@cloudflare/workerd-linux-64": "1.20260926.1", "@cloudflare/workerd-linux-arm64": "1.20260926.1", "@cloudflare/workerd-windows-64": "1.20260926.1" }, "bin": { "workerd": "bin/workerd" } }, "sha512-YojhsWBuZwk3Jk9OC0QfTgVbLeQOD1tK1olC9ZXAUcmeip8z4NE/xtttpxCsuTvQBRqppvy7Tkac0kxPYMjIXA=="],
@@ -1031,6 +1029,8 @@
     "@cspotcode/source-map-support/@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
 
     "@jsr/deno__cache-dir/@jsr/deno__graph": ["@jsr/deno__graph@0.86.9", "https://npm.jsr.io/~/11/@jsr/deno__graph/0.86.9.tgz", {}, "sha512-+qrrma5/bL+hcG20mfaEeC8SLopqoyd1RjcKFMRu++3SAXyrTKuvuIjBJCn/NyN7X+kV+QrJG67BCHX38Rzw+g=="],
+
+    "@kjanat/tsc-vue-mapper/typescript": ["@typescript/typescript6@6.0.2", "", { "dependencies": { "@typescript/old": "npm:typescript@^6" }, "bin": { "tsc6": "bin/tsc6" } }, "sha512-mbCddXd+jm7hfx7w2YU64/Av4/NqqeG3GoRZgxPcgoTxYjhrcfJRw9ULch71SS4G+Q3bOXFhRvPqjguN0Hyp5w=="],
 
     "@vue/devtools-kit/hookable": ["hookable@5.5.3", "", {}, "sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ=="],
 

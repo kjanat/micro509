@@ -29,6 +29,8 @@ export interface ProjectOverrides {
 	readonly files?: readonly string[];
 	/** tsconfig `compilerOptions` layered over the project's own. */
 	readonly compilerOptions?: Readonly<Record<string, unknown>>;
+	/** Runs the content mappers the project configures, like `tsc --runExternalCode`. */
+	readonly runExternalCode?: boolean;
 }
 
 export interface TscBridge {
@@ -126,9 +128,16 @@ export function clientFor(
 			return { outputText, diagnostics };
 		},
 		async checkProject(configPath, overrides = {}) {
-			const { files, compilerOptions } = overrides;
-			return (await request({ method: 'checkProject', configPath, files, compilerOptions }))
-				.diagnostics;
+			const { files, compilerOptions, runExternalCode } = overrides;
+			return (
+				await request({
+					method: 'checkProject',
+					configPath,
+					files,
+					compilerOptions,
+					runExternalCode,
+				})
+			).diagnostics;
 		},
 		async exportedCodeUnions(configPath, entrypoints) {
 			return (await request({ method: 'exportedCodeUnions', configPath, entrypoints })).unions;

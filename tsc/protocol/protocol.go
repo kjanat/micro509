@@ -16,6 +16,7 @@ import (
 	"github.com/microsoft/TypeScript/tsc/internal/checker"
 	"github.com/microsoft/TypeScript/tsc/internal/collections"
 	"github.com/microsoft/TypeScript/tsc/internal/compiler"
+	"github.com/microsoft/TypeScript/tsc/internal/contentmapper"
 	"github.com/microsoft/TypeScript/tsc/internal/core"
 	"github.com/microsoft/TypeScript/tsc/internal/diagnosticwriter"
 	"github.com/microsoft/TypeScript/tsc/internal/execute/incremental"
@@ -36,6 +37,7 @@ type Request struct {
 	Entrypoints     []string        `json:"entrypoints"`
 	Files           []string        `json:"files"`
 	CompilerOptions json.RawMessage `json:"compilerOptions"`
+	RunExternalCode bool            `json:"runExternalCode"`
 }
 
 type Diagnostic struct {
@@ -62,20 +64,56 @@ type Response struct {
 	Unions      []CodeUnion  `json:"unions"`
 }
 
+type placedDiagnostic struct {
+	*diagnosticwriter.ASTDiagnostic
+}
+
+func (d placedDiagnostic) MessageChain() []diagnosticwriter.Diagnostic {
+	chain := d.Diagnostic.MessageChain()
+	result := make([]diagnosticwriter.Diagnostic, 0, len(chain))
+	for _, item := range chain {
+		result = append(result, diagnosticwriter.WrapASTDiagnostic(item))
+	}
+	return result
+}
+
+func diagnostic(item *ast.Diagnostic, span *sourceSpan) Diagnostic {
+	located := diagnosticwriter.WrapASTDiagnostic(item)
+	var message diagnosticwriter.Diagnostic = located
+	start, length := located.Pos(), located.Len()
+	if span != nil {
+		message = placedDiagnostic{located}
+		start, length = span.Start, span.Length
+	}
+	d := Diagnostic{
+		Code: item.Code(), Category: int(item.Category()),
+		Message:     item.Localize(locale.Default),
+		MessageText: diagnosticwriter.FlattenDiagnosticMessage(message, "\n", locale.Default),
+		Start:       start, Length: length,
+		Children: diagnostics(item.MessageChain()),
+	}
+	if item.File() != nil {
+		d.FileName = item.File().FileName()
+	}
+	return d
+}
+
 func diagnostics(items []*ast.Diagnostic) []Diagnostic {
 	result := make([]Diagnostic, 0, len(items))
 	for _, item := range items {
-		d := Diagnostic{
-			Code: item.Code(), Category: int(item.Category()),
-			Message:     item.Localize(locale.Default),
-			MessageText: diagnosticwriter.FlattenDiagnosticMessage(diagnosticwriter.WrapASTDiagnostic(item), "\n", locale.Default),
-			Start:       item.Pos(), Length: item.Len(),
-			Children: diagnostics(item.MessageChain()),
+		result = append(result, diagnostic(item, nil))
+	}
+	return result
+}
+
+func verifiedDiagnostics(items []*ast.Diagnostic, spans map[*ast.Diagnostic]*sourceSpan) []Diagnostic {
+	result := make([]Diagnostic, 0, len(items))
+	for _, item := range items {
+		span, verified := spans[item]
+		if verified && span == nil {
+			continue
 		}
-		if item.File() != nil {
-			d.FileName = item.File().FileName()
-		}
-		result = append(result, d)
+		result = append(result, diagnostic(item, span))
 	}
 	return result
 }
@@ -87,7 +125,8 @@ type cachedSourceFile struct {
 
 type cachingHost struct {
 	compiler.CompilerHost
-	files *collections.SyncMap[tspath.Path, *cachedSourceFile]
+	files  *collections.SyncMap[tspath.Path, *cachedSourceFile]
+	mapped *collections.SyncMap[tspath.Path, *cachedMappedFiles]
 }
 
 func (h *cachingHost) GetSourceFile(opts ast.SourceFileParseOptions) *ast.SourceFile {
@@ -106,6 +145,8 @@ func (h *cachingHost) GetSourceFile(opts ast.SourceFileParseOptions) *ast.Source
 
 type project struct {
 	files   collections.SyncMap[tspath.Path, *cachedSourceFile]
+	mapped  collections.SyncMap[tspath.Path, *cachedMappedFiles]
+	mappers contentmapper.Project
 	program *incremental.Program
 }
 
@@ -115,12 +156,15 @@ var (
 )
 
 func projectKey(configPath string, req Request) (string, error) {
-	key, err := json.Marshal([]any{configPath, req.Files, req.CompilerOptions})
+	key, err := json.Marshal([]any{configPath, req.Files, req.CompilerOptions, req.RunExternalCode})
 	return string(key), err
 }
 
 func parseConfig(configPath string, req Request, host compiler.CompilerHost) (*tsoptions.ParsedCommandLine, []*ast.Diagnostic, error) {
 	options := &core.CompilerOptions{NoEmit: core.TSTrue}
+	if req.RunExternalCode {
+		options.RunExternalCode = core.TSTrue
+	}
 	if req.Files == nil && len(req.CompilerOptions) == 0 {
 		config, parseErrors := tsoptions.GetParsedCommandLineOfConfigFile(filepath.ToSlash(configPath), options, nil, host, nil)
 		return config, parseErrors, nil
@@ -162,20 +206,32 @@ func loadProgram(req Request) (*incremental.Program, []*ast.Diagnostic, error) {
 		state = &project{}
 		projects[key] = state
 	}
-	host := &cachingHost{
-		CompilerHost: compiler.NewCompilerHost(
-			filepath.Dir(configPath), bundled.WrapFS(osvfs.FS()), bundled.LibPath(), nil, nil, nil,
-		),
-		files: &state.files,
-	}
-	config, parseErrors, err := parseConfig(configPath, req, host)
+	dir := filepath.Dir(configPath)
+	fs := bundled.WrapFS(osvfs.FS())
+	config, parseErrors, err := parseConfig(configPath, req, compiler.NewCompilerHost(dir, fs, bundled.LibPath(), nil, nil, nil))
 	if err != nil || config == nil || len(parseErrors) != 0 {
 		return nil, parseErrors, err
 	}
+	var mappers contentmapper.Project
+	if len(config.ContentMappers()) != 0 {
+		mappers = mapperHost().Project(contentmapper.ProjectSpec{
+			ConfigFileName:  filepath.ToSlash(configPath),
+			Mappers:         config.ContentMappers(),
+			CompilerOptions: config.CompilerOptions(),
+		})
+	}
+	host := &cachingHost{
+		CompilerHost: compiler.NewCompilerHost(dir, fs, bundled.LibPath(), nil, nil, mappers),
+		files:        &state.files,
+		mapped:       &state.mapped,
+	}
 	state.program = incremental.NewProgram(compiler.NewProgram(compiler.ProgramOptions{
-		ProgramConfig: compiler.ProgramConfig{Config: config, SingleThreaded: core.TSTrue},
-		ProgramHosts:  compiler.ProgramHosts{Host: host},
+		Config: config, SingleThreaded: core.TSTrue, Host: host,
 	}), state.program, nil, time.Now, false)
+	if state.mappers != nil {
+		state.mappers.Close()
+	}
+	state.mappers = mappers
 	return state.program, nil, nil
 }
 
@@ -291,6 +347,17 @@ func Handle(req Request) Response {
 	items = append(items, program.GetGlobalDiagnostics(ctx)...)
 	items = append(items, program.GetSemanticDiagnostics(ctx, nil)...)
 	slices.SortFunc(items, ast.CompareDiagnostics)
-	result.Diagnostics = diagnostics(slices.CompactFunc(items, ast.EqualDiagnostics))
+	items = slices.CompactFunc(items, ast.EqualDiagnostics)
+	configPath, err := filepath.Abs(req.ConfigPath)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	spans, err := verifyContentMapped(program.GetProgram(), configPath, items)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Diagnostics = verifiedDiagnostics(items, spans)
 	return result
 }

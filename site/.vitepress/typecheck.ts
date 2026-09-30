@@ -1,7 +1,7 @@
-import { createRequire } from 'node:module';
-import { run } from 'vue-tsc';
+import path from 'node:path';
+import { checkProjectSync, formatDiagnostic } from '@kjanat/tsc-bridge';
 
-const require = createRequire(import.meta.url);
-
-// Select the native checker explicitly even when vue-tsc is hoisted beside TS6.
-run(require.resolve('typescript-native-bridge/lib/tsc'));
+const root = import.meta.dirname;
+const diagnostics = checkProjectSync(path.join(root, 'tsconfig.json'), { runExternalCode: true });
+for (const diagnostic of diagnostics) console.log(formatDiagnostic(diagnostic, root));
+if (diagnostics.some((diagnostic) => diagnostic.category === 1)) process.exitCode = 2;

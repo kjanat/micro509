@@ -39,13 +39,16 @@ try {
 
 - `transpile(source, fileName?)` emits ESNext modules and reports syntax and option
   diagnostics. It does not perform semantic type checking.
-- `checkProject(configPath, { files, compilerOptions }?)` returns configuration,
-  syntax, global, and semantic diagnostics for one project. It reads the project's
-  compiler options and embeds the matching upstream standard libraries. It never
-  emits project files and does not recursively build project references. `files`
-  replaces the project's root files and `compilerOptions` is layered over the
-  project's own, as a tsconfig that extends `configPath` would; both resolve
-  relative to the configuration file.
+- `checkProject(configPath, { files, compilerOptions, runExternalCode }?)` returns
+  configuration, syntax, global, and semantic diagnostics for one project. It reads
+  the project's compiler options and embeds the matching upstream standard
+  libraries. It never emits project files and does not recursively build project
+  references. `files` replaces the project's root files and `compilerOptions` is
+  layered over the project's own, as a tsconfig that extends `configPath` would;
+  both resolve relative to the configuration file. `runExternalCode` runs the
+  content mappers the tsconfig declares in `contentMappers`, as
+  `tsc --runExternalCode` does. [`@kjanat/tsc-vue-mapper`](../vue-mapper/README.md)
+  is one.
 - `exportedCodeUnions(configPath, entrypoints)` evaluates exported types whose names
   end in `ErrorCode` or `ReasonCode`, following re-exports and collecting their string
   literal members. Results are sorted and duplicate exports are deduplicated;
@@ -78,8 +81,12 @@ printf '%s\n' '{"id":1,"method":"transpile","source":"export const x: number = 1
 same transpilation result for synchronous consumers such as Markdown renderers.
 It starts and reaps one helper per call; repeated snippets should be cached by
 the caller. Its timeout defaults to 60 seconds and output is limited to 16 MiB.
-`checkProjectSync(configPath, { files, compilerOptions, executable, cwd, timeoutMs }?)`
+`checkProjectSync(configPath, { files, compilerOptions, runExternalCode, executable, cwd, timeoutMs }?)`
 does the same for `checkProject`.
+
+`formatDiagnostic(diagnostic, root)` prints a diagnostic the way
+`tsc --pretty false` does, with its file path relative to `root`. It reads the
+file to turn the byte offset into a line and column.
 
 The types (`Diagnostic`, `TscBridge`, `ProjectOverrides` and the rest) are
 re-exported from `@kjanat/tsc-protocol`.

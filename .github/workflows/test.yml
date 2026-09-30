@@ -82,7 +82,7 @@ jobs:
           - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
             with: { go-version-file: go.work, cache-dependency-path: tsc/*/go.sum }
       - run: runner install -sf @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build
-      - run: run -s @kjanat/tsc-protocol:test @kjanat/tsc-bridge:test @kjanat/tsc-wasm:test
+      - run: run -s @kjanat/tsc-protocol:test @kjanat/tsc-bridge:test @kjanat/tsc-wasm:test @kjanat/tsc-vue-mapper:test
 
   differential:
     name: OpenSSL differential

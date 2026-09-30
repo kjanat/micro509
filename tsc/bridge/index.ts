@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import type {
@@ -29,6 +31,19 @@ function executableOf(executable?: string): string {
 			),
 		)
 	);
+}
+
+const categories = ['warning', 'error', 'suggestion', 'message'] as const;
+
+export function formatDiagnostic(diagnostic: Diagnostic, root: string): string {
+	const message = `${categories[diagnostic.category] ?? 'error'} TS${diagnostic.code}: ${diagnostic.messageText}`;
+	if (diagnostic.fileName === undefined) return message;
+	const lines = readFileSync(diagnostic.fileName)
+		.subarray(0, diagnostic.start)
+		.toString('utf8')
+		.split('\n');
+	const column = (lines.at(-1)?.length ?? 0) + 1;
+	return `${path.relative(root, diagnostic.fileName)}(${lines.length},${column}): ${message}`;
 }
 
 export interface HelperOptions {
@@ -73,9 +88,11 @@ export function checkProjectSync(
 	configPath: string,
 	options: HelperOptions & ProjectOverrides = {},
 ): readonly Diagnostic[] {
-	const { files, compilerOptions } = options;
-	return requestSync({ method: 'checkProject', configPath, files, compilerOptions }, options)
-		.diagnostics;
+	const { files, compilerOptions, runExternalCode } = options;
+	return requestSync(
+		{ method: 'checkProject', configPath, files, compilerOptions, runExternalCode },
+		options,
+	).diagnostics;
 }
 
 /** Starts one persistent helper process. Paths passed to it resolve against cwd. */

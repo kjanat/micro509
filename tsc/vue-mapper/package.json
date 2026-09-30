@@ -1,0 +1,45 @@
+{
+	"name": "@kjanat/tsc-vue-mapper",
+	"version": "0.0.0",
+	"private": true,
+	"description": "TypeScript content mapper that type-checks Vue single-file components with the native compiler.",
+	"type": "module",
+	"scripts": {
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@vue/language-core": "catalog:ts",
+		"typescript": "catalog:ts6"
+	},
+	"devDependencies": {
+		"@kjanat/tsc-bridge": "workspace:*",
+		"@kjanat/tsc-wasm": "workspace:*",
+		"@volar/typescript": "catalog:ts"
+	},
+	"engines": {
+		"bun": ">=1.4.2"
+	},
+	"engineStrict": true,
+	"devEngines": {
+		"packageManager": {
+			"name": "bun",
+			"version": ">=1.4.2",
+			"onFail": "error"
+		},
+		"runtime": {
+			"name": "bun",
+			"version": ">=1.4.2",
+			"onFail": "error"
+		}
+	},
+	"tscBridge": {
+		"verify": true
+	},
+	"typescript": {
+		"contentMapper": {
+			"exec": ["bun", "server.ts"],
+			"compilerOptions": [],
+			"dynamicConfig": false
+		}
+	}
+}

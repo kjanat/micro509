@@ -22,7 +22,9 @@ try {
 `createWasmBridge({ wasm }?)` loads `bin/tsc-bridge.wasm`, or the module at `wasm`,
 and resolves to the same `TscBridge` interface as `createTscBridge`: `transpile`,
 `checkProject` with its `files` and `compilerOptions` overrides, and
-`exportedCodeUnions`, with identical results. Paths resolve against the process's
+`exportedCodeUnions`, with identical results. With `runExternalCode`, content
+mappers run as child processes of the host through `node:child_process`, and
+`close()` kills any that are still running. Paths resolve against the process's
 working directory. Requests run concurrently, and each instance keeps its own
 project cache. `close()` waits for in-flight requests, stops the Go runtime and
 disposes its timers; later requests reject.

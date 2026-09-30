@@ -4,5 +4,11 @@
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"types": ["node", "bun"]
 	},
-	"exclude": ["./dist/", "./cache/"]
+	"exclude": ["./dist/", "./cache/"],
+	"contentMappers": [
+		{
+			"package": "@kjanat/tsc-vue-mapper",
+			"extensions": [".vue"]
+		}
+	]
 }
