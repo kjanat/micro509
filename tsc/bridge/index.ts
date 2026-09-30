@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -77,6 +77,56 @@ function isCodeUnion(value: unknown): value is CodeUnion {
 	);
 }
 
+function executableOf(executable?: string): string {
+	return (
+		executable ??
+		fileURLToPath(
+			new URL(
+				process.platform === 'win32' ? './bin/tsc-bridge.exe' : './bin/tsc-bridge',
+				import.meta.url,
+			),
+		)
+	);
+}
+
+/** Runs one helper for integrations that require a synchronous transpiler. */
+export function transpileSync(
+	source: string,
+	options: {
+		readonly fileName?: string;
+		readonly executable?: string;
+		readonly cwd?: string;
+		readonly timeoutMs?: number;
+	} = {},
+): TranspileResult {
+	const timeoutMs = options.timeoutMs ?? 60_000;
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
+	const result = spawnSync(executableOf(options.executable), [], {
+		cwd: options.cwd,
+		encoding: 'utf8',
+		timeout: timeoutMs,
+		maxBuffer: 16 * 1024 * 1024,
+		input: `${JSON.stringify({ id: 1, method: 'transpile', source, fileName: options.fileName })}\n`,
+	});
+	if (result.error) throw result.error;
+	if (result.status !== 0) {
+		throw new Error(
+			`TypeScript helper exited (${result.signal ?? result.status}): ${result.stderr.trim()}`,
+		);
+	}
+	const value: unknown = JSON.parse(result.stdout);
+	if (!isRecord(value) || value.id !== 1) throw new Error('Invalid helper response');
+	if (typeof value.error === 'string') throw new Error(value.error);
+	if (
+		typeof value.outputText !== 'string' ||
+		!Array.isArray(value.diagnostics) ||
+		!value.diagnostics.every(isDiagnostic)
+	) {
+		throw new Error('Invalid helper response payload');
+	}
+	return { outputText: value.outputText, diagnostics: value.diagnostics };
+}
+
 /** Starts one persistent helper process. Paths passed to it resolve against cwd. */
 export function createTscBridge(
 	options: {
@@ -87,14 +137,7 @@ export function createTscBridge(
 ): TscBridge {
 	const timeoutMs = options.timeoutMs ?? 60_000;
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
-	const executable =
-		options.executable ??
-		fileURLToPath(
-			new URL(
-				process.platform === 'win32' ? './bin/tsc-bridge.exe' : './bin/tsc-bridge',
-				import.meta.url,
-			),
-		);
+	const executable = executableOf(options.executable);
 	const child = spawn(executable, [], { cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
 	const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 	const pending = new Map<

@@ -10,12 +10,12 @@ import markdownItTaskLists from 'markdown-it-task-lists';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import ts from 'typescript';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import type { DefaultTheme } from 'vitepress';
 import { defineConfig } from 'vitepress';
 import { devServerCertificate } from './dev-cert.ts';
+import { repairExamples, stripTypes } from './live-code.ts';
 
 interface DocsThemeConfig extends DefaultTheme.Config {
 	readonly versions: readonly DocsVersion[];
@@ -193,55 +193,12 @@ const examples: DocExamplesOptions = {
 	},
 };
 
-const LIVE_CODE_BLOCK = /(<LiveCode[^>]*>\s*\n\n```ts\n)([\s\S]*?)(```)/g;
-
 const RUNNABLE_PAGE = /(^|\/)(guide|reference)\/[^/]+\.md$|(^|\/)index\.md$/;
-
-/** A LiveCode fence executes in the browser, which parses JavaScript, not TypeScript. */
-function stripTypes(source: string): string {
-	return ts.transpileModule(source, {
-		compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
-	}).outputText;
-}
 
 function pageOf(env: unknown): string {
 	if (typeof env !== 'object' || env === null) return '';
 	const value = Object.fromEntries(Object.entries(env))['relativePath'];
 	return typeof value === 'string' ? value : '';
-}
-
-/** The example's syntax errors. A bare transpile does no type checking. */
-function syntaxErrors(source: string): readonly ts.Diagnostic[] {
-	return (
-		ts.transpileModule(source, {
-			reportDiagnostics: true,
-			compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
-		}).diagnostics ?? []
-	);
-}
-
-/**
- * Repair an example that lost a closing brace before its tag by inserting each
- * brace where the parser expects it, then confirming the result parses. An
- * example that does not resolve to valid syntax is left untouched.
- */
-function repairExample(source: string): string {
-	let repaired = source;
-	for (let attempt = 0; attempt < 20; attempt += 1) {
-		const errors = syntaxErrors(repaired);
-		if (errors.length === 0) return repaired;
-		const missingBrace = errors.find((error) => error.code === 1005 || error.code === 1513);
-		if (missingBrace === undefined || missingBrace.start === undefined) return source;
-		repaired = `${repaired.slice(0, missingBrace.start)}}\n${repaired.slice(missingBrace.start)}`;
-	}
-	return source;
-}
-
-/** Repair runnable examples an archived tag shipped with a syntax error. */
-function repairExamples(markdown: string): string {
-	return markdown.replace(LIVE_CODE_BLOCK, (whole, open, body, close) =>
-		syntaxErrors(body).length === 0 ? whole : `${open}${repairExample(body)}${close}`,
-	);
 }
 
 /** Replace stale pins in immutable release docs with per-tree frontmatter. */

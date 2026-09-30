@@ -71,3 +71,8 @@ The transport is newline-delimited JSON over stdin/stdout. For a direct smoke te
 printf '%s\n' '{"id":1,"method":"transpile","source":"export const x: number = 1;"}' |
   ./bin/tsc-bridge
 ```
+
+`transpileSync(source, { fileName, executable, cwd, timeoutMs }?)` provides the
+same transpilation result for synchronous consumers such as Markdown renderers.
+It starts and reaps one helper per call; repeated snippets should be cached by
+the caller. Its timeout defaults to 60 seconds and output is limited to 16 MiB.

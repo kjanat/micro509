@@ -3,7 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { createTscBridge } from '#bridge';
+import { fileURLToPath } from 'node:url';
+import { createTscBridge, transpileSync } from '#bridge';
 
 test('native transpilation, queued requests, syntax diagnostics, and clean shutdown', async () => {
 	const bridge = createTscBridge();
@@ -80,5 +81,24 @@ test('a missing executable rejects requests and close without hanging', async ()
 		await assert.rejects(bridge.close(), /ENOENT/);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('synchronous transpilation matches the persistent helper and reports failures', async () => {
+	const bridge = createTscBridge();
+	try {
+		for (const source of ['export const answer: number = 42;', 'const value: = 1;']) {
+			assert.deepEqual(transpileSync(source), await bridge.transpile(source));
+		}
+		assert.throws(() => transpileSync('', { timeoutMs: 0 }), /timeoutMs/);
+		assert.throws(
+			() =>
+				transpileSync('', {
+					executable: fileURLToPath(new URL('./absent-helper', import.meta.url)),
+				}),
+			/ENOENT/,
+		);
+	} finally {
+		await bridge.close();
 	}
 });

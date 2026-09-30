@@ -241,6 +241,7 @@
 			"typescript": "npm:typescript@>=6,<7",
 			"typescript-6": "npm:@typescript/typescript6@^6",
 			"typescript-7": "npm:typescript@>=7",
+			"typescript-native-bridge": "6.0.3-bridge.18.tsgo.7.0.2",
 			"vue-tsc": "^3.3.11"
 		}
 	},
