@@ -13,6 +13,6 @@
 		"biome": "catalog:"
 	},
 	"peerDependencies": {
-		"vitepress": ">=2.0.0-alpha.18"
+		"vitepress": "catalog:site"
 	}
 }

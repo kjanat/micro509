@@ -2,7 +2,9 @@ module github.com/microsoft/TypeScript/tsc/wasm
 
 go 1.27
 
-require github.com/microsoft/TypeScript/tsc/bridge v0.0.0
+toolchain go1.27.1
+
+require github.com/microsoft/TypeScript/tsc/protocol v0.0.0
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -15,4 +17,4 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 )
 
-replace github.com/microsoft/TypeScript/tsc/bridge => ../bridge
+replace github.com/microsoft/TypeScript/tsc/protocol => ../protocol

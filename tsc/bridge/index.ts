@@ -1,92 +1,23 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import type {
+	BridgeRequest,
+	BridgeResponse,
+	Diagnostic,
+	ProjectOverrides,
+	TranspileResult,
+	TscBridge,
+} from '@kjanat/tsc-protocol';
+import { clientFor, decodeResponse, readResponse } from '@kjanat/tsc-protocol';
 
-export interface Diagnostic {
-	readonly code: number;
-	readonly category: number;
-	readonly message: string;
-	/** `message` followed by its chained messages, as TypeScript prints them. */
-	readonly messageText: string;
-	readonly fileName?: string;
-	/** Zero-based UTF-8 byte offset, matching the Go compiler. */
-	readonly start: number;
-	/** Length in UTF-8 bytes. */
-	readonly length: number;
-	readonly children?: readonly Diagnostic[];
-}
-
-export interface TranspileResult {
-	readonly outputText: string;
-	/** Syntactic and compiler-option diagnostics; transpilation does not typecheck. */
-	readonly diagnostics: readonly Diagnostic[];
-}
-
-export interface CodeUnion {
-	readonly name: string;
-	readonly codes: readonly string[];
-}
-
-/** Applied as a tsconfig that extends the project's configuration. */
-export interface ProjectOverrides {
-	/** Replaces the project's root files. Paths are relative to the configuration file's directory. */
-	readonly files?: readonly string[];
-	/** tsconfig `compilerOptions` layered over the project's own. */
-	readonly compilerOptions?: Readonly<Record<string, unknown>>;
-}
-
-export interface TscBridge {
-	transpile(source: string, fileName?: string): Promise<TranspileResult>;
-	checkProject(configPath: string, overrides?: ProjectOverrides): Promise<readonly Diagnostic[]>;
-	/** Entrypoints are relative to the configuration file's directory. */
-	exportedCodeUnions(
-		configPath: string,
-		entrypoints: readonly string[],
-	): Promise<readonly CodeUnion[]>;
-	/** Finishes queued work, closes stdin, and waits for the helper to exit. */
-	close(): Promise<void>;
-}
-
-interface Response extends TranspileResult {
-	readonly unions: readonly CodeUnion[];
-}
-
-type Request =
-	| { readonly method: 'transpile'; readonly source: string; readonly fileName?: string }
-	| ({ readonly method: 'checkProject'; readonly configPath: string } & ProjectOverrides)
-	| {
-			readonly method: 'exportedCodeUnions';
-			readonly configPath: string;
-			readonly entrypoints: readonly string[];
-	  };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isDiagnostic(value: unknown): value is Diagnostic {
-	return (
-		isRecord(value) &&
-		typeof value.code === 'number' &&
-		typeof value.category === 'number' &&
-		typeof value.message === 'string' &&
-		typeof value.messageText === 'string' &&
-		typeof value.start === 'number' &&
-		typeof value.length === 'number' &&
-		(value.fileName === undefined || typeof value.fileName === 'string') &&
-		(value.children === undefined ||
-			(Array.isArray(value.children) && value.children.every(isDiagnostic)))
-	);
-}
-
-function isCodeUnion(value: unknown): value is CodeUnion {
-	return (
-		isRecord(value) &&
-		typeof value.name === 'string' &&
-		Array.isArray(value.codes) &&
-		value.codes.every((code: unknown) => typeof code === 'string')
-	);
-}
+export type {
+	CodeUnion,
+	Diagnostic,
+	ProjectOverrides,
+	TranspileResult,
+	TscBridge,
+} from '@kjanat/tsc-protocol';
 
 function executableOf(executable?: string): string {
 	return (
@@ -100,27 +31,13 @@ function executableOf(executable?: string): string {
 	);
 }
 
-function responseOf(value: Record<string, unknown>): Response {
-	const { outputText, diagnostics, unions } = value;
-	if (
-		typeof outputText !== 'string' ||
-		!Array.isArray(diagnostics) ||
-		!diagnostics.every(isDiagnostic) ||
-		!Array.isArray(unions) ||
-		!unions.every(isCodeUnion)
-	) {
-		throw new Error('Invalid helper response payload');
-	}
-	return { outputText, diagnostics, unions };
-}
-
 export interface HelperOptions {
 	readonly executable?: string;
 	readonly cwd?: string;
 	readonly timeoutMs?: number;
 }
 
-function requestSync(payload: Request, options: HelperOptions): Response {
+function requestSync(payload: BridgeRequest, options: HelperOptions): BridgeResponse {
 	const timeoutMs = options.timeoutMs ?? 60_000;
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
 	const result = spawnSync(executableOf(options.executable), [], {
@@ -136,10 +53,7 @@ function requestSync(payload: Request, options: HelperOptions): Response {
 			`TypeScript helper exited (${result.signal ?? result.status}): ${result.stderr.trim()}`,
 		);
 	}
-	const value: unknown = JSON.parse(result.stdout);
-	if (!isRecord(value) || value.id !== 1) throw new Error('Invalid helper response');
-	if (typeof value.error === 'string') throw new Error(value.error);
-	return responseOf(value);
+	return readResponse(result.stdout, 1);
 }
 
 /** Runs one helper for integrations that require a synchronous transpiler. */
@@ -174,7 +88,7 @@ export function createTscBridge(options: HelperOptions = {}): TscBridge {
 	const pending = new Map<
 		number,
 		{
-			readonly resolve: (response: Response) => void;
+			readonly resolve: (response: BridgeResponse) => void;
 			readonly reject: (error: Error) => void;
 			readonly timer: ReturnType<typeof setTimeout>;
 		}
@@ -220,28 +134,20 @@ export function createTscBridge(options: HelperOptions = {}): TscBridge {
 	});
 	lines.on('line', (line) => {
 		try {
-			const value: unknown = JSON.parse(line);
-			if (!isRecord(value) || typeof value.id !== 'number')
-				throw new Error('Invalid helper response');
-			const item = pending.get(value.id);
-			if (!item) throw new Error(`Unexpected response ID: ${value.id}`);
-			if (typeof value.error === 'string') {
-				pending.delete(value.id);
-				clearTimeout(item.timer);
-				item.reject(new Error(value.error));
-				return;
-			}
-			const response = responseOf(value);
-			pending.delete(value.id);
+			const decoded = decodeResponse(line);
+			const item = pending.get(decoded.id);
+			if (!item) throw new Error(`Unexpected response ID: ${decoded.id}`);
+			pending.delete(decoded.id);
 			clearTimeout(item.timer);
-			item.resolve(response);
+			if (decoded.ok) item.resolve(decoded.response);
+			else item.reject(new Error(decoded.error));
 		} catch (error) {
 			fail(error instanceof Error ? error : new Error(String(error)));
 			child.kill();
 		}
 	});
 
-	function request(payload: Request): Promise<Response> {
+	function request(payload: BridgeRequest): Promise<BridgeResponse> {
 		if (failure) return Promise.reject(failure);
 		if (closing) return Promise.reject(new Error('TypeScript bridge is closed'));
 		return new Promise((resolve, reject) => {
@@ -257,25 +163,11 @@ export function createTscBridge(options: HelperOptions = {}): TscBridge {
 		});
 	}
 
-	return {
-		async transpile(source, fileName) {
-			const { outputText, diagnostics } = await request({ method: 'transpile', source, fileName });
-			return { outputText, diagnostics };
-		},
-		async checkProject(configPath, overrides = {}) {
-			const { files, compilerOptions } = overrides;
-			return (await request({ method: 'checkProject', configPath, files, compilerOptions }))
-				.diagnostics;
-		},
-		async exportedCodeUnions(configPath, entrypoints) {
-			return (await request({ method: 'exportedCodeUnions', configPath, entrypoints })).unions;
-		},
-		close() {
-			if (!closing) {
-				closing = true;
-				child.stdin.end();
-			}
-			return exited;
-		},
-	};
+	return clientFor(request, () => {
+		if (!closing) {
+			closing = true;
+			child.stdin.end();
+		}
+		return exited;
+	});
 }

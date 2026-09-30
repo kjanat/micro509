@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/microsoft/TypeScript/tsc/bridge/protocol"
+	"github.com/microsoft/TypeScript/tsc/protocol"
 )
 
 func run(in io.Reader, out io.Writer) error {

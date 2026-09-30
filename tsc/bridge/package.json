@@ -13,11 +13,31 @@
 	},
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
+		"postinstall": "run build",
 		"test": "run -s test:go test:js",
-		"test:go": "go test -race -count=1 ./...",
-		"test:js": "node --test test/smoke.mts test/cache.mts"
+		"test:go": "go vet ./...",
+		"test:js": "bun test"
+	},
+	"dependencies": {
+		"@kjanat/tsc-protocol": "workspace:*"
 	},
 	"devDependencies": {
 		"runner-run": "catalog:"
+	},
+	"engines": {
+		"bun": ">=1.4.2"
+	},
+	"engineStrict": true,
+	"devEngines": {
+		"packageManager": {
+			"name": "bun",
+			"version": ">=1.4.2",
+			"onFail": "error"
+		},
+		"runtime": {
+			"name": "bun",
+			"version": ">=1.4.2",
+			"onFail": "error"
+		}
 	}
 }

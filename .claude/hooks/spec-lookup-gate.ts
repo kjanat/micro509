@@ -31,30 +31,9 @@ const CORPUS = ['rfc', 'itu', 'w3c', 'ms'] as const;
 const SPEC_RE = /docs\/(rfc|itu|w3c|ms)(\/|$|[^A-Za-z0-9_.-])/;
 const GLOB_META = /[*?[]/;
 const PROSE_CONSUMERS: ReadonlySet<string> = new Set(['git', 'gh', 'glab']);
-const METADATA: ReadonlySet<string> = new Set([
-	'ls',
-	'find',
-	'stat',
-	'wc',
-	'file',
-	'basename',
-	'dirname',
-	'realpath',
-	'test',
-	'[',
-]);
+const METADATA: ReadonlySet<string> = new Set(/* dprint-ignore */ ['ls', 'find', 'stat', 'wc', 'file', 'basename', 'dirname', 'realpath', 'test', '[']);
 const FIND_ACTIONS: ReadonlySet<string> = new Set(['-exec', '-execdir', '-ok', '-okdir']);
-const PREFIXES: ReadonlySet<string> = new Set([
-	'xargs',
-	'parallel',
-	'command',
-	'exec',
-	'time',
-	'nice',
-	'nohup',
-	'env',
-	'sudo',
-]);
+const PREFIXES: ReadonlySet<string> = new Set(/* dprint-ignore */['xargs', 'parallel', 'command', 'exec', 'time', 'nice', 'nohup', 'env', 'sudo']);
 const FANOUT: ReadonlySet<string> = new Set(['xargs', 'parallel']);
 const GLOB_FLAGS: ReadonlySet<string> = new Set(['-g', '--glob', '--iglob']);
 const SEARCHERS: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'ugrep']);

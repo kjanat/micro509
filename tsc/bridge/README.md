@@ -1,17 +1,10 @@
 # Experimental TypeScript Go bridge
 
-A persistent Go helper with a dependency-free JS-facing client, authored in
-TypeScript. Node 26 and Bun can import the client directly.
-
-The helper imports TypeScript's compiler, checker, and transpiler directly. Its
-module path, `github.com/microsoft/TypeScript/tsc/bridge`, satisfies Go's `internal`
-import rule. The upstream module is a normal dependency; no fork or source patches
-are used. Request handling lives in the `protocol` package, which the native
-helper and [`../wasm`](../wasm/README.md) both import.
-
-Pinned upstream commit: `299a555c3a91519552b471c5b8ce3eb4247ab044`.
-This is an upstream development snapshot, not the installed npm TypeScript 7.0.2.
-The Go API is internal and may change when this pin is updated.
+The native transport for [`@kjanat/tsc-protocol`](../protocol/README.md): a
+persistent Go helper that answers requests over stdin/stdout, and a JS-facing
+client authored in TypeScript. Node 26 and Bun can import the client directly.
+Request handling, the pinned compiler, and the wire types all live in the protocol
+package.
 
 ## Build and test
 
@@ -19,8 +12,7 @@ Requires Go 1.27 or newer. From this directory:
 
 ```sh
 go build -p 2 -trimpath -o bin/tsc-bridge .
-go test -race -count=1 ./...
-node --test test/smoke.mts test/cache.mts
+bun test # or: node --test test/*.ts
 ```
 
 The executable is ignored by Git. On Windows, use `bin/tsc-bridge.exe`.
@@ -88,3 +80,6 @@ It starts and reaps one helper per call; repeated snippets should be cached by
 the caller. Its timeout defaults to 60 seconds and output is limited to 16 MiB.
 `checkProjectSync(configPath, { files, compilerOptions, executable, cwd, timeoutMs }?)`
 does the same for `checkProject`.
+
+The types (`Diagnostic`, `TscBridge`, `ProjectOverrides` and the rest) are
+re-exported from `@kjanat/tsc-protocol`.

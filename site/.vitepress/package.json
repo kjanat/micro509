@@ -10,10 +10,10 @@
 	"scripts": {
 		"build": "vitepress build ..",
 		"dev": "vitepress dev .. --host",
-		"fmt": "cd ../ && dprint fmt",
+		"fmt": "run --dir=.. dprint fmt",
 		"preview": "vitepress preview ..",
 		"test": "bun test live-code.test.ts",
-		"typecheck": "node typecheck.ts --noEmit -p tsconfig.json",
+		"typecheck": "bun typecheck.ts --noEmit -p tsconfig.json",
 		"wrangler:types": "wrangler types"
 	},
 	"devDependencies": {
@@ -30,7 +30,8 @@
 		"dprint": "catalog:",
 		"importmapify": "catalog:deno",
 		"markdown-it-task-lists": "catalog:site",
-		"typescript-7": "catalog:ts",
+		"runner-run": "catalog:",
+		"typescript": "catalog:ts7",
 		"typescript-native-bridge": "catalog:ts",
 		"vite-robots-txt": "catalog:site",
 		"vite-svg-to-ico": "catalog:site",

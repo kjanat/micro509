@@ -4,14 +4,19 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"syscall/js"
 
-	"github.com/microsoft/TypeScript/tsc/bridge/protocol"
+	"github.com/microsoft/TypeScript/tsc/protocol"
 )
 
 func main() {
+	name := os.Getenv("TSC_WASM_GLOBAL")
+	if name == "" {
+		name = "tscWasm"
+	}
 	done := make(chan struct{})
-	call := js.FuncOf(func(this js.Value, args []js.Value) any {
+	invoke := js.FuncOf(func(this js.Value, args []js.Value) any {
 		input := args[0].String()
 		executor := js.FuncOf(func(this js.Value, callbacks []js.Value) any {
 			resolve, reject := callbacks[0], callbacks[1]
@@ -38,9 +43,12 @@ func main() {
 		close(done)
 		return nil
 	})
-	js.Global().Set("tscProbeInvoke", call)
-	js.Global().Set("tscProbeClose", stop)
+	api := js.Global().Get("Object").New()
+	api.Set("invoke", invoke)
+	api.Set("close", stop)
+	js.Global().Set(name, api)
 	<-done
-	call.Release()
+	js.Global().Delete(name)
+	invoke.Release()
 	stop.Release()
 }

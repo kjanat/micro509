@@ -83,7 +83,7 @@
 	"jsdelivr": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"files": ["dist", "CHANGELOG.md"],
-	"workspaces": ["examples/*", "packages/*", "site/.vitepress", "tsc/*"],
+	"workspaces": ["packages/*", "site/.vitepress", "tsc/*"],
 	"scripts": {
 		"bd": "tsdown",
 		"build": "tsdown",
