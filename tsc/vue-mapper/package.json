@@ -4,6 +4,15 @@
 	"private": true,
 	"description": "TypeScript content mapper that type-checks Vue single-file components with the native compiler.",
 	"type": "module",
+	"imports": {
+		"#vue-mapper": "./src/index.ts",
+		"#*": "./src/*.ts"
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	},
+	"bin": "server.ts",
 	"scripts": {
 		"test": "bun test"
 	},
@@ -33,7 +42,8 @@
 		}
 	},
 	"tscBridge": {
-		"verify": true
+		"verify": true,
+		"module": "./src/index.ts"
 	},
 	"typescript": {
 		"contentMapper": {

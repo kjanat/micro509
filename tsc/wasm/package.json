@@ -11,7 +11,7 @@
 		".": "./index.ts",
 		"./package.json": "./package.json"
 	},
-	"files": ["/bin/", "/index.ts"],
+	"files": ["/bin/", "/host.ts", "/index.ts"],
 	"scripts": {
 		"build": "bun build.ts",
 		"test": "bun probe.ts"

@@ -9,7 +9,8 @@ import {
 	shouldReportDiagnostics,
 } from '@vue/language-core';
 import ts from 'typescript';
-import { isRecord } from './rpc.ts';
+import type { Handler } from '#rpc';
+import { isRecord } from '#rpc';
 
 type VuePlugin = LanguagePlugin<string, VueVirtualCode>;
 
@@ -98,7 +99,6 @@ function read<T>(params: unknown, key: string, guard: (value: unknown) => value 
 }
 
 const plugins = new Map<string, VuePlugin>();
-const projects = new Map<string, string>();
 
 function pluginFor(configFileName: string): VuePlugin {
 	const cached = plugins.get(configFileName);
@@ -199,17 +199,7 @@ function gaps(mappings: readonly CodeMapping[], length: number): Directive[] {
 	return result;
 }
 
-export function openProject(params: unknown): Record<string, never> {
-	projects.set(read(params, 'projectHandle', isString), read(params, 'configFileName', isString));
-	return {};
-}
-
-export function closeProject(params: unknown): null {
-	projects.delete(read(params, 'projectHandle', isString));
-	return null;
-}
-
-export function transform(params: unknown) {
+function transform(projects: ReadonlyMap<string, string>, params: unknown) {
 	const handle = read(params, 'projectHandle', isString);
 	const configFileName = projects.get(handle);
 	if (configFileName === undefined) throw new Error(`Unknown project handle ${handle}`);
@@ -230,7 +220,7 @@ export function transform(params: unknown) {
 	};
 }
 
-export function verify(params: unknown): (SourceSpan | null)[][] {
+function verify(params: unknown): (SourceSpan | null)[][] {
 	const plugin = pluginFor(read(params, 'configFileName', isString));
 	return read(params, 'files', isVerifyFiles).map((file) => {
 		const generated = generate(plugin, file.fileName, file.content);
@@ -248,4 +238,29 @@ export function verify(params: unknown): (SourceSpan | null)[][] {
 			return null;
 		});
 	});
+}
+
+export function createHandler(): Handler {
+	const projects = new Map<string, string>();
+	return (method, params) => {
+		switch (method) {
+			case 'initialize':
+				return { positionEncoding: 'utf-16', diagnosticSource: 'vue' };
+			case 'openProject':
+				projects.set(
+					read(params, 'projectHandle', isString),
+					read(params, 'configFileName', isString),
+				);
+				return {};
+			case 'closeProject':
+				projects.delete(read(params, 'projectHandle', isString));
+				return null;
+			case 'transform':
+				return transform(projects, params);
+			case 'verify':
+				return verify(params);
+			default:
+				throw new Error(`Unknown method: ${method}`);
+		}
+	};
 }

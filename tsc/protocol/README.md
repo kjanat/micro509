@@ -22,7 +22,8 @@ project's tsconfig declares, through upstream's content mapper host. Mapped file
 are transformed once per content change and cached with the project.
 
 Mapper processes start through `os/exec` unless the embedder calls `SetSpawner`.
-The WebAssembly entry point passes one backed by the host's `node:child_process`.
+The WebAssembly entry point passes one that asks its JavaScript host for the
+connection.
 
 Upstream places a diagnostic in a mapped file through the mapper's span map.
 A mapper can take over placement by setting `"tscBridge": { "verify": true }` in

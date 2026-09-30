@@ -31,10 +31,18 @@
 					"level": "info"
 				}
 			},
-			"correctness": { "recommended": true },
-			"performance": { "recommended": true },
-			"nursery": { "recommended": true },
-			"security": { "recommended": true },
+			"correctness": {
+				"recommended": true
+			},
+			"performance": {
+				"recommended": true
+			},
+			"nursery": {
+				"recommended": true
+			},
+			"security": {
+				"recommended": true
+			},
 			"style": {
 				"recommended": true,
 				"useImportType": { "level": "error", "options": { "style": "separatedType" } }
@@ -49,7 +57,9 @@
 	"assist": {
 		"enabled": true,
 		"actions": {
-			"source": { "organizeImports": "on" }
+			"source": {
+				"organizeImports": "on"
+			}
 		}
 	},
 	"overrides": [

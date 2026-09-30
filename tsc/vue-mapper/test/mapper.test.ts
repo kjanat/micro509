@@ -1,9 +1,9 @@
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { Diagnostic } from '@kjanat/tsc-bridge';
 import { checkProjectSync, formatDiagnostic } from '@kjanat/tsc-bridge';
-import { createWasmBridge } from '@kjanat/tsc-wasm';
 
 const fixture = path.join(import.meta.dirname, 'fixture');
 const config = path.join(fixture, 'tsconfig.json');
@@ -30,16 +30,13 @@ test('reports what vue-tsc 3.3.11 reports on TypeScript 6', () => {
 	assert.deepEqual(formatted(checkProjectSync(config, { runExternalCode: true })), vueTsc);
 });
 
-test('reports the same through the WASM bridge', async () => {
-	const compiler = await createWasmBridge();
-	try {
-		assert.deepEqual(
-			formatted(await compiler.checkProject(config, { runExternalCode: true })),
-			vueTsc,
-		);
-	} finally {
-		await compiler.close();
-	}
+test('reports the same through the WASM bridge without starting a process', () => {
+	const result = spawnSync(process.execPath, [path.join(import.meta.dirname, 'wasm.ts')], {
+		encoding: 'utf8',
+		env: { ...process.env, PATH: import.meta.dirname },
+	});
+	assert.equal(result.status, 0, result.stderr);
+	assert.deepEqual(JSON.parse(result.stdout), vueTsc);
 });
 
 test('runs no mapper without runExternalCode', () => {

@@ -1,9 +1,8 @@
-import type { ChildProcess } from 'node:child_process';
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { BridgeRequest, BridgeResponse, TscBridge } from '@kjanat/tsc-protocol';
 import { clientFor, readResponse } from '@kjanat/tsc-protocol';
+import { createHost } from './host.ts';
 
 export type {
 	CodeUnion,
@@ -19,19 +18,6 @@ interface GoRuntime {
 	run(instance: WebAssembly.Instance): Promise<void>;
 	readonly _scheduledTimeouts: Map<number, ReturnType<typeof setTimeout>>;
 }
-
-interface HostProcess {
-	write(chunk: Uint8Array): void;
-	close(): void;
-}
-
-type Spawn = (
-	command: readonly string[],
-	cwd: string,
-	onStdout: (chunk: Uint8Array) => void,
-	onStderr: (chunk: Uint8Array) => void,
-	onClose: (code: number | null, error?: string) => void,
-) => HostProcess;
 
 interface Exported {
 	invoke(input: string): Promise<string>;
@@ -76,38 +62,8 @@ export async function createWasmBridge(options: WasmBridgeOptions = {}): Promise
 	const go = new Go();
 	const name = `tscWasm${++instances}`;
 	go.env = { ...go.env, TSC_WASM_GLOBAL: name };
-	const children = new Set<ChildProcess>();
-	let stopped = false;
-	const host: Spawn = (command, cwd, onStdout, onStderr, onClose) => {
-		const [file = '', ...args] = command;
-		const child = spawn(file, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
-		children.add(child);
-		let failure: string | undefined;
-		child.stdout.on('data', (chunk: Buffer) => {
-			if (!stopped) onStdout(chunk);
-		});
-		child.stderr.on('data', (chunk: Buffer) => {
-			if (!stopped) onStderr(chunk);
-		});
-		child.stdin.on('error', () => {});
-		child.on('error', (error) => {
-			failure = error.message;
-		});
-		child.on('close', (code) => {
-			children.delete(child);
-			if (!stopped) onClose(code, failure);
-		});
-		return {
-			write(chunk) {
-				child.stdin.write(chunk);
-			},
-			close() {
-				child.stdin.end();
-				child.kill();
-			},
-		};
-	};
-	Reflect.set(globalThis, name, { spawn: host });
+	const host = createHost();
+	Reflect.set(globalThis, name, { spawn: host.spawn });
 	const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
 	const running = go.run(instance);
 	const api: unknown = Reflect.get(globalThis, name);
@@ -135,8 +91,7 @@ export async function createWasmBridge(options: WasmBridgeOptions = {}): Promise
 	return clientFor(request, () => {
 		closed ??= (async () => {
 			await Promise.allSettled(pending);
-			stopped = true;
-			for (const child of children) child.kill();
+			host.stop();
 			api.close();
 			await running;
 			for (const timer of go._scheduledTimeouts.values()) clearTimeout(timer);

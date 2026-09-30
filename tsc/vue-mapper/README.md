@@ -27,7 +27,10 @@ for (const diagnostic of checkProjectSync('tsconfig.json', { runExternalCode: tr
 ```
 
 Vue options come from `vueCompilerOptions` in that configuration and the
-configurations it extends. `bun` must be on `PATH`.
+configurations it extends. The native bridge starts the mapper as `bun server.ts`,
+so `bun` must be on `PATH`. The WebAssembly bridge imports `index.ts`, named by
+`tscBridge.module`, and runs the mapper inside the calling process through
+`connect(send)`.
 
 `@vue/language-core` parses `<script>` blocks with TypeScript's JavaScript API,
 which TypeScript 7 does not ship. This package depends on TypeScript 6 for that
