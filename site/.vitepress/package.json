@@ -30,6 +30,7 @@
 		"dprint": "catalog:",
 		"importmapify": "catalog:deno",
 		"markdown-it-task-lists": "catalog:site",
+		"micro509": "workspace:*",
 		"runner-run": "catalog:",
 		"typescript": "catalog:ts7",
 		"typescript-native-bridge": "catalog:ts",
