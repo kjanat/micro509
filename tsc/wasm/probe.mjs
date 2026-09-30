@@ -47,11 +47,78 @@ try {
 		configPath,
 		entrypoints: ['src/index.ts'],
 	});
+	const project = fileURLToPath(new URL('./bin/probe-project/', import.meta.url));
+	fs.rmSync(project, { recursive: true, force: true });
+	fs.mkdirSync(project, { recursive: true });
+	fs.writeFileSync(
+		`${project}tsconfig.json`,
+		JSON.stringify({
+			compilerOptions: { strict: true, target: 'ESNext', module: 'NodeNext', types: [] },
+			include: ['*.ts'],
+		}),
+	);
+	fs.writeFileSync(
+		`${project}index.ts`,
+		'export const f: (x: string) => void = (x: number) => {};\n',
+	);
+	fs.writeFileSync(`${project}loose.ts`, 'export function g(x) { return x; }\n');
+	const probeConfig = `${project}tsconfig.json`;
 	const native = createTscBridge();
 	try {
 		assert.deepEqual(unions.unions, await native.exportedCodeUnions(configPath, ['src/index.ts']));
+		const batch = [
+			{ method: 'transpile', source: 'export const answer: number = 42;' },
+			{ method: 'checkProject', configPath },
+			{ method: 'checkProject', configPath: probeConfig },
+			{ method: 'exportedCodeUnions', configPath, entrypoints: ['src/index.ts'] },
+			{ method: 'transpile', source: 'export const answer: = 42;' },
+			{
+				method: 'checkProject',
+				configPath: probeConfig,
+				files: ['loose.ts'],
+				compilerOptions: { strict: false },
+			},
+		];
+		const requests = [...batch, ...batch];
+		const concurrent = await Promise.all(
+			requests.map(async (req, id) => {
+				const response = JSON.parse(
+					await globalThis.tscProbeInvoke(JSON.stringify({ id, ...req })),
+				);
+				if (response.error) throw new Error(response.error);
+				assert.equal(response.id, id);
+				return response;
+			}),
+		);
+		for (const [index, req] of requests.entries()) {
+			const got = concurrent[index];
+			if (req.method === 'transpile') {
+				const { outputText, diagnostics } = await native.transpile(req.source);
+				assert.deepEqual(
+					{ outputText: got.outputText, diagnostics: got.diagnostics },
+					{
+						outputText,
+						diagnostics,
+					},
+				);
+			} else if (req.method === 'checkProject') {
+				const { files, compilerOptions } = req;
+				assert.deepEqual(
+					got.diagnostics,
+					await native.checkProject(req.configPath, { files, compilerOptions }),
+				);
+			} else {
+				assert.deepEqual(
+					got.unions,
+					await native.exportedCodeUnions(req.configPath, req.entrypoints),
+				);
+			}
+		}
+		assert.ok(concurrent[2].diagnostics.length > 0, 'probe project must report diagnostics');
+		console.log(JSON.stringify({ concurrentRequests: requests.length, matchesNative: true }));
 	} finally {
 		await native.close();
+		fs.rmSync(project, { recursive: true, force: true });
 	}
 	console.log(
 		JSON.stringify({

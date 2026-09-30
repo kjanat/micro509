@@ -30,6 +30,27 @@
 				"source.organizeImports.biome": true
 			}
 		},
+		"JavaScript": {
+			"format_on_save": "on",
+			"formatter": [
+				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+				{ "language_server": { "name": "dprint" } }
+			],
+			"language_servers": [
+				"typescript", // https://github.com/kjanat/zed-typescript (just better...)
+				// "typescript-ls",
+				"deno",
+				"biome",
+				"oxlint",
+				"!vtsls",
+				"!oxfmt",
+				"!tailwindcss-language-server"
+			],
+			"code_actions_on_format": {
+				"source.fixAll.biome": true,
+				"source.organizeImports.biome": true
+			}
+		},
 		"Markdown": { "wrap_guides": [80] },
 		"TOML": { "wrap_guides": [140] }
 	},

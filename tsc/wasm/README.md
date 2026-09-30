@@ -21,16 +21,20 @@ bun tsc/wasm/probe.mjs
 The build produces `bin/tsc-bridge.wasm` and the matching `bin/wasm_exec.js`.
 Both are available locally and ignored by Git. All paths are derived from the
 scripts' locations; no `/tmp` files or machine-specific paths are needed.
-`build.mjs` resolves the `@kjanat/tsc-bridge` workspace dependency and generates
-its Go build inputs under `bin/build/` from that package's `main.go`, `go.mod`,
-and `go.sum`, replacing only the CLI entrypoint with [`main.go`](./main.go).
-Compiler logic and dependency pins stay in `../bridge`.
+This directory is its own Go module. [`main.go`](./main.go) builds only for
+`js/wasm` and imports `github.com/microsoft/TypeScript/tsc/bridge/protocol`,
+which `go.mod` replaces with `../bridge`; compiler logic stays there. The
+repository's `go.work` lists both modules for editors and `go` commands run from
+the root. `build.mjs` builds with `GOWORK=off`, so only `go.mod` decides the
+dependencies.
 
 The probe checks:
 
 - Emitted JavaScript executes correctly, and invalid syntax produces diagnostics.
 - The repository's `tsconfig.src.json` checks without diagnostics.
 - Root-exported error and reason code unions exactly match the native bridge.
+- Twelve concurrent transpile, project-check, override and union requests each
+  return the native bridge's result for the same request.
 - The runtime shuts down and its remaining JS timers are disposed.
 
 It reports module size, gzip size, timings, diagnostic and union counts, and

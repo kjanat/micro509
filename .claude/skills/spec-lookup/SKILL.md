@@ -179,7 +179,7 @@ Revocation Available", updates 5280), ITU-T X.509 2023 Corrigendum 2, PKITS
   all the time."
 - PKITS §4.4: a max age from `thisUpdate` is the configurable local-policy
   override for staleness.
-- RFC 9919 §4 ("MUST reject" when `nextUpdate` is absent) is an OCSP
+- RFC 9919 §5 ("MUST reject" when `nextUpdate` is absent) is an OCSP
   profile: analogous for CRLs, not governing.
 
 Conclusion the text supports: revocation determination is the default with

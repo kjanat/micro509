@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { createTscBridge, transpileSync } from '#bridge';
+import { checkProjectSync, createTscBridge, transpileSync } from '#bridge';
 
 test('native transpilation, queued requests, syntax diagnostics, and clean shutdown', async () => {
 	const bridge = createTscBridge();
@@ -67,6 +67,66 @@ test('project diagnostics and evaluated, re-exported literal unions', async () =
 		assert.deepEqual(await bridge.checkProject('tsconfig.json'), []);
 		const missing = await bridge.checkProject('missing.json');
 		assert.ok(missing.some((d) => d.category === 1));
+	} finally {
+		await bridge.close();
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('cached projects, overrides, chained messages, and synchronous checks', async () => {
+	const dir = await mkdtemp(path.join(tmpdir(), 'tsc-bridge-cache-'));
+	const bridge = createTscBridge({ cwd: dir });
+	try {
+		await writeFile(
+			path.join(dir, 'tsconfig.json'),
+			JSON.stringify({
+				compilerOptions: { strict: true, target: 'ESNext', module: 'NodeNext', types: [] },
+				files: ['index.ts'],
+			}),
+		);
+		await writeFile(path.join(dir, 'codes.ts'), "export type AErrorCode = 'a';\n");
+		await writeFile(
+			path.join(dir, 'index.ts'),
+			"export type { AErrorCode } from './codes.js';\nexport const f: (x: string) => void = (x: number) => {};\n",
+		);
+		await writeFile(path.join(dir, 'loose.ts'), 'export function g(x) { return x; }\n');
+
+		const [chained] = await bridge.checkProject('tsconfig.json');
+		assert.ok(chained, 'expected a diagnostic');
+		assert.equal(chained.code, 2322);
+		assert.ok(chained.children?.length, JSON.stringify(chained));
+		assert.equal(
+			chained.messageText,
+			[
+				"Type '(x: number) => void' is not assignable to type '(x: string) => void'.",
+				"  Types of parameters 'x' and 'x' are incompatible.",
+				"    Type 'string' is not assignable to type 'number'.",
+			].join('\n'),
+		);
+		assert.deepEqual(checkProjectSync('tsconfig.json', { cwd: dir }), [chained]);
+
+		assert.deepEqual(await bridge.exportedCodeUnions('tsconfig.json', ['index.ts']), [
+			{ name: 'AErrorCode', codes: ['a'] },
+		]);
+		await writeFile(path.join(dir, 'codes.ts'), "export type AErrorCode = 'a' | 'b';\n");
+		assert.deepEqual(await bridge.exportedCodeUnions('tsconfig.json', ['index.ts']), [
+			{ name: 'AErrorCode', codes: ['a', 'b'] },
+		]);
+
+		const strict = await bridge.checkProject('tsconfig.json', { files: ['loose.ts'] });
+		assert.deepEqual(
+			strict.map((d) => [path.basename(d.fileName ?? ''), d.code]),
+			[['loose.ts', 7006]],
+		);
+		const overrides = { files: ['loose.ts'], compilerOptions: { strict: false } };
+		assert.deepEqual(await bridge.checkProject('tsconfig.json', overrides), []);
+		assert.deepEqual(checkProjectSync('tsconfig.json', { cwd: dir, ...overrides }), []);
+
+		await writeFile(
+			path.join(dir, 'index.ts'),
+			"export type { AErrorCode } from './codes.js';\nexport const f: (x: string) => void = (x: string) => {};\n",
+		);
+		assert.deepEqual(await bridge.checkProject('tsconfig.json'), []);
 	} finally {
 		await bridge.close();
 		await rm(dir, { recursive: true, force: true });

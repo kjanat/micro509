@@ -6,6 +6,8 @@ export interface Diagnostic {
 	readonly code: number;
 	readonly category: number;
 	readonly message: string;
+	/** `message` followed by its chained messages, as TypeScript prints them. */
+	readonly messageText: string;
 	readonly fileName?: string;
 	/** Zero-based UTF-8 byte offset, matching the Go compiler. */
 	readonly start: number;
@@ -25,9 +27,17 @@ export interface CodeUnion {
 	readonly codes: readonly string[];
 }
 
+/** Applied as a tsconfig that extends the project's configuration. */
+export interface ProjectOverrides {
+	/** Replaces the project's root files. Paths are relative to the configuration file's directory. */
+	readonly files?: readonly string[];
+	/** tsconfig `compilerOptions` layered over the project's own. */
+	readonly compilerOptions?: Readonly<Record<string, unknown>>;
+}
+
 export interface TscBridge {
 	transpile(source: string, fileName?: string): Promise<TranspileResult>;
-	checkProject(configPath: string): Promise<readonly Diagnostic[]>;
+	checkProject(configPath: string, overrides?: ProjectOverrides): Promise<readonly Diagnostic[]>;
 	/** Entrypoints are relative to the configuration file's directory. */
 	exportedCodeUnions(
 		configPath: string,
@@ -43,7 +53,7 @@ interface Response extends TranspileResult {
 
 type Request =
 	| { readonly method: 'transpile'; readonly source: string; readonly fileName?: string }
-	| { readonly method: 'checkProject'; readonly configPath: string }
+	| ({ readonly method: 'checkProject'; readonly configPath: string } & ProjectOverrides)
 	| {
 			readonly method: 'exportedCodeUnions';
 			readonly configPath: string;
@@ -60,6 +70,7 @@ function isDiagnostic(value: unknown): value is Diagnostic {
 		typeof value.code === 'number' &&
 		typeof value.category === 'number' &&
 		typeof value.message === 'string' &&
+		typeof value.messageText === 'string' &&
 		typeof value.start === 'number' &&
 		typeof value.length === 'number' &&
 		(value.fileName === undefined || typeof value.fileName === 'string') &&
@@ -89,16 +100,27 @@ function executableOf(executable?: string): string {
 	);
 }
 
-/** Runs one helper for integrations that require a synchronous transpiler. */
-export function transpileSync(
-	source: string,
-	options: {
-		readonly fileName?: string;
-		readonly executable?: string;
-		readonly cwd?: string;
-		readonly timeoutMs?: number;
-	} = {},
-): TranspileResult {
+function responseOf(value: Record<string, unknown>): Response {
+	const { outputText, diagnostics, unions } = value;
+	if (
+		typeof outputText !== 'string' ||
+		!Array.isArray(diagnostics) ||
+		!diagnostics.every(isDiagnostic) ||
+		!Array.isArray(unions) ||
+		!unions.every(isCodeUnion)
+	) {
+		throw new Error('Invalid helper response payload');
+	}
+	return { outputText, diagnostics, unions };
+}
+
+export interface HelperOptions {
+	readonly executable?: string;
+	readonly cwd?: string;
+	readonly timeoutMs?: number;
+}
+
+function requestSync(payload: Request, options: HelperOptions): Response {
 	const timeoutMs = options.timeoutMs ?? 60_000;
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
 	const result = spawnSync(executableOf(options.executable), [], {
@@ -106,7 +128,7 @@ export function transpileSync(
 		encoding: 'utf8',
 		timeout: timeoutMs,
 		maxBuffer: 16 * 1024 * 1024,
-		input: `${JSON.stringify({ id: 1, method: 'transpile', source, fileName: options.fileName })}\n`,
+		input: `${JSON.stringify({ id: 1, ...payload })}\n`,
 	});
 	if (result.error) throw result.error;
 	if (result.status !== 0) {
@@ -117,24 +139,33 @@ export function transpileSync(
 	const value: unknown = JSON.parse(result.stdout);
 	if (!isRecord(value) || value.id !== 1) throw new Error('Invalid helper response');
 	if (typeof value.error === 'string') throw new Error(value.error);
-	if (
-		typeof value.outputText !== 'string' ||
-		!Array.isArray(value.diagnostics) ||
-		!value.diagnostics.every(isDiagnostic)
-	) {
-		throw new Error('Invalid helper response payload');
-	}
-	return { outputText: value.outputText, diagnostics: value.diagnostics };
+	return responseOf(value);
+}
+
+/** Runs one helper for integrations that require a synchronous transpiler. */
+export function transpileSync(
+	source: string,
+	options: HelperOptions & { readonly fileName?: string } = {},
+): TranspileResult {
+	const { outputText, diagnostics } = requestSync(
+		{ method: 'transpile', source, fileName: options.fileName },
+		options,
+	);
+	return { outputText, diagnostics };
+}
+
+/** Runs one helper for integrations that require a synchronous project check. */
+export function checkProjectSync(
+	configPath: string,
+	options: HelperOptions & ProjectOverrides = {},
+): readonly Diagnostic[] {
+	const { files, compilerOptions } = options;
+	return requestSync({ method: 'checkProject', configPath, files, compilerOptions }, options)
+		.diagnostics;
 }
 
 /** Starts one persistent helper process. Paths passed to it resolve against cwd. */
-export function createTscBridge(
-	options: {
-		readonly executable?: string;
-		readonly cwd?: string;
-		readonly timeoutMs?: number;
-	} = {},
-): TscBridge {
+export function createTscBridge(options: HelperOptions = {}): TscBridge {
 	const timeoutMs = options.timeoutMs ?? 60_000;
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
 	const executable = executableOf(options.executable);
@@ -200,19 +231,10 @@ export function createTscBridge(
 				item.reject(new Error(value.error));
 				return;
 			}
-			const { outputText, diagnostics, unions } = value;
-			if (
-				typeof outputText !== 'string' ||
-				!Array.isArray(diagnostics) ||
-				!diagnostics.every(isDiagnostic) ||
-				!Array.isArray(unions) ||
-				!unions.every(isCodeUnion)
-			) {
-				throw new Error('Invalid helper response payload');
-			}
+			const response = responseOf(value);
 			pending.delete(value.id);
 			clearTimeout(item.timer);
-			item.resolve({ outputText, diagnostics, unions });
+			item.resolve(response);
 		} catch (error) {
 			fail(error instanceof Error ? error : new Error(String(error)));
 			child.kill();
@@ -240,8 +262,10 @@ export function createTscBridge(
 			const { outputText, diagnostics } = await request({ method: 'transpile', source, fileName });
 			return { outputText, diagnostics };
 		},
-		async checkProject(configPath) {
-			return (await request({ method: 'checkProject', configPath })).diagnostics;
+		async checkProject(configPath, overrides = {}) {
+			const { files, compilerOptions } = overrides;
+			return (await request({ method: 'checkProject', configPath, files, compilerOptions }))
+				.diagnostics;
 		},
 		async exportedCodeUnions(configPath, entrypoints) {
 			return (await request({ method: 'exportedCodeUnions', configPath, entrypoints })).unions;

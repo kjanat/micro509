@@ -8,16 +8,17 @@ permissions: {}
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: &U ubuntu-26.04
     timeout-minutes: 15
-    permissions: { contents: read, id-token: write, attestations: read }
+    permissions: { contents: &r read, id-token: write, attestations: *r }
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - parallel:
-          - uses: $/.github/actions/setup-ts
+          - uses: &TS $/.github/actions/setup-ts
             with: { install-bun: true, install-node: true, install-deno: true }
-          - uses: $/.github/actions/setup-openssl
+          - uses: &SSL $/.github/actions/setup-openssl
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
       - run: run typecheck
@@ -27,12 +28,12 @@ jobs:
         env: { DIFFERENTIAL_OPENSSL: "1" }
       - parallel:
           - name: Upload coverage to Codecov
-            if: github.repository == 'kjanat/micro509'
-            uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
+            if: &OG github.repository == 'kjanat/micro509'
+            uses: &codecov codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
             with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
           - name: Upload test-results to Codecov
-            if: github.repository == 'kjanat/micro509'
-            uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
+            if: *OG
+            uses: *codecov
             with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: test_results, files: test-results.xml }
       - parallel:
           - name: Node smoke test (dist)
@@ -42,13 +43,12 @@ jobs:
 
   docs:
     name: Docs site
-    runs-on: ubuntu-latest
+    runs-on: *U
     timeout-minutes: 15
-    permissions: { contents: read }
+    permissions: { contents: *r }
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
+      - *checkout
+      - uses: *TS
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
         env: { GITHUB_TOKEN: "${{ github.token }}" }
@@ -60,25 +60,39 @@ jobs:
 
   runtime-smoke:
     name: Workerd + browser smoke
-    runs-on: ubuntu-latest
+    runs-on: *U
     timeout-minutes: 15
-    permissions: { contents: read }
+    permissions: { contents: *r }
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
+      - *checkout
+      - uses: *TS
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -sf bd playwright:chromium smoke
 
+  tsc:
+    name: TypeScript compiler bridges
+    runs-on: *U
+    timeout-minutes: 15
+    permissions: { contents: *r }
+    steps:
+      - *checkout
+      - parallel:
+          - uses: *TS
+            with: { install-bun: true, install-node: true }
+          - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+            with: { go-version-file: go.work, cache-dependency-path: tsc/*/go.sum }
+      - run: runner install -sf @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build
+      - run: run -s @kjanat/tsc-bridge:test @kjanat/tsc-wasm:test
+
   differential:
     name: OpenSSL differential
-    runs-on: ubuntu-26.04
+    runs-on: *U
     timeout-minutes: 10
-    permissions: { contents: read, attestations: read }
+    permissions: { contents: *r, attestations: *r }
     env: { DIFFERENTIAL_OPENSSL: "1" }
     steps:
-      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
+      - *checkout
       - parallel:
-          - { uses: $/.github/actions/setup-ts, with: { install-bun: "true" } }
-          - { uses: $/.github/actions/setup-openssl }
+          - { uses: *TS, with: { install-bun: "true" } }
+          - { uses: *SSL }
       - run: runner install -f test:differential

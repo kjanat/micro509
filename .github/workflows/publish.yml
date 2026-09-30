@@ -22,15 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read }
-    if: github.repository == 'kjanat/micro509' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'kjanat/micro509' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) # pretty-yaml-ignore
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      jsr_url: ${{ steps.version.outputs.jsr_url }}
-      npm_url: ${{ steps.version.outputs.npm_url }}
-      is_tag: ${{ steps.version.outputs.is_tag }}
+      version:    ${{ steps.version.outputs.version    }}
+      jsr_url:    ${{ steps.version.outputs.jsr_url    }}
+      npm_url:    ${{ steps.version.outputs.npm_url    }}
+      is_tag:     ${{ steps.version.outputs.is_tag     }}
       prerelease: ${{ steps.version.outputs.prerelease }}
-      is_stable: ${{ steps.version.outputs.is_stable }}
-      mode: ${{ steps.version.outputs.mode }}
+      is_stable:  ${{ steps.version.outputs.is_stable  }}
+      mode:       ${{ steps.version.outputs.mode       }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
@@ -44,10 +44,10 @@ jobs:
     if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.test.result == 'success' || (needs.test.result == 'skipped' && github.event_name != 'push')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions: { contents: read, id-token: write }
+    permissions: { contents: read, id-token: write } # pretty-yaml-ignore
     environment:
-      name: ${{ needs.validate.outputs.is_tag == 'true' && 'jsr' || '' }}
-      url: ${{ needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.jsr_url || '' }}
+      name: ${{ case(needs.validate.outputs.is_tag == 'true', 'jsr', '') }}
+      url:  ${{ case(needs.validate.outputs.is_tag == 'true', needs.validate.outputs.jsr_url, '') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
@@ -58,7 +58,7 @@ jobs:
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |
-          $outputs = ConvertFrom-Json $env:OUTPUTS
+          $outputs = $env:OUTPUTS | ConvertFrom-Json
           if ($outputs.is_tag -ne 'true') { bunx jsr publish --dry-run; exit $LASTEXITCODE }
 
           $pkg = Get-Content jsr.json | ConvertFrom-Json

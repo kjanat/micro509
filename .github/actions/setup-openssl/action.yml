@@ -1,12 +1,13 @@
 name: Setup OpenSSL
 description: Install a pinned OpenSSL build from its GHCR tarballs, verified against its build provenance attestation.
 
+# pretty-yaml-ignore
 inputs:
-  version: { description: "OpenSSL release to install, e.g. 4.0.2 or 4.1.0-beta1", required: false, default: "4.0.2" }
-  artifact: { description: OCI repository holding the per-platform tarballs, required: false, default: ghcr.io/kjanat/openssl-prebuilt }
-  repository: { description: Repository whose openssl.yml workflow signed the build, required: false, default: kjanat/micro509 }
-  source-ref: { description: Git ref the build must have been published from, required: false, default: refs/heads/master }
-  token: { description: Token used to read the build's attestation, required: false, default: "${{ github.token }}" }
+  version:      { description: "OpenSSL release to install, e.g. 4.0.2 or 4.1.0-beta1", required: false, default: "4.0.2"                         }
+  artifact:     { description: OCI repository holding the per-platform tarballs,        required: false, default: ghcr.io/kjanat/openssl-prebuilt }
+  repository:   { description: Repository whose openssl.yml workflow signed the build,  required: false, default: kjanat/micro509                 }
+  source-ref:   { description: Git ref the build must have been published from,         required: false, default: refs/heads/master               }
+  token:        { description: Token used to read the build's attestation,              required: false, default: "${{ github.token }}"           }
 
 outputs:
   openssl-path: { description: Path to the installed openssl binary, value: "${{ steps.install.outputs.openssl-path }}" }
@@ -14,19 +15,22 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+    - uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
 
     - name: Download, verify, and install OpenSSL
       id: install
-      shell: bash
+      shell: "bash -euo pipefail {0}"
+      # pretty-yaml-ignore
       env:
-        GH_TOKEN: ${{ inputs.token }}
-        ARTIFACT: ${{ inputs.artifact }}
-        REPOSITORY: ${{ inputs.repository }}
-        SOURCE_REF: ${{ inputs.source-ref }}
-        VERSION: ${{ inputs.version }}
+        GH_TOKEN:   ${{ inputs.token      }}
+        artifact:   ${{ inputs.artifact   }}
+        repository: ${{ inputs.repository }}
+        source_ref: ${{ inputs.source-ref }}
+        version:    ${{ inputs.version    }}
+        os:         ${{ case(runner.os   == 'windows', 'windows', runner.os   == 'macos', 'darwin', runner.os == 'linux', 'linux', runner.os) }}
+        arch:       ${{ case(runner.arch == 'x64', 'x64',         runner.arch == 'arm64', 'arm64',  runner.arch) }}
+        binary:     ${{ case(runner.os   == 'windows', 'openssl.exe', 'openssl') }}
       run: |
-        set -euo pipefail
         retry() {
           local attempt status delay=2
           for attempt in 1 2 3 4; do
@@ -36,44 +40,35 @@ runs:
             sleep "${delay}"; delay=$((delay * 2))
           done
         }
-        binary=openssl
-        case "${RUNNER_OS}/${RUNNER_ARCH}" in
-          Linux/X64) platform=linux-x64 ;;
-          Linux/ARM64) platform=linux-arm64 ;;
-          macOS/X64) platform=darwin-x64 ;;
-          macOS/ARM64) platform=darwin-arm64 ;;
-          Windows/X64) platform=windows-x64 binary=openssl.exe ;;
-          Windows/ARM64) platform=windows-arm64 binary=openssl.exe ;;
-          *) echo "::error::No OpenSSL build exists for ${RUNNER_OS}/${RUNNER_ARCH}."; exit 1 ;;
-        esac
-        if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)[0-9]+)?$ ]]; then
+        platform="${os}-${arch}"
+        if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)[0-9]+)?$ ]]; then
           echo '::error::version must be an OpenSSL release such as 4.0.2 or 4.1.0-beta1.'
           exit 1
         fi
 
-        archive="openssl-${VERSION}-${platform}.tar.gz"
+        archive="openssl-${version}-${platform}.tar.gz"
         root="$(mktemp -d "${RUNNER_TEMP//\\//}/openssl.XXXXXXXX")"
-        manifest="$(retry oras manifest fetch "${ARTIFACT}:${VERSION}")"
+        manifest="$(retry oras manifest fetch "${artifact}:${version}")"
         digest="$(jq -r --arg name "${archive}" '.layers[] | select(.annotations["org.opencontainers.image.title"] == $name) | .digest' <<< "${manifest}")"
         if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-          echo "::error::${ARTIFACT}:${VERSION} has no ${archive}."
+          echo "::error::${artifact}:${version} has no ${archive}."
           exit 1
         fi
-        retry oras blob fetch --output "${root}/${archive}" "${ARTIFACT}@${digest}"
+        retry oras blob fetch --output "${root}/${archive}" "${artifact}@${digest}"
         retry gh attestation verify "${root}/${archive}" \
-          --repo "${REPOSITORY}" \
-          --signer-workflow "${REPOSITORY}/.github/workflows/openssl.yml" \
-          --source-ref "${SOURCE_REF}" \
+          --repo "${repository}" \
+          --signer-workflow "${repository}/.github/workflows/openssl.yml" \
+          --source-ref "${source_ref}" \
           --deny-self-hosted-runners
         (cd "${root}" && tar -xzf "${archive}")
 
         reported="$("${root}/bin/${binary}" version)"
         echo "${reported}"
         case "${reported}" in
-          "OpenSSL ${VERSION} "*) ;;
-          *) echo "::error::expected OpenSSL ${VERSION}"; exit 1 ;;
+          "OpenSSL ${version} "*) ;;
+          *) echo "::error::expected OpenSSL ${version}"; exit 1 ;;
         esac
 
-        printf '%s\n' "${root}/bin" >> "${GITHUB_PATH}"
+        printf '%s/bin\n'          "${root}"                 >> "${GITHUB_PATH}"
         printf 'OPENSSL_CONF=%s\n' "${root}/ssl/openssl.cnf" >> "${GITHUB_ENV}"
-        printf 'openssl-path=%s\n' "${root}/bin/${binary}" >> "${GITHUB_OUTPUT}"
+        printf 'openssl-path=%s\n' "${root}/bin/${binary}"   >> "${GITHUB_OUTPUT}"

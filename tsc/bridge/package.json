@@ -7,9 +7,17 @@
 	"imports": {
 		"#bridge": "./index.ts"
 	},
-	"exports": "./index.ts",
+	"exports": {
+		".": "./index.ts",
+		"./package.json": "./package.json"
+	},
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
-		"test": "node --test test/smoke.mts"
+		"test": "run -s test:go test:js",
+		"test:go": "go test -race -count=1 ./...",
+		"test:js": "node --test test/smoke.mts test/cache.mts"
+	},
+	"devDependencies": {
+		"runner-run": "catalog:"
 	}
 }

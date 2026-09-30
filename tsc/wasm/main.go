@@ -1,8 +1,12 @@
+//go:build js && wasm
+
 package main
 
 import (
 	"encoding/json"
 	"syscall/js"
+
+	"github.com/microsoft/TypeScript/tsc/bridge/protocol"
 )
 
 func main() {
@@ -12,12 +16,12 @@ func main() {
 		executor := js.FuncOf(func(this js.Value, callbacks []js.Value) any {
 			resolve, reject := callbacks[0], callbacks[1]
 			go func() {
-				var req request
+				var req protocol.Request
 				if err := json.Unmarshal([]byte(input), &req); err != nil {
 					reject.Invoke(err.Error())
 					return
 				}
-				output, err := json.Marshal(handle(req))
+				output, err := json.Marshal(protocol.Handle(req))
 				if err != nil {
 					reject.Invoke(err.Error())
 					return
