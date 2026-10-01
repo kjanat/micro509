@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,7 +16,9 @@ execFileSync(
 	{ ...options, stdio: 'inherit' },
 );
 const goroot = execFileSync('go', ['env', 'GOROOT'], { ...options, encoding: 'utf8' }).trim();
-copyFileSync(path.join(goroot, 'lib/wasm/wasm_exec.js'), path.join(bin, 'wasm_exec.cjs'));
+const runtime = path.join(bin, 'wasm_exec.cjs');
+rmSync(runtime, { force: true });
+writeFileSync(runtime, readFileSync(path.join(goroot, 'lib/wasm/wasm_exec.js')));
 console.log(
 	`Built ${path.relative(process.cwd(), path.join(bin, 'compat.wasm'))} and its matching Go JS runtime.`,
 );
