@@ -26,15 +26,14 @@ jobs:
         run: run -p check:deno lint:deno docs:lint
       - run: run test:coverage
         env: { DIFFERENTIAL_OPENSSL: "1" }
-      - parallel:
-          - name: Upload coverage to Codecov
-            if: &OG github.repository == 'kjanat/micro509'
-            uses: &codecov codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
-            with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
-          - name: Upload test-results to Codecov
-            if: *OG
-            uses: *codecov
-            with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: test_results, files: test-results.xml }
+      - name: Upload coverage to Codecov
+        if: &OG github.repository == 'kjanat/micro509'
+        uses: &codecov codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
+      - name: Upload test-results to Codecov
+        if: *OG
+        uses: *codecov
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: test_results, files: test-results.xml }
       - parallel:
           - name: Node smoke test (dist)
             run: node scripts/smoke.mjs
