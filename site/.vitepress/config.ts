@@ -65,6 +65,16 @@ function git(...args: readonly string[]): string | undefined {
 	}
 }
 
+function locallyExcludedMarkdown(): readonly string[] {
+	const exclude = git('rev-parse', '--git-path', 'info/exclude');
+	if (exclude === undefined || !fs.existsSync(path.resolve(repoRoot, exclude))) return [];
+	return (
+		git('ls-files', '--others', '--ignored', `--exclude-from=${exclude}`, '--', '*.md')?.split(
+			'\n',
+		) ?? []
+	);
+}
+
 function envOf(...names: readonly string[]): string | undefined {
 	for (const name of names) {
 		const value = process.env[name]?.trim();
@@ -316,6 +326,7 @@ export default defineConfig<DocsThemeConfig>({
 		'packages/**',
 		'src/**',
 		'test/**',
+		...locallyExcludedMarkdown(),
 		...docs.srcExclude,
 	],
 	ignoreDeadLinks: [/test\/fixtures\//],
