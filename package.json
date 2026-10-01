@@ -110,7 +110,7 @@
 		"prepare": "{ [ -z \"${WORKERS_CI:-}\" ] || ls -l node_modules/.bin/run; } && run -s deno:importsmap deno:cache && if [ -n \"${WORKERS_CI:-}\" ]; then run -s @kjanat/tsc-bridge:fetch; else run -sq @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build @kjanat/tsc-compat:build; fi",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; BIN=\"${BIN:-bun}\"; $BIN x jsr publish",
-		"publish:pkgprnew": "BIN=\"${BIN:-bun}\"; $BIN x pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun --template './examples/vite' . ./tsc/protocol ./tsc/bridge ./tsc/wasm ./tsc/compat ./tsc/vue-mapper",
+		"publish:pkgprnew": "BIN=\"${BIN:-bun}\"; $BIN x pkg-pr-new publish --packageManager=bun --bun --template './examples/vite' . ./tsc/protocol ./tsc/bridge ./tsc/wasm ./tsc/compat ./tsc/vue-mapper",
 		"rfc": "bun scripts/fetch-spec.bun.ts rfc",
 		"site:build": "run -s build micro509-site:build",
 		"site:import-maps": "deno run --allow-read --allow-net --allow-write --allow-run scripts/site-import-maps.deno.ts",
