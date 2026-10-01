@@ -7,7 +7,7 @@
 		"skipLibCheck": true,
 		"allowImportingTsExtensions": true,
 		"noEmit": true,
-		"types": ["node"]
+		"types": ["node", "bun"]
 	},
 	"include": ["./**/*.ts"]
 }

@@ -13,7 +13,7 @@
 	"files": ["/bin/tsc-bridge", "/index.ts"],
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
-		"fetch": "mkdir -p bin && for ref in \"${WORKERS_CI_COMMIT_SHA:-master}\" \"${WORKERS_CI_BRANCH:-master}\" master; do curl --fail --silent --show-error --location --connect-timeout 10 --max-time 60 --retry 2 --output bin/tsc-bridge.tgz \"https://pkg.pr.new/kjanat/micro509/@kjanat/tsc-bridge@$ref\" && tar -xzf bin/tsc-bridge.tgz --strip-components=1 package/bin/tsc-bridge && rm bin/tsc-bridge.tgz && exit; done; rm -f bin/tsc-bridge.tgz; exit 1",
+		"fetch": "bun fetch.ts",
 		"test": "run -s test:go test:js",
 		"test:go": "go vet ./...",
 		"test:js": "bun test"
