@@ -32,9 +32,10 @@ so `bun` must be on `PATH`. The WebAssembly bridge imports `index.ts`, named by
 `tscBridge.module`, and runs the mapper inside the calling process through
 `connect(send)`.
 
-`@vue/language-core` parses `<script>` blocks with TypeScript's JavaScript API,
-which TypeScript 7 does not ship. This package depends on TypeScript 6 for that
-parser. The bridge's compiler does the type checking.
+`@vue/language-core` parses `<script>` blocks and reads `vueCompilerOptions`
+through TypeScript 6's synchronous JavaScript API, which TypeScript 7 does not
+ship. The mapper hands it [`@kjanat/tsc-compat`](../compat/README.md), which
+serves that API from the bridge's own compiler.
 
 ## Diagnostics
 

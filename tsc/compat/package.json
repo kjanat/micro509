@@ -1,0 +1,35 @@
+{
+	"name": "@kjanat/tsc-compat",
+	"version": "0.0.0",
+	"private": true,
+	"description": "TypeScript 6 parser and configuration API backed by the pinned TypeScript Go compiler in WebAssembly.",
+	"type": "module",
+	"exports": {
+		".": "./index.ts",
+		"./package.json": "./package.json"
+	},
+	"files": ["/bin/", "/index.ts", "/runtime.ts", "/sys.ts"],
+	"scripts": {
+		"build": "bun build.ts",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"typescript": "7.1.0-dev.20260930.4"
+	},
+	"engines": {
+		"bun": ">=1.4.2"
+	},
+	"engineStrict": true,
+	"devEngines": {
+		"packageManager": {
+			"name": "bun",
+			"version": ">=1.4.2",
+			"onFail": "error"
+		},
+		"runtime": {
+			"name": "bun",
+			"version": ">=1.4.2",
+			"onFail": "error"
+		}
+	}
+}

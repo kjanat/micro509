@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import * as ts from '@kjanat/tsc-compat';
 import type { CodeMapping, LanguagePlugin, VueVirtualCode } from '@vue/language-core';
 import {
 	createParsedCommandLine,
@@ -8,7 +9,6 @@ import {
 	SourceMap,
 	shouldReportDiagnostics,
 } from '@vue/language-core';
-import ts from 'typescript';
 import type { Handler } from '#rpc';
 import { isRecord } from '#rpc';
 

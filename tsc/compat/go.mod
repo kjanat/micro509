@@ -1,4 +1,4 @@
-module github.com/microsoft/TypeScript/tsc/protocol
+module github.com/microsoft/TypeScript/tsc/compat
 
 go 1.27
 

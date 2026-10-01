@@ -56,9 +56,9 @@ Its module path sits under `github.com/microsoft/TypeScript/tsc`, which satisfie
 Go's `internal` import rule. The upstream module is a normal dependency; no fork
 or source patches are used.
 
-Pinned upstream commit: `299a555c3a91519552b471c5b8ce3eb4247ab044`.
-This is an upstream development snapshot, not the installed npm TypeScript 7.0.2.
-The Go API is internal and may change when this pin is updated.
+Pinned upstream commit: `9adc871ff47f79b3e99ff2b1cbe9efb140d76af8`, which npm
+publishes as the nightly `typescript@7.1.0-dev.20260930.4`. The Go API is internal
+and may change when this pin is updated.
 
 ## Test
 

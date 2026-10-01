@@ -17,8 +17,8 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@vue/language-core": "catalog:ts",
-		"typescript": "catalog:ts6"
+		"@kjanat/tsc-compat": "workspace:*",
+		"@vue/language-core": "catalog:ts"
 	},
 	"devDependencies": {
 		"@kjanat/tsc-bridge": "workspace:*",
