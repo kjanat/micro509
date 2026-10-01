@@ -5,6 +5,8 @@ import { test } from 'node:test';
 import type { Diagnostic } from '@kjanat/tsc-bridge';
 import { checkProjectSync, formatDiagnostic } from '@kjanat/tsc-bridge';
 
+const timeout = 60_000;
+
 const fixture = path.join(import.meta.dirname, 'fixture');
 const config = path.join(fixture, 'tsconfig.json');
 
@@ -26,11 +28,11 @@ const vueTsc = [
 	"main.ts(4,14): error TS2322: Type 'DefineComponent<{}, {}, {}, {}, {}, ComponentOptionsMixin, ComponentOptionsMixin, {}, string, PublicProps, ToResolvedProps<{}, {}>, ... 8 more ..., any>' is not assignable to type 'number'.",
 ];
 
-test('reports what vue-tsc 3.3.11 reports on TypeScript 6', () => {
+test('reports what vue-tsc 3.3.11 reports on TypeScript 6', { timeout }, () => {
 	assert.deepEqual(formatted(checkProjectSync(config, { runExternalCode: true })), vueTsc);
 });
 
-test('reports the same through the WASM bridge without starting a process', () => {
+test('reports the same through the WASM bridge without starting a process', { timeout }, () => {
 	const result = spawnSync(process.execPath, [path.join(import.meta.dirname, 'wasm.ts')], {
 		encoding: 'utf8',
 		env: { ...process.env, PATH: import.meta.dirname },
@@ -39,7 +41,7 @@ test('reports the same through the WASM bridge without starting a process', () =
 	assert.deepEqual(JSON.parse(result.stdout), vueTsc);
 });
 
-test('runs no mapper without runExternalCode', () => {
+test('runs no mapper without runExternalCode', { timeout }, () => {
 	assert.deepEqual(formatted(checkProjectSync(config)), [
 		"main.ts(1,20): error TS2307: Cannot find module './Broken.vue' or its corresponding type declarations.",
 		"main.ts(2,19): error TS2307: Cannot find module './Child.vue' or its corresponding type declarations.",

@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import type { CodeUnion, Diagnostic, ProjectOverrides } from '#bridge';
 import { checkProjectSync, createTscBridge } from '#bridge';
 
+const timeout = 60_000;
+
 type Located = readonly [file: string, code: number];
 
 function located(diagnostics: readonly Diagnostic[]): readonly Located[] {
@@ -32,7 +34,7 @@ const tsconfig = (strict: boolean) => ({
 	include: ['src/**/*.ts'],
 });
 
-test('cached diagnostics match a fresh helper after every edit', async () => {
+test('cached diagnostics match a fresh helper after every edit', { timeout }, async () => {
 	const { dir, write } = await project();
 	const bridge = createTscBridge({ cwd: dir });
 	try {
@@ -122,7 +124,7 @@ test('cached diagnostics match a fresh helper after every edit', async () => {
 	}
 });
 
-test('overrides match the same tsconfig written to disk', async () => {
+test('overrides match the same tsconfig written to disk', { timeout }, async () => {
 	const { dir, write } = await project();
 	const bridge = createTscBridge({ cwd: dir });
 	try {
@@ -181,7 +183,7 @@ test('overrides match the same tsconfig written to disk', async () => {
 	}
 });
 
-test('interleaved project requests stay consistent in one helper', async () => {
+test('interleaved project requests stay consistent in one helper', { timeout }, async () => {
 	const { dir, write } = await project();
 	const bridge = createTscBridge({ cwd: dir });
 	try {

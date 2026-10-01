@@ -6,7 +6,11 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { checkProjectSync, createTscBridge, transpileSync } from '#bridge';
 
-test('native transpilation, queued requests, syntax diagnostics, and clean shutdown', async () => {
+const timeout = 60_000;
+
+test('native transpilation, queued requests, syntax diagnostics, and clean shutdown', {
+	timeout,
+}, async () => {
 	const bridge = createTscBridge();
 	try {
 		const results = await Promise.all(
@@ -29,7 +33,7 @@ test('native transpilation, queued requests, syntax diagnostics, and clean shutd
 	}
 });
 
-test('project diagnostics and evaluated, re-exported literal unions', async () => {
+test('project diagnostics and evaluated, re-exported literal unions', { timeout }, async () => {
 	const dir = await mkdtemp(path.join(tmpdir(), 'tsc-bridge-'));
 	const bridge = createTscBridge({ cwd: dir });
 	try {
@@ -73,7 +77,9 @@ test('project diagnostics and evaluated, re-exported literal unions', async () =
 	}
 });
 
-test('cached projects, overrides, chained messages, and synchronous checks', async () => {
+test('cached projects, overrides, chained messages, and synchronous checks', {
+	timeout,
+}, async () => {
 	const dir = await mkdtemp(path.join(tmpdir(), 'tsc-bridge-cache-'));
 	const bridge = createTscBridge({ cwd: dir });
 	try {
@@ -144,7 +150,9 @@ test('a missing executable rejects requests and close without hanging', async ()
 	}
 });
 
-test('synchronous transpilation matches the persistent helper and reports failures', async () => {
+test('synchronous transpilation matches the persistent helper and reports failures', {
+	timeout,
+}, async () => {
 	const bridge = createTscBridge();
 	try {
 		for (const source of ['export const answer: number = 42;', 'const value: = 1;']) {
