@@ -1,9 +1,10 @@
 import { chmod } from 'node:fs/promises';
+import { env, exit } from 'node:process';
 
 const entry = 'package/bin/tsc-bridge';
 const binary = new URL('./bin/tsc-bridge', import.meta.url);
 const refs = new Set(
-	[process.env.WORKERS_CI_COMMIT_SHA, process.env.WORKERS_CI_BRANCH, 'master'].filter(
+	[env.WORKERS_CI_COMMIT_SHA, env.WORKERS_CI_BRANCH, 'master'].filter(
 		(ref): ref is string => ref !== undefined && ref !== '',
 	),
 );
@@ -27,13 +28,14 @@ for (const ref of refs) {
 	const tarball = await download(ref);
 	if (tarball === undefined) continue;
 	const file = (await new Bun.Archive(tarball).files(entry)).get(entry);
+	const bridge = `tsc-bridge@${ref}`;
 	if (file === undefined) {
-		console.error(`tsc-bridge@${ref}: no ${entry}`);
+		console.error(`${bridge}: no ${entry}`);
 		continue;
 	}
 	await Bun.write(binary, file);
 	await chmod(binary, 0o755);
-	console.log(`tsc-bridge@${ref}`);
-	process.exit(0);
+	console.log(`${bridge}`);
+	exit(0);
 }
-process.exit(1);
+exit(1);
