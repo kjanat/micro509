@@ -105,13 +105,9 @@ function commitSha(): string | undefined {
 
 const treeSha = commitSha();
 
-/** The commit the latest release tag points at; peeled remotely when the clone is shallow. */
+/** The commit the latest release tag points at. */
 function releasedSha(): string | undefined {
-	const peeled = `refs/tags/v${repo.version}^{}`;
-	return (
-		git('rev-parse', '--quiet', '--verify', peeled) ??
-		git('ls-remote', repoUrl.href, peeled)?.split('\t')[0]
-	);
+	return git('ls-remote', repoUrl.href, `refs/tags/v${repo.version}^{}`)?.split('\t')[0];
 }
 
 const released = releasedSha();

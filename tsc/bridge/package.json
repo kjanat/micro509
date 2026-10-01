@@ -13,7 +13,6 @@
 	},
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
-		"postinstall": "run build",
 		"test": "run -s test:go test:js",
 		"test:go": "go vet ./...",
 		"test:js": "bun test"

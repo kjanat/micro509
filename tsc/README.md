@@ -89,7 +89,9 @@ Inside `.vue` files the editor uses upstream's placement rules alone, because th
 ## Build and test
 
 Requires Go 1.27 or newer and Bun 1.4.2 or newer. `bun install` builds the native helper and both
-WebAssembly modules through the root `prepare` script. From the repository root:
+WebAssembly modules through the root `prepare` script. Under Cloudflare Workers Builds, where
+`WORKERS_CI` is set, it builds only the native helper, the one package the site build loads. From the
+repository root:
 
 ```sh
 run -s @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build @kjanat/tsc-compat:build

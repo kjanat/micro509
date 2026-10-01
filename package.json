@@ -107,7 +107,7 @@
 		"lint:fix": "biome check --fix",
 		"ms": "bun scripts/fetch-spec.bun.ts ms",
 		"playwright:chromium": "npx playwright install --with-deps chromium",
-		"prepare": "run -sq deno:importsmap deno:cache @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build @kjanat/tsc-compat:build",
+		"prepare": "run -sq deno:importsmap deno:cache @kjanat/tsc-bridge:build && { [ -n \"${WORKERS_CI:-}\" ] || run -sq @kjanat/tsc-wasm:build @kjanat/tsc-compat:build; }",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; BIN=\"${BIN:-bun}\"; $BIN x jsr publish",
 		"publish:pkgprnew": "BIN=\"${BIN:-bun}\"; $BIN x pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun --template './examples/vite'",
