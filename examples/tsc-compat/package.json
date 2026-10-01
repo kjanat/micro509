@@ -1,0 +1,16 @@
+{
+	"name": "tsc-compat-demo",
+	"private": true,
+	"description": "Parse TypeScript with the TypeScript Go compiler's parser, compiled to WebAssembly, through the TypeScript 6 API.",
+	"type": "module",
+	"scripts": {
+		"start": "node index.js"
+	},
+	"dependencies": {
+		"@kjanat/tsc-compat": "latest"
+	},
+	"stackblitz": {
+		"installDependencies": true,
+		"startCommand": "npm start"
+	}
+}

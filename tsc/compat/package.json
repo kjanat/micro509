@@ -4,10 +4,14 @@
 	"description": "TypeScript 6 parser and configuration API backed by the pinned TypeScript Go compiler in WebAssembly.",
 	"type": "module",
 	"exports": {
-		".": "./index.ts",
+		".": {
+			"types": "./index.ts",
+			"bun": "./index.ts",
+			"default": "./compat.js"
+		},
 		"./package.json": "./package.json"
 	},
-	"files": ["/bin/", "/index.ts", "/runtime.ts", "/sys.ts"],
+	"files": ["/bin/", "/compat.js", "/index.ts", "/runtime.ts", "/sys.ts"],
 	"scripts": {
 		"build": "bun build.ts",
 		"test": "bun test"

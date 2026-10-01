@@ -63,7 +63,7 @@ micro509/
 ├── docs/              # scope statements, harness docs, vendored RFC text
 ├── site/              # VitePress docs site + generated API pages
 ├── packages/          # workspace tooling (doc-render, VitePress plugins)
-├── examples/          # runnable consumers (browser, vite)
+├── examples/          # runnable consumers (browser, vite, tsc-compat)
 ├── scripts/           # build, smoke, and doc-render helper scripts
 ├── .github/actions/   # reusable CI setup/release validation actions
 ├── .github/openssl/   # OpenSSL image Dockerfile + usage README for ghcr.io/kjanat/openssl{,-prebuilt}
