@@ -1,7 +1,6 @@
 {
 	"name": "@kjanat/tsc-compat",
 	"version": "0.0.0",
-	"private": true,
 	"description": "TypeScript 6 parser and configuration API backed by the pinned TypeScript Go compiler in WebAssembly.",
 	"type": "module",
 	"exports": {

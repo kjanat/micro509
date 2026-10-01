@@ -9,15 +9,18 @@ jobs:
   build:
     if: github.repository == 'kjanat/micro509'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     cancel-timeout-minutes: 1
     permissions: { contents: read }
     steps:
       - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
-      - { uses: $/.github/actions/setup-ts, with: { install-bun: true, install-node: true } }
+      - parallel:
+          - { uses: $/.github/actions/setup-ts, with: { install-bun: true, install-node: true } }
+          - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+            with: { go-version-file: go.work, cache-dependency-path: tsc/*/go.sum }
       - run: runner install -f build
       - id: pkg-pr
-        timeout-minutes: 1
+        timeout-minutes: 3
         continue-on-error: true # pkg.pr.new intermittently returns unrelated Cloudflare 500/1101 errors and hangs; previews are non-critical.
         run: |
           run -q publish:pkgprnew --json pkgpr.json

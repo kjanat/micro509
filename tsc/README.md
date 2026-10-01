@@ -89,9 +89,14 @@ Inside `.vue` files the editor uses upstream's placement rules alone, because th
 ## Build and test
 
 Requires Go 1.27 or newer and Bun 1.4.2 or newer. `bun install` builds the native helper and both
-WebAssembly modules through the root `prepare` script. Under Cloudflare Workers Builds, where
-`WORKERS_CI` is set, it builds only the native helper, the one package the site build loads. From the
-repository root:
+WebAssembly modules through the root `prepare` script. Each push to `master` or a pull request
+publishes all five packages with their built binaries to [pkg.pr.new] through [`.github/workflows/pkg-pr-new.yml`][wf/pkg-pr-new].
+Under Cloudflare Workers Builds, where `WORKERS_CI` is set, `prepare` builds nothing and
+`@kjanat/tsc-bridge:fetch` downloads the native helper pkg.pr.new published for the commit, its
+branch, or `master`, in that order. The site build needs no Go. From the repository root:
+
+[pkg.pr.new]: https://pkg.pr.new
+[wf/pkg-pr-new]: ../.github/workflows/pkg-pr-new.yml
 
 ```sh
 run -s @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build @kjanat/tsc-compat:build

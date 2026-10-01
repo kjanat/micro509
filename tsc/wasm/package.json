@@ -1,7 +1,6 @@
 {
 	"name": "@kjanat/tsc-wasm",
 	"version": "0.0.0",
-	"private": true,
 	"description": "Experimental in-process WebAssembly version of the TypeScript Go bridge.",
 	"type": "module",
 	"imports": {

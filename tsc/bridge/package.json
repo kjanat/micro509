@@ -1,7 +1,6 @@
 {
 	"name": "@kjanat/tsc-bridge",
 	"version": "0.0.0",
-	"private": true,
 	"description": "Experimental JS access to the native TypeScript compiler.",
 	"type": "module",
 	"imports": {
@@ -11,8 +10,10 @@
 		".": "./index.ts",
 		"./package.json": "./package.json"
 	},
+	"files": ["/bin/tsc-bridge", "/index.ts"],
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
+		"fetch": "for ref in \"${WORKERS_CI_COMMIT_SHA:-master}\" \"${WORKERS_CI_BRANCH:-master}\" master; do curl --fail --silent --show-error --location \"https://pkg.pr.new/kjanat/micro509/@kjanat/tsc-bridge@$ref\" | tar -xz --strip-components=1 package/bin/tsc-bridge && exit; done; exit 1",
 		"test": "run -s test:go test:js",
 		"test:go": "go vet ./...",
 		"test:js": "bun test"

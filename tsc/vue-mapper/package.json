@@ -1,7 +1,6 @@
 {
 	"name": "@kjanat/tsc-vue-mapper",
 	"version": "0.0.0",
-	"private": true,
 	"description": "TypeScript content mapper that type-checks Vue single-file components with the native compiler.",
 	"type": "module",
 	"imports": {
@@ -13,6 +12,7 @@
 		"./package.json": "./package.json"
 	},
 	"bin": "server.ts",
+	"files": ["/server.ts", "/src/"],
 	"scripts": {
 		"test": "bun test"
 	},
