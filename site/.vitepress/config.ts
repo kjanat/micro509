@@ -228,7 +228,7 @@ const docs = await versionedDocs({
 	 * jsDelivr serves releases. esm.sh builds the current GitHub tree by commit,
 	 * which only exists for pushed refs, so the dev server serves the local
 	 * `dist/` through vite's `/@fs` instead. `bun dev` keeps it fresh via
-	 * `build:watch`; a bare `site:dev` needs a prior `bun bd`.
+	 * `build:watch`; a bare `micro509-site:dev` needs a prior `bun bd`.
 	 */
 	library: {
 		name: repo.name,

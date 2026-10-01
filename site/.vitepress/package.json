@@ -9,7 +9,8 @@
 	},
 	"scripts": {
 		"build": "vitepress build ..",
-		"deploy": "wrangler versions upload",
+		"deploy": "wrangler deploy",
+		"deploy:version": "wrangler versions upload",
 		"dev": "vitepress dev .. --host",
 		"fmt": "run --dir=.. dprint fmt",
 		"preview": "vitepress preview ..",
