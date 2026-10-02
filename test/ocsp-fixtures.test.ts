@@ -529,6 +529,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 
 		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
@@ -557,6 +558,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 
 		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
@@ -599,6 +601,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 
 		// Empty CRL proves 'good' — accepted
 		const emptyCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,

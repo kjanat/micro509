@@ -19,6 +19,7 @@ async function crlSignedBy(
 	commonName: string,
 ) {
 	return createCertificateRevocationList({
+		crlNumber: 1,
 		issuer: { commonName },
 		signerPrivateKey: issuer.keyPair.privateKey,
 		issuerPublicKey: issuer.keyPair.publicKey,

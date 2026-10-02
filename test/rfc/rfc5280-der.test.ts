@@ -58,6 +58,7 @@ async function crlDerWithIdp(
 ): Promise<Uint8Array> {
 	const ca = await crlCa();
 	const crl = await createCertificateRevocationList({
+		crlNumber: 1,
 		issuer: { commonName: 'DER CRL CA' },
 		signerPrivateKey: ca.keyPair.privateKey,
 		issuerPublicKey: ca.keyPair.publicKey,
