@@ -297,6 +297,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2^53 − 1, though [RFC 5280 §5.2.3][rfc5280-section-5.2.3] requires verifiers to handle 20 octets, and
   read a CRLNumber of another ASN.1 type as an INTEGER. It now refuses the
   latter as malformed.
+- CRL parsing refuses trailing data after a CRLNumber, deltaCRLIndicator,
+  cRLReason or invalidityDate value, and requires cRLReason to be a minimal,
+  non-negative ENUMERATED ([RFC 5280 §5.3.1][rfc5280-section-5.3.1]). It read
+  the first content octet of any element as the reason code.
 - An [RFC 7292][rfc7292] MAC password containing a UTF-16 surrogate (a non-BMP character
   or a lone surrogate), U+FFFE or U+FFFF is not a BMPString ([RFC 7292 Appendix
   B.1][rfc7292-appendix-B.1], X.680 §41.15).
