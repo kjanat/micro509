@@ -16,8 +16,11 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
-import { integer, sequence, tlv } from '#micro509/internal/asn1/der';
+import { integer, objectIdentifier, sequence, tlv } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
+	childAt,
+	constructedChildren,
 	expectRejectedErrorCode,
 	expectRejectedWith,
 	hexToBytes,
@@ -60,6 +63,7 @@ describe('RFC 5280', () => {
 			const ca = await crlIssuer();
 			const nextUpdate = new Date('2025-01-08T00:00:00Z');
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -72,6 +76,7 @@ describe('RFC 5280', () => {
 		it('still parses a received CRL that omits nextUpdate ("not specified by this profile", L3275)', async () => {
 			const ca = await crlIssuer();
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -96,6 +101,7 @@ describe('RFC 5280', () => {
 			]) {
 				await expectRejectedErrorCode(
 					createCertificateRevocationList({
+						crlNumber: 1,
 						issuer: { commonName: 'RFC 5280 CRL CA' },
 						signerPrivateKey: ca.keyPair.privateKey,
 						issuerPublicKey: ca.keyPair.publicKey,
@@ -111,6 +117,7 @@ describe('RFC 5280', () => {
 			const ca = await crlIssuer();
 			await expectRejectedErrorCode(
 				createCertificateRevocationList({
+					crlNumber: 1,
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
 					issuerPublicKey: ca.keyPair.publicKey,
@@ -146,6 +153,7 @@ describe('RFC 5280', () => {
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
 					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 1,
 					thisUpdate: THIS_UPDATE,
 					nextUpdate: new Date('2025-01-08T00:00:00Z'),
 					...fields,
@@ -158,6 +166,7 @@ describe('RFC 5280', () => {
 			const ca = await crlIssuer();
 			const nextUpdate = new Date(THIS_UPDATE.getTime() + 1_000);
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -165,6 +174,62 @@ describe('RFC 5280', () => {
 				nextUpdate,
 			});
 			expect(parseCertificateRevocationListDerOrThrow(crl.der).nextUpdate).toEqual(nextUpdate);
+		});
+	});
+
+	describe('§5.2 "Conforming CRL issuers are REQUIRED to include the authority key identifier (Section 5.2.1) and the CRL number (Section 5.2.3) extensions in all CRLs issued." (L3334-3336)', () => {
+		async function issuedCrl() {
+			const ca = await crlIssuer();
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: 'RFC 5280 CRL CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				crlNumber: 42,
+				thisUpdate: THIS_UPDATE,
+				nextUpdate: new Date('2025-01-08T00:00:00Z'),
+			});
+			return { ca, crl };
+		}
+
+		function crlExtension(crlDer: Uint8Array, oid: string): readonly Uint8Array[] {
+			const wrapper = constructedChildren(childAt(crlDer, 0)).find((child) => child[0] === 0xa0);
+			const list = wrapper === undefined ? undefined : constructedChildren(wrapper)[0];
+			const encodedOid = objectIdentifier(oid);
+			const extension = (list === undefined ? [] : constructedChildren(list))
+				.map(constructedChildren)
+				.find(([extnId]) => extnId !== undefined && Bun.deepEquals(extnId, encodedOid));
+			if (extension === undefined) throw new Error(`CRL has no extension ${oid}`);
+			return extension;
+		}
+
+		it('prints the sentences this suite enforces', () => {
+			expect(printed(3334, 3336)).toContain(
+				'Conforming CRL issuers are REQUIRED to include the authority key identifier (Section 5.2.1) and the CRL number (Section 5.2.3) extensions in all CRLs issued.',
+			);
+			expect(printed(3348, 3349)).toContain(
+				'Conforming CRL issuers MUST use the key identifier method, and MUST include this extension in all CRLs issued.',
+			);
+			expect(printed(3384, 3386)).toContain(
+				'CRL issuers conforming to this profile MUST include this extension in all CRLs and MUST mark this extension as non-critical.',
+			);
+		});
+
+		it('§5.2.1 L3348-3349: encodes the issuer key identifier as the Authority Key Identifier', async () => {
+			const { ca, crl } = await issuedCrl();
+			const issuerKeyIdentifier = unwrap(
+				parseCertificatePem(ca.certificate.pem),
+			).subjectKeyIdentifier;
+			expect(issuerKeyIdentifier).toBeDefined();
+			expect(parseCertificateRevocationListDerOrThrow(crl.der).authorityKeyIdentifier).toBe(
+				issuerKeyIdentifier,
+			);
+			expect(crlExtension(crl.der, OIDS.authorityKeyIdentifier)).toHaveLength(2);
+		});
+
+		it('§5.2.3 L3384-3386: encodes the CRL number as a non-critical extension', async () => {
+			const { crl } = await issuedCrl();
+			expect(parseCertificateRevocationListDerOrThrow(crl.der).crlNumber).toBe(42);
+			expect(crlExtension(crl.der, OIDS.cRLNumber)).toHaveLength(2);
 		});
 	});
 });
@@ -488,6 +553,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const signerRevokedByOldCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
@@ -502,6 +568,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			],
 		});
 		const leafCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
 			issuerPublicKey: signerKeys.publicKey,

@@ -148,16 +148,16 @@ export interface CreateCertificateRevocationListInput {
 	readonly issuer: NameInput;
 	/** Private key used to sign the CRL. Algorithm is inferred from the key. */
 	readonly signerPrivateKey: CryptoKey;
-	/** Issuer public key — used to embed an Authority Key Identifier extension. */
-	readonly issuerPublicKey?: CryptoKey;
+	/** Issuer public key. Its key identifier becomes the Authority Key Identifier extension (RFC 5280 §5.2.1). */
+	readonly issuerPublicKey: CryptoKey;
 	/** Issuance timestamp. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
 	/** Date by which the next CRL will be issued. Must be at least one second later than `thisUpdate`. */
 	readonly nextUpdate: Date;
 	/** Certificates to list as revoked in this CRL. */
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
-	/** Monotonically-increasing CRL sequence number (CRLNumber extension). */
-	readonly crlNumber?: number;
+	/** Monotonically-increasing CRL sequence number (CRLNumber extension, RFC 5280 §5.2.3). */
+	readonly crlNumber: number;
 	/** If set, marks this CRL as a delta CRL referencing the given base CRL number. */
 	readonly baseCrlNumber?: number;
 	/** Issuing distribution point extension — scopes this CRL to a subset of certificates. */
@@ -565,8 +565,9 @@ interface MutableAuthorityKeyIdentifierState {
 /**
  * Signs and encodes an X.509 v2 CRL.
  *
- * Embeds Authority Key Identifier, CRLNumber, delta CRL indicator,
- * issuing distribution point, and freshest-CRL extensions as configured.
+ * Always embeds the Authority Key Identifier and CRLNumber extensions
+ * (RFC 5280 §5.2), plus delta CRL indicator, issuing distribution point and
+ * freshest-CRL extensions as configured.
  *
  * @example
  * ```ts
@@ -629,7 +630,7 @@ export async function createCertificateRevocationList(
 		time(thisUpdate),
 		time(nextUpdate),
 		...revokedSequence,
-		...(extensions.length === 0 ? [] : [explicitContext(0, sequence(extensions))]),
+		explicitContext(0, sequence(extensions)),
 	]);
 	const signatureValue = await signBytes(input.signerPrivateKey, signatureAlgorithm, tbsCertList);
 	const der = sequence([
@@ -2144,25 +2145,20 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 
 /** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
 async function buildCrlExtensions(
-	issuerPublicKey: CryptoKey | undefined,
-	crlNumber: number | undefined,
+	issuerPublicKey: CryptoKey,
+	crlNumber: number,
 	baseCrlNumber?: number,
 	issuingDistributionPoint?: IssuingDistributionPoint,
 	freshestCrlDistributionPoints?: readonly DistributionPoint[],
 ): Promise<Uint8Array[]> {
-	const extensions: Uint8Array[] = [];
-	if (issuerPublicKey !== undefined) {
-		const spki = await exportSpkiDer(issuerPublicKey);
-		extensions.push(
-			encodeExtension(
-				OIDS.authorityKeyIdentifier,
-				sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
-			),
-		);
-	}
-	if (crlNumber !== undefined) {
-		extensions.push(encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)));
-	}
+	const spki = await exportSpkiDer(issuerPublicKey);
+	const extensions: Uint8Array[] = [
+		encodeExtension(
+			OIDS.authorityKeyIdentifier,
+			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
+		),
+		encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)),
+	];
 	if (baseCrlNumber !== undefined) {
 		extensions.push(
 			encodeExtension(OIDS.deltaCRLIndicator, integerFromNumber(baseCrlNumber), true),

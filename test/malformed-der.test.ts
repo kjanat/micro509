@@ -441,6 +441,7 @@ describe('malformed DER corpus', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificateDer(leaf.der));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed CRL CA' },
 			issuerPublicKey: issuer.keyPair.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -778,6 +779,7 @@ describe('malformed DER corpus', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Nested Malformed CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,

@@ -451,6 +451,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `createCertificateRevocationList` also requires it at least one second
       after `thisUpdate`. This is a micro509 builder invariant. [RFC 5280][rfc5280] and
       X.509 do not specify an order between the two fields.
+- [x] Always encode the Authority Key Identifier, by the key identifier method,
+      and a non-critical CRL Number in generated CRLs ([RFC 5280 §5.2.1][rfc5280-section-5.2.1],
+      [§5.2.3][rfc5280-section-5.2.3]). `createCertificateRevocationList` requires `issuerPublicKey`
+      and `crlNumber`.
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
@@ -597,6 +601,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
+[rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
+[rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
 [rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
 [rfc5280-section-6.3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.3.3

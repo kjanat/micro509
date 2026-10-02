@@ -284,6 +284,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second than `thisUpdate`, which defaults to now. This ordering is a micro509
   builder invariant. `CrlEncoderErrorCode` gains
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
+- **BREAKING** `createCertificateRevocationList` requires `issuerPublicKey` and
+  `crlNumber` and always encodes the Authority Key Identifier and CRL Number
+  extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]).
 - An [RFC 7292][rfc7292] MAC password containing a UTF-16 surrogate (a non-BMP character
   or a lone surrogate), U+FFFE or U+FFFF is not a BMPString ([RFC 7292 Appendix
   B.1][rfc7292-appendix-B.1], X.680 §41.15).
@@ -1890,6 +1893,7 @@ Initial prerelease. API may change before 1.0.
 [rfc5280-section-5.1.1.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.1.2
 [rfc5280-section-5.1.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.3
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
+[rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
 [rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
 [rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1

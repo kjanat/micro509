@@ -82,6 +82,7 @@ describe('revocation boundary', () => {
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
@@ -120,6 +121,7 @@ describe('revocation boundary', () => {
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
@@ -171,6 +173,7 @@ describe('revocation boundary', () => {
 		});
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scoped Revocation CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -230,6 +233,7 @@ describe('revocation boundary', () => {
 			},
 		});
 		const cleanCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Partial Coverage CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -367,6 +371,7 @@ describe('revocation boundary', () => {
 			},
 		});
 		const baseCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Indirect Revocation CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -435,6 +440,7 @@ describe('revocation boundary', () => {
 		});
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const mismatchedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scope Mismatch CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -481,6 +487,7 @@ describe('revocation boundary', () => {
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const nonApplicableCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
@@ -682,6 +689,7 @@ describe('revocation boundary', () => {
 		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const nonApplicableCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
