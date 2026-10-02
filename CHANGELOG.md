@@ -286,7 +286,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
 - **BREAKING** `createCertificateRevocationList` requires `issuerPublicKey` and
   `crlNumber` and always encodes the Authority Key Identifier and CRL Number
-  extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]).
+  extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]). An `issuerPublicKey` that is not an
+  extractable public `CryptoKey` throws `ResultError` code
+  `issuer_public_key_invalid`.
 - **BREAKING** CRL numbers are `bigint`. `crlNumber` and `baseCrlNumber` on
   `createCertificateRevocationList` take a `number` or `bigint` up to 20
   octets and throw `ResultError` code `crl_number_invalid` past that, when

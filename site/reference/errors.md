@@ -271,6 +271,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | `crl_number_invalid`                 | `crlNumber` or `baseCrlNumber` is negative, not an integer, or over 20 octets ([RFC 5280 §5.2.3][rfc5280-section-5.2.3]) |
 | `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName                                                                          |
 | `issuer_distinguished_name_empty`    | [RFC 5280 §5.1.2.3][rfc5280-section-5.1.2.3] requires a non-empty issuer DN                                              |
+| `issuer_public_key_invalid`          | `issuerPublicKey` is not an extractable public `CryptoKey`                                                               |
 | `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`                                                                         |
 | `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate`                                                            |
 

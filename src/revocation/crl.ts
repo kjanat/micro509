@@ -601,6 +601,17 @@ export async function createCertificateRevocationList(
 			'issuer must be a non-empty distinguished name',
 		);
 	}
+	if (!isExportablePublicKey(input.issuerPublicKey)) {
+		throwCrlEncoderError(
+			'issuer_public_key_invalid',
+			'issuerPublicKey must be an extractable public CryptoKey',
+		);
+	}
+	const crlNumber = encodeCrlNumber(input.crlNumber, 'crlNumber');
+	const baseCrlNumber =
+		input.baseCrlNumber === undefined
+			? undefined
+			: encodeCrlNumber(input.baseCrlNumber, 'baseCrlNumber');
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const thisUpdate = input.thisUpdate ?? new Date();
 	const nextUpdate = input.nextUpdate;
@@ -618,8 +629,8 @@ export async function createCertificateRevocationList(
 	}
 	const extensions = await buildCrlExtensions(
 		input.issuerPublicKey,
-		input.crlNumber,
-		input.baseCrlNumber,
+		crlNumber,
+		baseCrlNumber,
 		input.issuingDistributionPoint,
 		input.freshestCrlDistributionPoints,
 	);
@@ -2151,8 +2162,8 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 /** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
 async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey,
-	crlNumber: number | bigint,
-	baseCrlNumber?: number | bigint,
+	crlNumber: Uint8Array,
+	baseCrlNumber?: Uint8Array,
 	issuingDistributionPoint?: IssuingDistributionPoint,
 	freshestCrlDistributionPoints?: readonly DistributionPoint[],
 ): Promise<Uint8Array[]> {
@@ -2162,16 +2173,10 @@ async function buildCrlExtensions(
 			OIDS.authorityKeyIdentifier,
 			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
 		),
-		encodeExtension(OIDS.cRLNumber, encodeCrlNumber(crlNumber, 'crlNumber')),
+		encodeExtension(OIDS.cRLNumber, crlNumber),
 	];
 	if (baseCrlNumber !== undefined) {
-		extensions.push(
-			encodeExtension(
-				OIDS.deltaCRLIndicator,
-				encodeCrlNumber(baseCrlNumber, 'baseCrlNumber'),
-				true,
-			),
-		);
+		extensions.push(encodeExtension(OIDS.deltaCRLIndicator, baseCrlNumber, true));
 	}
 	if (issuingDistributionPoint !== undefined) {
 		extensions.push(
@@ -2562,12 +2567,23 @@ export type CrlEncoderErrorCode =
 	| 'crl_number_invalid'
 	| 'distribution_point_full_name_empty'
 	| 'issuer_distinguished_name_empty'
+	| 'issuer_public_key_invalid'
 	| 'invalid_date'
 	| 'next_update_not_after_this_update';
 
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
 	throwMicro509Error(code, message);
+}
+
+/** A public CryptoKey whose SPKI can be exported. */
+function isExportablePublicKey(key: unknown): boolean {
+	return (
+		typeof key === 'object' &&
+		key !== null &&
+		Reflect.get(key, 'type') === 'public' &&
+		Reflect.get(key, 'extractable') === true
+	);
 }
 
 /** RFC 5280 §5.2.3: "Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets." */
