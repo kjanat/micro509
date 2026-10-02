@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `unrecognizedReasonCode` (`'revoked'` by default, or `'reject'`) on
+  `checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation` and the
+  chain `RevocationPolicy`, and `responderRevocationUnrecognizedReasonCode` on
+  `validateOcspResponse`, choose the treatment of evidence that revokes a
+  certificate with a CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1]. `'reject'` reports
+  `reason_code_unrecognized`, at chain level `crl_reason_code_unrecognized` or
+  `ocsp_reason_code_unrecognized`, and keeps other evidence from settling the
+  status as `good`.
 - The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
   for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
   within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
@@ -226,6 +234,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING** A CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1] parses as
+  `{ type: 'unrecognized', code }` (`UnrecognizedRevocationReason`) instead of
+  being dropped. `ParsedRevokedCertificate.reasonCode`, the revoked value of
+  `checkCertificateRevocationAgainstCrl`, `revocationReason` of
+  `checkCertificateRevocation`, the chain `revocationInfo.reason` and
+  `revocationReasonFromCode` use `ParsedRevocationReason`. A critical cRLReason
+  holding an unrecognized code makes the CRL `malformed`.
 - A typed SRVName SAN outside the [RFC 6335][rfc6335] service grammar or STD3 LDH Name
   syntax is refused with the new `invalid_srv_name`.
 - A critical subjectAltName holding a SRVName that is not `_Service.Name`

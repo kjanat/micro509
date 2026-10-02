@@ -11,12 +11,14 @@ import { rethrowIfInvariant } from '#micro509/result/result';
 import type {
 	CrlApplicabilityFailureReason,
 	CrlSource,
-	RevocationReason,
+	ParsedRevocationReason,
+	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
+	revocationReasonFromCode,
 } from '#micro509/revocation/crl';
 import type {
 	OcspCertificateSource,
@@ -114,6 +116,13 @@ export interface CheckCertificateRevocationInput {
 	 * {@linkcode ValidateOcspResponseInput.profile}. Defaults to `'rfc6960'`.
 	 */
 	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
+	/**
+	 * Treatment of CRL or OCSP evidence whose CRLReason is unrecognized. See
+	 * {@linkcode UnrecognizedReasonCodePolicy}. `'reject'` turns that evidence
+	 * into `reason_code_unrecognized`, which also keeps other evidence from
+	 * settling the status as `good`. Defaults to `'revoked'`.
+	 */
+	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
@@ -132,6 +141,7 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'non_applicable',
 	'nonce_mismatch',
 	'ocsp_signing_missing',
+	'reason_code_unrecognized',
 	'reason_coverage_incomplete',
 	'request_mismatch',
 	'responder_id_mismatch',
@@ -202,8 +212,8 @@ export interface RevocationCheckRevokedValue {
 	readonly message: string;
 	/** When the certificate was revoked (from CRL entry or OCSP response). */
 	readonly revokedAt?: Date;
-	/** CRL reason string (from CRL evidence). */
-	readonly revocationReason?: RevocationReason;
+	/** CRL reason (from CRL evidence). */
+	readonly revocationReason?: ParsedRevocationReason;
 	/** CRL reason integer code (from OCSP evidence). */
 	readonly revocationReasonCode?: number;
 }
@@ -364,15 +374,39 @@ export async function checkCertificateRevocation(
 		}
 		indeterminateEvidence.push(result.detail);
 	}
+	return settleRevocationEvidence(
+		ocspGoodResult,
+		crlGoodResult,
+		crlCoveredReasons,
+		indeterminateEvidence,
+		checkedSources,
+	);
+}
+
+/** The result once no evidence revoked the certificate outright. */
+function settleRevocationEvidence(
+	ocspGoodResult: RevocationCheckGoodValue | undefined,
+	crlGoodResult: RevocationCheckGoodValue | undefined,
+	crlCoveredReasons: Set<string>,
+	indeterminateEvidence: RevocationIndeterminateEvidence[],
+	checkedSources: readonly RevocationEvidenceKind[],
+): CheckCertificateRevocationResult {
+	const unrecognizedReason = indeterminateEvidence.some(
+		(entry) => entry.code === 'reason_code_unrecognized',
+	);
 	// An OCSP good is per-certificate and definitive. A CRL good is definitive
 	// only once the applicable CRLs together cover every revocation reason.
-	if (ocspGoodResult !== undefined) {
+	if (ocspGoodResult !== undefined && !unrecognizedReason) {
 		return revocationSuccess(ocspGoodResult);
 	}
-	if (crlGoodResult !== undefined && coversAllDistributionPointReasons(crlCoveredReasons)) {
+	if (
+		crlGoodResult !== undefined &&
+		!unrecognizedReason &&
+		coversAllDistributionPointReasons(crlCoveredReasons)
+	) {
 		return revocationSuccess(crlGoodResult);
 	}
-	if (crlGoodResult !== undefined) {
+	if (crlGoodResult !== undefined && !coversAllDistributionPointReasons(crlCoveredReasons)) {
 		indeterminateEvidence.push({
 			kind: 'crl',
 			code: 'reason_coverage_incomplete',
@@ -443,6 +477,9 @@ async function checkCertificateRevocationWithCrl(
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 		...(input.crlMaxAgeMs === undefined ? {} : { maxAgeMs: input.crlMaxAgeMs }),
+		...(input.unrecognizedReasonCode === undefined
+			? {}
+			: { unrecognizedReasonCode: input.unrecognizedReasonCode }),
 	});
 	if (result.ok) {
 		if (result.value.status === 'revoked') {
@@ -522,6 +559,19 @@ async function checkCertificateRevocationWithOcsp(
 		};
 	}
 	if (matchedResponse.certStatus === 'revoked') {
+		if (
+			input.unrecognizedReasonCode === 'reject' &&
+			typeof revocationReasonFromCode(matchedResponse.revocationReasonCode) === 'object'
+		) {
+			return {
+				status: 'indeterminate',
+				detail: {
+					kind: 'ocsp',
+					code: 'reason_code_unrecognized',
+					message: `OCSP response carries unrecognized reason code ${String(matchedResponse.revocationReasonCode)}`,
+				},
+			};
+		}
 		return {
 			status: 'revoked',
 			result: {

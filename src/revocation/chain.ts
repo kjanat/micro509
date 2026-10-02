@@ -15,7 +15,8 @@ import type {
 	AuthenticatedCrlCheckOutcome,
 	CrlSource,
 	ParsedCertificateRevocationList,
-	RevocationReason,
+	ParsedRevocationReason,
+	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
@@ -128,6 +129,15 @@ export interface RevocationPolicy {
 	 * to `'rfc6960'`.
 	 */
 	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
+	/**
+	 * Treatment of CRL entries and OCSP responses whose CRLReason is
+	 * unrecognized, including the CRLs for CRL signers and delegated OCSP
+	 * responders. See {@linkcode UnrecognizedReasonCodePolicy}. `'reject'`
+	 * makes that evidence yield `crl_reason_code_unrecognized` or
+	 * `ocsp_reason_code_unrecognized`, which outranks a `good` verdict from
+	 * other evidence. Defaults to `'revoked'`.
+	 */
+	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -172,6 +182,10 @@ export interface CheckChainRevocationInput {
  *   CRL cannot settle the status, `delta_crl_retry_limit_exceeded` when delta
  *   CRL candidates remain after the attempt limit. Either one outranks a
  *   `good` verdict from other evidence.
+ * - **Reason code**: `crl_reason_code_unrecognized` and
+ *   `ocsp_reason_code_unrecognized` when evidence revokes the certificate with
+ *   an unrecognized CRLReason under `unrecognizedReasonCode: 'reject'`. Either
+ *   one outranks a `good` verdict from other evidence.
  */
 export const REVOCATION_INDETERMINATE_REASONS = [
 	// Evidence not found
@@ -201,6 +215,9 @@ export const REVOCATION_INDETERMINATE_REASONS = [
 	// Delta CRL
 	'delta_crl_unusable',
 	'delta_crl_retry_limit_exceeded',
+	// Reason code
+	'crl_reason_code_unrecognized',
+	'ocsp_reason_code_unrecognized',
 ] as const;
 
 /** See the doc comment above {@linkcode REVOCATION_INDETERMINATE_REASONS}. */
@@ -258,7 +275,7 @@ export type CertificateRevocationStatus =
 				/** When the certificate was revoked. */
 				readonly revocationDate: Date;
 				/** RFC 5280 CRLReason code, if provided by the CRL/OCSP response. */
-				readonly reason?: RevocationReason;
+				readonly reason?: ParsedRevocationReason;
 			};
 			/** Never present on a `revoked` verdict. */
 			readonly indeterminateReasons?: undefined;
@@ -512,6 +529,7 @@ interface SignerValidationContext {
 	readonly at: Date;
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
+	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
 }
 
 /**
@@ -687,6 +705,7 @@ async function checkSignerAgainstCrl(
 		at: ctx.at,
 		...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
 		...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
+		unrecognizedReasonCode: ctx.unrecognizedReasonCode,
 	});
 	if (!result.ok) {
 		return SIGNER_CRL_NO_EVIDENCE;
@@ -706,7 +725,7 @@ function buildCrlRevokedStatus(
 	signer: ParsedCertificate,
 	thisUpdate: Date,
 	revocationDate: Date,
-	reasonCode?: RevocationReason,
+	reasonCode?: ParsedRevocationReason,
 ): CertificateRevocationStatus {
 	return {
 		certificate: cert,
@@ -736,7 +755,8 @@ type ClassifiedOcspEvidence =
 	| { readonly kind: 'good'; readonly thisUpdate: Date }
 	| { readonly kind: 'hold'; readonly evidence: OcspHoldEvidence }
 	| { readonly kind: 'revoked'; readonly status: CertificateRevocationStatus }
-	| { readonly kind: 'unknown' };
+	| { readonly kind: 'unknown' }
+	| { readonly kind: 'unrecognized_reason' };
 
 type ApplicableOcspResponse =
 	| {
@@ -790,7 +810,7 @@ function buildOcspRevokedStatus(
 	cert: ParsedCertificate,
 	thisUpdate: Date,
 	revocationDate: Date,
-	reason: RevocationReason | undefined,
+	reason: ParsedRevocationReason | undefined,
 ): CertificateRevocationStatus {
 	return {
 		certificate: cert,
@@ -807,6 +827,7 @@ function buildOcspRevokedStatus(
 function classifyValidatedOcspEntry(
 	cert: ParsedCertificate,
 	entry: ParsedOcspSingleResponse,
+	unrecognizedReasonCode: UnrecognizedReasonCodePolicy,
 ): ClassifiedOcspEvidence {
 	if (entry.certStatus === 'good') {
 		return { kind: 'good', thisUpdate: entry.thisUpdate };
@@ -815,6 +836,9 @@ function classifyValidatedOcspEntry(
 		return { kind: 'unknown' };
 	}
 	const reason = revocationReasonFromCode(entry.revocationReasonCode);
+	if (unrecognizedReasonCode === 'reject' && typeof reason === 'object') {
+		return { kind: 'unrecognized_reason' };
+	}
 	const status = buildOcspRevokedStatus(cert, entry.thisUpdate, entry.revokedAt, reason);
 	return reason === 'certificateHold'
 		? { kind: 'hold', evidence: { status, thisUpdate: entry.thisUpdate } }
@@ -923,6 +947,9 @@ async function validateOcspResponseWithResponderFallback(
 			: {}),
 		...(input.policy?.clockSkewMs !== undefined ? { clockSkewMs: input.policy.clockSkewMs } : {}),
 		...(input.policy?.ocspProfile !== undefined ? { profile: input.policy.ocspProfile } : {}),
+		...(input.policy?.unrecognizedReasonCode !== undefined
+			? { responderRevocationUnrecognizedReasonCode: input.policy.unrecognizedReasonCode }
+			: {}),
 	};
 	const primary = await validateOcspResponse({ response, ...shared });
 	if (primary.ok || !OCSP_RESPONDER_FAILURE_CODES.has(primary.code)) {
@@ -961,9 +988,7 @@ async function evaluateOcspEvidence(
 ): Promise<EvidenceEvaluation> {
 	const { ocspResponses = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
-	const reasons = new Set<RevocationIndeterminateReason>();
-	let freshestGoodThisUpdate: Date | undefined;
-	let freshestHold: OcspHoldEvidence | undefined;
+	const state: OcspEvidenceState = { reasons: new Set(), sawUnrecognizedReason: false };
 
 	for (const source of ocspResponses) {
 		const applicable = findApplicableOcspResponse(source, cert);
@@ -982,33 +1007,78 @@ async function evaluateOcspEvidence(
 			at,
 		);
 		if (!validation.ok) {
-			reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
+			state.reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
 			continue;
 		}
 
-		const evidence = classifyValidatedOcspEntry(cert, applicable.entry);
+		const evidence = classifyValidatedOcspEntry(
+			cert,
+			applicable.entry,
+			input.policy?.unrecognizedReasonCode ?? 'revoked',
+		);
 		if (evidence.kind === 'revoked') {
 			return {
 				status: evidence.status,
 				executionErrors,
 			};
 		}
-		if (evidence.kind === 'good') {
-			freshestGoodThisUpdate = laterEvidenceDate(freshestGoodThisUpdate, evidence.thisUpdate);
-			continue;
-		}
-		if (evidence.kind === 'hold') {
-			if (
-				freshestHold === undefined ||
-				evidence.evidence.thisUpdate.getTime() > freshestHold.thisUpdate.getTime()
-			) {
-				freshestHold = evidence.evidence;
-			}
-			continue;
-		}
-		reasons.add('ocsp_status_unknown');
+		recordOcspEvidence(state, evidence);
 	}
 
+	return settleOcspEvidence(cert, state, executionErrors);
+}
+
+/** What the non-revoked OCSP entries for one certificate established. */
+interface OcspEvidenceState {
+	readonly reasons: Set<RevocationIndeterminateReason>;
+	freshestGoodThisUpdate?: Date;
+	freshestHold?: OcspHoldEvidence;
+	sawUnrecognizedReason: boolean;
+}
+
+function recordOcspEvidence(
+	state: OcspEvidenceState,
+	evidence: Exclude<ClassifiedOcspEvidence, { readonly kind: 'revoked' }>,
+): void {
+	switch (evidence.kind) {
+		case 'good':
+			state.freshestGoodThisUpdate = laterEvidenceDate(
+				state.freshestGoodThisUpdate,
+				evidence.thisUpdate,
+			);
+			return;
+		case 'hold':
+			if (
+				state.freshestHold === undefined ||
+				evidence.evidence.thisUpdate.getTime() > state.freshestHold.thisUpdate.getTime()
+			) {
+				state.freshestHold = evidence.evidence;
+			}
+			return;
+		case 'unrecognized_reason':
+			state.sawUnrecognizedReason = true;
+			return;
+		case 'unknown':
+			state.reasons.add('ocsp_status_unknown');
+			return;
+		default: {
+			const _exhaustive: never = evidence;
+			throw new Error(`Unhandled OCSP evidence: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+/** The OCSP verdict once no response revoked the certificate outright. */
+function settleOcspEvidence(
+	cert: ParsedCertificate,
+	state: OcspEvidenceState,
+	executionErrors: readonly RevocationExecutionError[],
+): EvidenceEvaluation {
+	if (state.sawUnrecognizedReason) {
+		state.reasons.add('ocsp_reason_code_unrecognized');
+		return finalizeOcspEvidence(cert, undefined, state.reasons, executionErrors);
+	}
+	const { freshestGoodThisUpdate, freshestHold } = state;
 	if (
 		freshestHold !== undefined &&
 		(freshestGoodThisUpdate === undefined ||
@@ -1016,8 +1086,7 @@ async function evaluateOcspEvidence(
 	) {
 		return { status: freshestHold.status, executionErrors };
 	}
-
-	return finalizeOcspEvidence(cert, freshestGoodThisUpdate, reasons, executionErrors);
+	return finalizeOcspEvidence(cert, freshestGoodThisUpdate, state.reasons, executionErrors);
 }
 
 /**
@@ -1039,6 +1108,7 @@ interface CrlEvidenceState {
 	sawStaleCrl: boolean;
 	sawDeltaCrlUnusable: boolean;
 	sawDeltaCrlRetryLimit: boolean;
+	sawUnrecognizedReasonCode: boolean;
 	sawGood: boolean;
 	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
 }
@@ -1054,6 +1124,7 @@ interface BaseCrlResolution {
 	readonly at: Date;
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
+	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
 	readonly signerCtx: SignerValidationContext;
 	readonly deltaBudget: DeltaCrlBudget;
 	readonly state: CrlEvidenceState;
@@ -1080,6 +1151,7 @@ async function resolveBaseCrlAgainstSigners(
 		at,
 		crlMaxAgeMs,
 		clockSkewMs,
+		unrecognizedReasonCode,
 		signerCtx,
 		deltaBudget,
 		state,
@@ -1094,6 +1166,7 @@ async function resolveBaseCrlAgainstSigners(
 			at,
 			crlMaxAgeMs,
 			clockSkewMs,
+			unrecognizedReasonCode,
 			budgets: [baseBudget, deltaBudget],
 			state,
 		});
@@ -1154,6 +1227,7 @@ async function evaluateCrlEvidence(
 		sawStaleCrl: false,
 		sawDeltaCrlUnusable: false,
 		sawDeltaCrlRetryLimit: false,
+		sawUnrecognizedReasonCode: false,
 		sawGood: false,
 	};
 
@@ -1185,6 +1259,7 @@ async function evaluateCrlEvidence(
 			at,
 			crlMaxAgeMs,
 			clockSkewMs,
+			unrecognizedReasonCode: input.policy?.unrecognizedReasonCode ?? 'revoked',
 			signerCtx,
 			deltaBudget,
 			state,
@@ -1194,10 +1269,10 @@ async function evaluateCrlEvidence(
 		}
 	}
 
-	const deltaReasons = deltaCrlIndeterminateReasons(state);
-	if (deltaReasons.length > 0) {
+	const blockingReasons = blockingCrlIndeterminateReasons(state);
+	if (blockingReasons.length > 0) {
 		return {
-			status: { certificate: cert, status: 'indeterminate', indeterminateReasons: deltaReasons },
+			status: { certificate: cert, status: 'indeterminate', indeterminateReasons: blockingReasons },
 			executionErrors: state.executionErrors,
 		};
 	}
@@ -1240,13 +1315,14 @@ async function evaluateCrlEvidence(
 	};
 }
 
-/** Delta CRL conditions that keep the status indeterminate despite `good` evidence. */
-function deltaCrlIndeterminateReasons(
+/** CRL conditions that keep the status indeterminate despite `good` evidence. */
+function blockingCrlIndeterminateReasons(
 	state: CrlEvidenceState,
 ): readonly RevocationIndeterminateReason[] {
 	return [
 		...(state.sawDeltaCrlUnusable ? (['delta_crl_unusable'] as const) : []),
 		...(state.sawDeltaCrlRetryLimit ? (['delta_crl_retry_limit_exceeded'] as const) : []),
+		...(state.sawUnrecognizedReasonCode ? (['crl_reason_code_unrecognized'] as const) : []),
 	];
 }
 
@@ -1347,6 +1423,7 @@ interface DeltaCandidateCheck {
 	readonly at: Date;
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
+	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
 	readonly budgets: readonly DeltaCrlBudget[];
 	readonly state: CrlEvidenceState;
 }
@@ -1384,6 +1461,7 @@ async function checkCrlAgainstDeltaCandidates(
 		at,
 		crlMaxAgeMs,
 		clockSkewMs,
+		unrecognizedReasonCode,
 		budgets,
 		state,
 	} = params;
@@ -1398,6 +1476,7 @@ async function checkCrlAgainstDeltaCandidates(
 		at,
 		...(crlMaxAgeMs === undefined ? {} : { maxAgeMs: crlMaxAgeMs }),
 		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
+		unrecognizedReasonCode,
 	};
 	for (const deltaCrl of deltaCandidates) {
 		const settled = takeDeltaCrlAttempt(budgets)
@@ -1481,6 +1560,9 @@ function settleAuthenticatedCrlOutcome(
 	if (!result.ok && result.code === 'stale_crl') {
 		state.sawStaleCrl = true;
 	}
+	if (!result.ok && result.code === 'reason_code_unrecognized') {
+		state.sawUnrecognizedReasonCode = true;
+	}
 	if (outcome.kind === 'delta_rejected') {
 		return undefined;
 	}
@@ -1533,6 +1615,14 @@ function recordGoodCrlEvidence(
 	}
 }
 
+/** Indeterminate reasons that keep other evidence from settling the status as `good`. */
+const GOOD_BLOCKING_REASONS: ReadonlySet<RevocationIndeterminateReason> = new Set([
+	'delta_crl_unusable',
+	'delta_crl_retry_limit_exceeded',
+	'crl_reason_code_unrecognized',
+	'ocsp_reason_code_unrecognized',
+]);
+
 /**
  * Evaluates revocation status for a single certificate by combining OCSP and
  * CRL evidence.
@@ -1541,9 +1631,10 @@ function recordGoodCrlEvidence(
  * either source wins regardless of {@linkcode RevocationPolicy.prefer}
  * (fail-closed). Otherwise the preferred source's `good` verdict is reported —
  * for `'best-available'` the source with the later evidence `thisUpdate` wins,
- * ties favoring OCSP. A CRL result of `delta_crl_unusable` or
- * `delta_crl_retry_limit_exceeded` outranks a `good` verdict. If neither
- * source is definitive, indeterminate reasons from both are merged.
+ * ties favoring OCSP. An indeterminate reason in
+ * {@linkcode GOOD_BLOCKING_REASONS} from either source outranks a `good`
+ * verdict. If neither source is definitive, indeterminate reasons from both
+ * are merged.
  */
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
@@ -1574,10 +1665,10 @@ async function evaluateCertificateRevocation(
 		return { status: revoked.status, executionErrors };
 	}
 	const good = ordered.find((evaluation) => evaluation.status.status === 'good');
-	const deltaBlocked = crl.status.indeterminateReasons?.some(
-		(reason) => reason === 'delta_crl_unusable' || reason === 'delta_crl_retry_limit_exceeded',
+	const blocked = [crl, ocsp].some((evaluation) =>
+		evaluation.status.indeterminateReasons?.some((reason) => GOOD_BLOCKING_REASONS.has(reason)),
 	);
-	if (good !== undefined && deltaBlocked !== true) {
+	if (good !== undefined && !blocked) {
 		return { status: good.status, executionErrors };
 	}
 
@@ -1663,6 +1754,7 @@ export async function checkChainRevocation(
 		at,
 		crlMaxAgeMs: policy?.crlMaxAgeMs,
 		clockSkewMs: policy?.clockSkewMs,
+		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
 	};
 	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
 

@@ -460,6 +460,16 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Refuse a CRL whose revoked entry carries a critical extension other
       than reasonCode, invalidityDate or certificateIssuer
       ([RFC 5280 §5.3][rfc5280-section-5.3]).
+- [x] Keep a CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1] as
+      `{ type: 'unrecognized', code }`, including X.509's
+      `weakAlgorithmOrKey (11)`. Neither [RFC 5280][rfc5280] nor X.509 says what a
+      relying party does with such a code, so `unrecognizedReasonCode` on
+      `checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation` and
+      the chain `RevocationPolicy` (`responderRevocationUnrecognizedReasonCode`
+      on `validateOcspResponse`) chooses: `'revoked'` (default) or `'reject'`,
+      under which the evidence settles nothing and other evidence cannot
+      settle the status as `good`. A critical cRLReason holding an
+      unrecognized code makes the CRL malformed ([RFC 5280 Appendix B][rfc5280-appendix-B]).
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
