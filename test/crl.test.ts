@@ -4043,6 +4043,43 @@ describe('crl', () => {
 		).toEqual(new Date('2024-01-01T00:00:00Z'));
 	});
 
+	it('parseCertificateRevocationListDerOrThrow decodes cRLReason as a DER ENUMERATED', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'CRL Reason Encoding CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Reason Encoding CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const withReason = (payload: Uint8Array) =>
+			rewriteFirstRevokedEntryExtensionValuePayload(crl.der, OIDS.cRLReason, payload);
+
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x02, 0x01, 0x01))),
+		).toThrow('cRLReason must use ENUMERATED');
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x00))),
+		).toThrow('cRLReason is empty');
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x02, 0x00, 0x01))),
+		).toThrow('cRLReason must use minimal encoding');
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x01, 0xff))),
+		).toThrow('cRLReason must be non-negative');
+		expect(
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x01, 0x0a)))
+				.revokedCertificates[0]?.reasonCode,
+		).toBe('aACompromise');
+	});
+
 	it('parseCertificateRevocationListDerOrThrow rejects malformed CRL extension middle fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Middle Field CA' },
