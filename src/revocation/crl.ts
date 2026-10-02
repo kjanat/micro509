@@ -2269,6 +2269,10 @@ function parseRevokedCertificateExtension(
 		throw new Error(`Duplicate revoked certificate extension OID: ${oid}`);
 	}
 	seenOids.add(oid);
+	const critical =
+		parts.length === 3
+			? decodeBoolean(requireElement(parts[1], 'revoked certificate extension critical').value)
+			: false;
 	const valueElement = requireElement(
 		parts[parts.length - 1],
 		'revoked certificate extension value',
@@ -2276,7 +2280,14 @@ function parseRevokedCertificateExtension(
 	if (valueElement.tag !== 0x04) {
 		throw new Error('Revoked certificate extension value must use OCTET STRING');
 	}
+	if (critical && !isSupportedRevokedCertificateExtensionOid(oid)) {
+		throw new Error(`Unsupported critical revoked certificate extension OID: ${oid}`);
+	}
 	applyRevokedCertificateExtensionValue(oid, valueElement.value, fields);
+}
+
+function isSupportedRevokedCertificateExtensionOid(oid: string): boolean {
+	return oid === OIDS.cRLReason || oid === OIDS.invalidityDate || oid === OIDS.certificateIssuer;
 }
 
 function applyRevokedCertificateExtensionValue(

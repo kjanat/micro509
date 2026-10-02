@@ -4043,6 +4043,45 @@ describe('crl', () => {
 		).toEqual(new Date('2024-01-01T00:00:00Z'));
 	});
 
+	it('parseCertificateRevocationListDerOrThrow refuses an unrecognized critical entry extension (RFC 5280 §5.3)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical Entry Extension CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Critical Entry Extension CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const withEntryExtension = (critical: boolean) =>
+			rewriteFirstRevokedEntryExtension(crl.der, (entryDer, entryExtensions) =>
+				sequence([
+					...childrenOf(entryDer, entryExtensions).map((extension) =>
+						sliceElement(entryDer, extension),
+					),
+					sequence([
+						objectIdentifier('1.3.6.1.4.1.55555.1'),
+						...(critical ? [bool(true)] : []),
+						octetString(nullValue()),
+					]),
+				]),
+			);
+
+		expect(() => parseCertificateRevocationListDerOrThrow(withEntryExtension(true))).toThrow(
+			'Unsupported critical revoked certificate extension OID: 1.3.6.1.4.1.55555.1',
+		);
+		expect(
+			parseCertificateRevocationListDerOrThrow(withEntryExtension(false)).revokedCertificates[0]
+				?.reasonCode,
+		).toBe('keyCompromise');
+	});
+
 	it('parseCertificateRevocationListDerOrThrow decodes cRLReason as a DER ENUMERATED', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL Reason Encoding CA' },

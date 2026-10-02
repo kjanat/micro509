@@ -327,6 +327,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CRL parsing accepted a revoked entry carrying a critical extension other
+  than reasonCode, invalidityDate or certificateIssuer. [RFC 5280 §5.3][rfc5280-section-5.3]
+  forbids using such a CRL for any certificate, and parsing now refuses it as
+  `malformed`.
 - Key import returned `malformed` for a decode limit inside a
   SubjectPublicKeyInfo, PKCS#8, SEC 1 or EncryptedPrivateKeyInfo, and
   `invalid_password` for one inside decrypted PKCS#8, PKCS#1 or SEC 1 content.
@@ -1910,6 +1914,7 @@ Initial prerelease. API may change before 1.0.
 [rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
 [rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
+[rfc5280-section-5.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3
 [rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
 [rfc5280-section-6.1.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.1.3
 [rfc5280-section-6.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.1.4
