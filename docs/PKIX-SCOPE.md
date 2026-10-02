@@ -440,13 +440,14 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       the check for v1 and v2 issuers ([RFC 10007 §4][rfc10007-section-4], updating [RFC 5280 §6.3.3][rfc5280-section-6.3.3]
       step (f)).
 - [x] Enforce CRL time/freshness semantics. CRL age is unbounded by default,
-      so a received CRL without `nextUpdate` stays usable unless the caller
-      sets `maxAgeMs` (`validateCertificateRevocationList`,
+      and a received CRL without `nextUpdate` fails with `stale_crl` unless the
+      caller sets `maxAgeMs` (`validateCertificateRevocationList`,
       `checkCertificateRevocationAgainstCrl`), `crlMaxAgeMs`
       (`checkCertificateRevocation`, the chain `RevocationPolicy`) or
-      `responderRevocationCrlMaxAgeMs` (`validateOcspResponse`). [RFC 5280
-      §5.1.2.5][rfc5280-section-5.1.2.5] does not specify client behaviour for such a CRL, and [§3.3][rfc5280-section-3.3]
-      leaves the required recency of revocation data to local policy.
+      `responderRevocationCrlMaxAgeMs` (`validateOcspResponse`), which then
+      governs it. [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify client behaviour for
+      such a CRL, and [§3.3][rfc5280-section-3.3] leaves the required recency of revocation data to
+      local policy.
 - [x] Always encode `nextUpdate` in generated CRLs ([RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5]).
       `createCertificateRevocationList` also requires it at least one second
       after `thisUpdate`. This is a micro509 builder invariant. [RFC 5280][rfc5280] and
