@@ -266,12 +266,13 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 
 ### CrlEncoderErrorCode
 
-| Code                                 | Meaning                                                                     |
-| ------------------------------------ | --------------------------------------------------------------------------- |
-| `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName                             |
-| `issuer_distinguished_name_empty`    | [RFC 5280 §5.1.2.3][rfc5280-section-5.1.2.3] requires a non-empty issuer DN |
-| `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`                            |
-| `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate`               |
+| Code                                 | Meaning                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `crl_number_invalid`                 | `crlNumber` or `baseCrlNumber` is negative, not an integer, or over 20 octets ([RFC 5280 §5.2.3][rfc5280-section-5.2.3]) |
+| `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName                                                                          |
+| `issuer_distinguished_name_empty`    | [RFC 5280 §5.1.2.3][rfc5280-section-5.1.2.3] requires a non-empty issuer DN                                              |
+| `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`                                                                         |
+| `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate`                                                            |
 
 ### OcspEncoderErrorCode
 
@@ -442,6 +443,7 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
 [rfc5280-section-4.2.1.13]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.13
 [rfc5280-section-5.1.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.3
+[rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-6.3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.3.3
 [rfc5891-section-4]: https://www.rfc-editor.org/rfc/rfc5891.html#section-4
 [rfc6335]: https://www.rfc-editor.org/rfc/rfc6335.html

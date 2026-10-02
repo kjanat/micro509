@@ -287,6 +287,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING** `createCertificateRevocationList` requires `issuerPublicKey` and
   `crlNumber` and always encodes the Authority Key Identifier and CRL Number
   extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]).
+- **BREAKING** CRL numbers are `bigint`. `crlNumber` and `baseCrlNumber` on
+  `createCertificateRevocationList` take a `number` or `bigint` up to 20
+  octets and throw `ResultError` code `crl_number_invalid` past that, when
+  negative, or when not an integer. `ParsedCertificateRevocationList.crlNumber`
+  and `baseCrlNumber` are `bigint`. Parsing failed on any CRL number above
+  2^53 − 1, though [RFC 5280 §5.2.3][rfc5280-section-5.2.3] requires verifiers to handle 20 octets, and
+  read a CRLNumber of another ASN.1 type as an INTEGER. It now refuses the
+  latter as malformed.
 - An [RFC 7292][rfc7292] MAC password containing a UTF-16 surrogate (a non-BMP character
   or a lone surrogate), U+FFFE or U+FFFF is not a BMPString ([RFC 7292 Appendix
   B.1][rfc7292-appendix-B.1], X.680 §41.15).

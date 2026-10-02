@@ -454,7 +454,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Always encode the Authority Key Identifier, by the key identifier method,
       and a non-critical CRL Number in generated CRLs ([RFC 5280 §5.2.1][rfc5280-section-5.2.1],
       [§5.2.3][rfc5280-section-5.2.3]). `createCertificateRevocationList` requires `issuerPublicKey`
-      and `crlNumber`.
+      and `crlNumber`, and refuses a CRL number or base CRL number longer than 20
+      octets. Parsing reads CRL numbers of any length as `bigint`, since verifiers
+      must handle values up to 20 octets.
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])

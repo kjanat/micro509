@@ -10,6 +10,7 @@
 import {
 	childrenOf,
 	decodeBoolean,
+	decodeIntegerMagnitude,
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
@@ -156,10 +157,14 @@ export interface CreateCertificateRevocationListInput {
 	readonly nextUpdate: Date;
 	/** Certificates to list as revoked in this CRL. */
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
-	/** Monotonically-increasing CRL sequence number (CRLNumber extension, RFC 5280 §5.2.3). */
-	readonly crlNumber: number;
-	/** If set, marks this CRL as a delta CRL referencing the given base CRL number. */
-	readonly baseCrlNumber?: number;
+	/**
+	 * Monotonically-increasing CRL sequence number (CRLNumber extension, RFC 5280
+	 * §5.2.3): non-negative and at most 20 octets encoded. Pass a `bigint` above
+	 * `Number.MAX_SAFE_INTEGER`.
+	 */
+	readonly crlNumber: number | bigint;
+	/** If set, marks this CRL as a delta CRL referencing the given base CRL number, bounded like {@linkcode crlNumber}. */
+	readonly baseCrlNumber?: number | bigint;
 	/** Issuing distribution point extension — scopes this CRL to a subset of certificates. */
 	readonly issuingDistributionPoint?: IssuingDistributionPoint;
 	/** Freshest CRL distribution points — tells relying parties where to find delta CRLs. */
@@ -226,9 +231,9 @@ export interface ParsedCertificateRevocationList {
 	/** Hex-encoded Authority Key Identifier, if the extension is present. */
 	readonly authorityKeyIdentifier?: string;
 	/** CRLNumber extension value — monotonically increasing sequence number. */
-	readonly crlNumber?: number;
+	readonly crlNumber?: bigint;
 	/** Delta CRL indicator — present only on delta CRLs, referencing the base CRL number. */
-	readonly baseCrlNumber?: number;
+	readonly baseCrlNumber?: bigint;
 	/** Issuing distribution point extension — scopes this CRL to a certificate subset. */
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	/** Freshest CRL extension — points to delta CRL locations. */
@@ -529,16 +534,16 @@ interface ParsedCrlVersionField {
 
 interface ParsedCrlExtensionFields {
 	readonly authorityKeyIdentifier?: string;
-	readonly crlNumber?: number;
-	readonly baseCrlNumber?: number;
+	readonly crlNumber?: bigint;
+	readonly baseCrlNumber?: bigint;
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 }
 
 interface MutableParsedCrlExtensionFields {
 	authorityKeyIdentifier?: string;
-	crlNumber?: number;
-	baseCrlNumber?: number;
+	crlNumber?: bigint;
+	baseCrlNumber?: bigint;
 	issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 }
@@ -2146,8 +2151,8 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 /** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
 async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey,
-	crlNumber: number,
-	baseCrlNumber?: number,
+	crlNumber: number | bigint,
+	baseCrlNumber?: number | bigint,
 	issuingDistributionPoint?: IssuingDistributionPoint,
 	freshestCrlDistributionPoints?: readonly DistributionPoint[],
 ): Promise<Uint8Array[]> {
@@ -2157,11 +2162,15 @@ async function buildCrlExtensions(
 			OIDS.authorityKeyIdentifier,
 			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
 		),
-		encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)),
+		encodeExtension(OIDS.cRLNumber, encodeCrlNumber(crlNumber, 'crlNumber')),
 	];
 	if (baseCrlNumber !== undefined) {
 		extensions.push(
-			encodeExtension(OIDS.deltaCRLIndicator, integerFromNumber(baseCrlNumber), true),
+			encodeExtension(
+				OIDS.deltaCRLIndicator,
+				encodeCrlNumber(baseCrlNumber, 'baseCrlNumber'),
+				true,
+			),
 		);
 	}
 	if (issuingDistributionPoint !== undefined) {
@@ -2550,6 +2559,7 @@ function decodeNameValue(element: DerElement): string {
 
 /** Machine-readable reason a CRL encoder rejected its construction input. */
 export type CrlEncoderErrorCode =
+	| 'crl_number_invalid'
 	| 'distribution_point_full_name_empty'
 	| 'issuer_distinguished_name_empty'
 	| 'invalid_date'
@@ -2558,6 +2568,39 @@ export type CrlEncoderErrorCode =
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
 	throwMicro509Error(code, message);
+}
+
+/** RFC 5280 §5.2.3: "Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets." */
+const CRL_NUMBER_MAX_OCTETS = 20;
+
+/** RFC 5280 §5.2.3 `CRLNumber ::= INTEGER (0..MAX)` as a DER INTEGER of at most 20 content octets. */
+function encodeCrlNumber(value: number | bigint, field: 'crlNumber' | 'baseCrlNumber'): Uint8Array {
+	const crlNumber =
+		typeof value === 'bigint' ? value : Number.isSafeInteger(value) ? BigInt(value) : -1n;
+	const hex = crlNumber.toString(16);
+	const magnitude = crlNumber < 0n ? undefined : hexToBytes(hex.length % 2 === 0 ? hex : `0${hex}`);
+	const first = magnitude?.[0];
+	if (
+		magnitude === undefined ||
+		first === undefined ||
+		magnitude.length + (first >= 0x80 ? 1 : 0) > CRL_NUMBER_MAX_OCTETS
+	) {
+		throwCrlEncoderError(
+			'crl_number_invalid',
+			`${field} must be a non-negative integer of at most ${String(CRL_NUMBER_MAX_OCTETS)} octets (RFC 5280 §5.2.3)`,
+		);
+	}
+	return integer(magnitude);
+}
+
+/** RFC 5280 §5.2.3: a received CRLNumber of any length, since verifiers MUST handle up to 20 octets. */
+function decodeCrlNumber(value: Uint8Array): bigint {
+	const element = readElement(value);
+	if (element.tag !== 0x02) {
+		throw new Error('CRLNumber must be an INTEGER');
+	}
+	decodeIntegerMagnitude(element.value, 'CRLNumber');
+	return BigInt(`0x${toHex(element.value)}`);
 }
 
 function assertCrlDate(date: Date | undefined, field: string): void {
@@ -2931,8 +2974,8 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	readonly thisUpdate: Date;
 	readonly nextUpdate?: Date;
 	readonly authorityKeyIdentifier?: string;
-	readonly crlNumber?: number;
-	readonly baseCrlNumber?: number;
+	readonly crlNumber?: bigint;
+	readonly baseCrlNumber?: bigint;
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
@@ -3120,10 +3163,10 @@ function applyParsedCrlExtensionField(
 		}
 	}
 	if (oid === OIDS.cRLNumber) {
-		fields.crlNumber = decodeIntegerNumber(readElement(value).value);
+		fields.crlNumber = decodeCrlNumber(value);
 	}
 	if (oid === OIDS.deltaCRLIndicator) {
-		fields.baseCrlNumber = decodeIntegerNumber(readElement(value).value);
+		fields.baseCrlNumber = decodeCrlNumber(value);
 	}
 	if (oid === OIDS.issuingDistributionPoint) {
 		fields.issuingDistributionPoint = parseIssuingDistributionPoint(value);

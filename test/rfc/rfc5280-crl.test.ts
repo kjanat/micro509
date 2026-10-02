@@ -228,8 +228,83 @@ describe('RFC 5280', () => {
 
 		it('§5.2.3 L3384-3386: encodes the CRL number as a non-critical extension', async () => {
 			const { crl } = await issuedCrl();
-			expect(parseCertificateRevocationListDerOrThrow(crl.der).crlNumber).toBe(42);
+			expect(parseCertificateRevocationListDerOrThrow(crl.der).crlNumber).toBe(42n);
 			expect(crlExtension(crl.der, OIDS.cRLNumber)).toHaveLength(2);
+		});
+	});
+
+	describe('§5.2.3 "CRL verifiers MUST be able to handle CRLNumber values up to 20 octets. Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets." (L3403-3406)', () => {
+		const LARGEST_20_OCTET = (1n << 159n) - 1n;
+
+		async function crlNumbered(crlNumber: number | bigint, baseCrlNumber?: number | bigint) {
+			const ca = await crlIssuer();
+			return createCertificateRevocationList({
+				issuer: { commonName: 'RFC 5280 CRL CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				crlNumber,
+				...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+				thisUpdate: THIS_UPDATE,
+				nextUpdate: new Date('2025-01-08T00:00:00Z'),
+			});
+		}
+
+		it('prints the sentences this suite enforces', () => {
+			expect(printed(3403, 3406)).toContain(
+				'CRL verifiers MUST be able to handle CRLNumber values up to 20 octets. Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets.',
+			);
+			expect(printed(3410, 3410)).toContain('CRLNumber ::= INTEGER (0..MAX)');
+		});
+
+		it('issues and parses a CRL number and base CRL number of exactly 20 octets', async () => {
+			const crl = await crlNumbered(LARGEST_20_OCTET, LARGEST_20_OCTET - 1n);
+			const parsed = parseCertificateRevocationListDerOrThrow(crl.der);
+			expect(parsed.crlNumber).toBe(LARGEST_20_OCTET);
+			expect(parsed.baseCrlNumber).toBe(LARGEST_20_OCTET - 1n);
+		});
+
+		it('refuses a CRL number or base CRL number longer than 20 octets, negative, or not an integer', async () => {
+			for (const invalid of [LARGEST_20_OCTET + 1n, -1n, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+				await expectRejectedErrorCode(crlNumbered(invalid), 'crl_number_invalid');
+				await expectRejectedErrorCode(crlNumbered(1, invalid), 'crl_number_invalid');
+			}
+		});
+
+		it('applies a delta CRL whose numbers exceed Number.MAX_SAFE_INTEGER', async () => {
+			const ca = await crlIssuer();
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'RFC 5280 CRL CA' },
+				subject: { commonName: 'long-crl-number.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+			});
+			const base = 1n << 64n;
+			const issue = (crlNumber: bigint, deltaFields: object) =>
+				createCertificateRevocationList({
+					issuer: { commonName: 'RFC 5280 CRL CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber,
+					nextUpdate: new Date(Date.now() + DAY_MS),
+					...deltaFields,
+				});
+			const completeCrl = await issue(base, {});
+			const deltaCrl = await issue(base + 1n, {
+				baseCrlNumber: base,
+				revokedCertificates: [
+					{ serialNumber: hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex) },
+				],
+			});
+			expect(
+				await checkCertificateRevocationAgainstCrl({
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					crl: completeCrl.der,
+					deltaCrl: deltaCrl.der,
+				}),
+			).toMatchObject({ ok: true, value: { status: 'revoked' } });
 		});
 	});
 });
