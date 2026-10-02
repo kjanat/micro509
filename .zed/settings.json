@@ -17,10 +17,12 @@
 			],
 			"language_servers": [
 				"typescript", // https://github.com/kjanat/zed-typescript (just better...)
-				// "typescript-ls",
+				// "typescript-ls", // the 'tsgo' extension
 				"deno",
 				"biome",
 				"oxlint",
+				"!json-language-server",
+				"!oxfmt",
 				"!vtsls",
 				"!oxfmt",
 				"!tailwindcss-language-server"
@@ -29,6 +31,32 @@
 				"source.fixAll.biome": true,
 				"source.organizeImports.biome": true
 			}
+		},
+		"JavaScript": {
+			"format_on_save": "on",
+			"formatter": [
+				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+				{ "language_server": { "name": "dprint" } }
+			],
+			"language_servers": [
+				"typescript", // https://github.com/kjanat/zed-typescript (just better...)
+				// "typescript-ls", // the 'tsgo' extension
+				"deno",
+				"biome",
+				"oxlint",
+				"!json-language-server",
+				"!oxfmt",
+				"!vtsls",
+				"!oxfmt",
+				"!tailwindcss-language-server"
+			],
+			"code_actions_on_format": {
+				"source.fixAll.biome": true,
+				"source.organizeImports.biome": true
+			}
+		},
+		"Vue.js": {
+			"language_servers": ["vue-language-server", "typescript", "!vtsls"]
 		},
 		"Markdown": { "wrap_guides": [80] },
 		"TOML": { "wrap_guides": [140] }
@@ -71,11 +99,31 @@
 			}
 		},
 		"vtsls": {
-			"settings": { "typescript": { "tsdk": "./node_modules/typescript/lib/" } }
+			"settings": {
+				"typescript": {
+					"tsdk": "./node_modules/@typescript/old/lib/"
+				}
+			}
 		},
 		"dprint": {
-			"binary": { "path": "bunx", "arguments": ["dprint", "lsp"] }
+			"binary": {
+				"path": "bunx",
+				"arguments": ["dprint", "lsp"]
+			}
 		},
-		"typescript": {}
+		"typescript": {
+			"binary": {
+				"path": "go",
+				"arguments": [
+					"-C",
+					"tsc/bridge",
+					"run",
+					"github.com/microsoft/TypeScript/tsc/cmd/tsc",
+					"--lsp",
+					"--stdio"
+				]
+			},
+			"initialization_options": { "runExternalCode": true }
+		}
 	}
 }

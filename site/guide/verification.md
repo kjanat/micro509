@@ -45,9 +45,7 @@ const leaf = await createCertificate({
   issuerPublicKey: intKeys.publicKey,
   extensions: {
     extendedKeyUsage: ['serverAuth'],
-    subjectAltNames: [
-      { type: 'dns', value: 'api.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'api.example.com' }],
   },
 });
 
@@ -128,11 +126,7 @@ const root = await createSelfSignedCertificate({
 
 // Issue a leaf with the extended key usage under test
 async function issue(cn = '', eku = '') {
-  if (
-    eku !== 'serverAuth' &&
-    eku !== 'clientAuth' &&
-    eku !== 'codeSigning'
-  ) {
+  if (eku !== 'serverAuth' && eku !== 'clientAuth' && eku !== 'codeSigning') {
     throw new Error(`Unsupported EKU: ${eku}`);
   }
   const keys = await generateKeyPair();
@@ -217,9 +211,7 @@ import { matchServiceIdentity } from 'micro509/verify';
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'example.com' },
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'example.com' }],
   },
 });
 
@@ -231,9 +223,7 @@ const result = matchServiceIdentity({
 });
 
 const sans = (parsed.subjectAltNames ?? [])
-  .map((name) =>
-    subjectAltNameToString(name, { prefix: true }),
-  )
+  .map((name) => subjectAltNameToString(name, { prefix: true }))
   .join(', ');
 
 if (result.ok) {
@@ -322,25 +312,17 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
-const result = await verifyCertificateSigningRequest(
-  csr.pem,
-);
+const result = await verifyCertificateSigningRequest(csr.pem);
 
 if (result.ok) {
   const sans = (result.value.subjectAltNames ?? [])
     .map((name) => subjectAltNameToString(name))
     .join(', ');
-  const body = csr.pem
-    .trimEnd()
-    .split('\n')
-    .slice(1, -1)
-    .join('');
+  const body = csr.pem.trimEnd().split('\n').slice(1, -1).join('');
   console.log(`\
 subject:   ${result.value.subject.values.commonName}
 sig algo:  ${result.value.signatureAlgorithmName}
@@ -377,11 +359,10 @@ import {
   unwrap,
 } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: { commonName: 'signer.example' },
-    algorithm: { kind: 'ecdsa', curve: 'P-256' },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: { commonName: 'signer.example' },
+  algorithm: { kind: 'ecdsa', curve: 'P-256' },
+});
 const parsed = unwrap(parseCertificatePem(certificate.pem));
 
 const data = new TextEncoder().encode('release-v1.tar.gz');
@@ -413,10 +394,7 @@ const tampered = await verifySignature({
 // X.509/CMS embed and the raw r||s form WebCrypto and
 // JOSE use, bridging an HSM or JWS signature into a
 // PKIX structure, or the other way around.
-const raw = ecdsaSignatureDerToRaw(
-  signed.signature,
-  'P-256',
-);
+const raw = ecdsaSignatureDerToRaw(signed.signature, 'P-256');
 const der = ecdsaSignatureRawToDer(raw, 'P-256');
 
 const rawHex = Array.from(raw, (byte) =>

@@ -10,12 +10,12 @@ import markdownItTaskLists from 'markdown-it-task-lists';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import ts from 'typescript';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import type { DefaultTheme } from 'vitepress';
 import { defineConfig } from 'vitepress';
 import { devServerCertificate } from './dev-cert.ts';
+import { repairExamples, stripTypes } from './live-code.ts';
 
 interface DocsThemeConfig extends DefaultTheme.Config {
 	readonly versions: readonly DocsVersion[];
@@ -57,12 +57,25 @@ const repoUrl = new URL(repo.repository.url.replace('git+', '').replace(/\.git$/
 
 function git(...args: readonly string[]): string | undefined {
 	try {
-		const out = execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+		const out = execFileSync('git', args, {
+			cwd: repoRoot,
+			encoding: 'utf8',
+		}).trim();
 		return out === '' ? undefined : out;
 	} catch (error) {
 		console.warn(`[versions] git ${args.join(' ')}: ${String(error)}`);
 		return undefined;
 	}
+}
+
+function locallyExcludedMarkdown(): readonly string[] {
+	const exclude = git('rev-parse', '--git-path', 'info/exclude');
+	if (exclude === undefined || !fs.existsSync(path.resolve(repoRoot, exclude))) return [];
+	return (
+		git('ls-files', '--others', '--ignored', `--exclude-from=${exclude}`, '--', '*.md')?.split(
+			'\n',
+		) ?? []
+	);
 }
 
 function envOf(...names: readonly string[]): string | undefined {
@@ -105,13 +118,9 @@ function commitSha(): string | undefined {
 
 const treeSha = commitSha();
 
-/** The commit the latest release tag points at; peeled remotely when the clone is shallow. */
+/** The commit the latest release tag points at. */
 function releasedSha(): string | undefined {
-	const peeled = `refs/tags/v${repo.version}^{}`;
-	return (
-		git('rev-parse', '--quiet', '--verify', peeled) ??
-		git('ls-remote', repoUrl.href, peeled)?.split('\t')[0]
-	);
+	return git('ls-remote', repoUrl.href, `refs/tags/v${repo.version}^{}`)?.split('\t')[0];
 }
 
 const released = releasedSha();
@@ -139,7 +148,9 @@ async function pullRequestOf(sha: string): Promise<string | undefined> {
 			return undefined;
 		}
 
-		const pulls: ReadonlyArray<{ readonly number: number }> = await response.json();
+		const pulls: ReadonlyArray<{
+			readonly number: number;
+		}> = await response.json();
 		const first = pulls[0];
 		return first === undefined ? undefined : String(first.number);
 	} catch (error) {
@@ -193,55 +204,12 @@ const examples: DocExamplesOptions = {
 	},
 };
 
-const LIVE_CODE_BLOCK = /(<LiveCode[^>]*>\s*\n\n```ts\n)([\s\S]*?)(```)/g;
-
 const RUNNABLE_PAGE = /(^|\/)(guide|reference)\/[^/]+\.md$|(^|\/)index\.md$/;
-
-/** A LiveCode fence executes in the browser, which parses JavaScript, not TypeScript. */
-function stripTypes(source: string): string {
-	return ts.transpileModule(source, {
-		compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
-	}).outputText;
-}
 
 function pageOf(env: unknown): string {
 	if (typeof env !== 'object' || env === null) return '';
 	const value = Object.fromEntries(Object.entries(env))['relativePath'];
 	return typeof value === 'string' ? value : '';
-}
-
-/** The example's syntax errors. A bare transpile does no type checking. */
-function syntaxErrors(source: string): readonly ts.Diagnostic[] {
-	return (
-		ts.transpileModule(source, {
-			reportDiagnostics: true,
-			compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
-		}).diagnostics ?? []
-	);
-}
-
-/**
- * Repair an example that lost a closing brace before its tag by inserting each
- * brace where the parser expects it, then confirming the result parses. An
- * example that does not resolve to valid syntax is left untouched.
- */
-function repairExample(source: string): string {
-	let repaired = source;
-	for (let attempt = 0; attempt < 20; attempt += 1) {
-		const errors = syntaxErrors(repaired);
-		if (errors.length === 0) return repaired;
-		const missingBrace = errors.find((error) => error.code === 1005 || error.code === 1513);
-		if (missingBrace === undefined || missingBrace.start === undefined) return source;
-		repaired = `${repaired.slice(0, missingBrace.start)}}\n${repaired.slice(missingBrace.start)}`;
-	}
-	return source;
-}
-
-/** Repair runnable examples an archived tag shipped with a syntax error. */
-function repairExamples(markdown: string): string {
-	return markdown.replace(LIVE_CODE_BLOCK, (whole, open, body, close) =>
-		syntaxErrors(body).length === 0 ? whole : `${open}${repairExample(body)}${close}`,
-	);
 }
 
 /** Replace stale pins in immutable release docs with per-tree frontmatter. */
@@ -275,7 +243,7 @@ const docs = await versionedDocs({
 	 * jsDelivr serves releases. esm.sh builds the current GitHub tree by commit,
 	 * which only exists for pushed refs, so the dev server serves the local
 	 * `dist/` through vite's `/@fs` instead. `bun dev` keeps it fresh via
-	 * `build:watch`; a bare `site:dev` needs a prior `bun bd`.
+	 * `build:watch`; a bare `micro509-site:dev` needs a prior `bun bd`.
 	 */
 	library: {
 		name: repo.name,
@@ -309,7 +277,10 @@ function versionPrefixOfPath(pathname: string): string {
 /** Reading order within each section. Unlisted pages append to the last group. */
 const ORDER: SidebarOrder = {
 	guide: [
-		{ text: 'Introduction', slugs: ['getting-started', 'why'] },
+		{
+			text: 'Introduction',
+			slugs: ['getting-started', 'why'],
+		},
 		{
 			text: 'Workflows',
 			slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs', 'extensions'],
@@ -332,7 +303,10 @@ export default defineConfig<DocsThemeConfig>({
 			apiDocsPlugin({
 				watchDir: path.join(repoRoot, 'src'),
 				regenerate: () =>
-					generateApi({ root: repoRoot, outDir: path.join(repoRoot, siteRoot, 'api') }),
+					generateApi({
+						root: repoRoot,
+						outDir: path.join(repoRoot, siteRoot, 'api'),
+					}),
 			}),
 			docExamplesPlugin(examples),
 			docs.plugin,
@@ -363,6 +337,7 @@ export default defineConfig<DocsThemeConfig>({
 		'packages/**',
 		'src/**',
 		'test/**',
+		...locallyExcludedMarkdown(),
 		...docs.srcExclude,
 	],
 	ignoreDeadLinks: [/test\/fixtures\//],
@@ -410,14 +385,26 @@ export default defineConfig<DocsThemeConfig>({
 	],
 
 	themeConfig: {
-		logo: { light: '/icon.svg', dark: '/icon-light.svg', alt: repo.name },
+		logo: {
+			light: '/icon.svg',
+			dark: '/icon-light.svg',
+			alt: repo.name,
+		},
 		versions: docs.versions,
 		nav: [{ component: 'VersionedNav' }, { component: 'VersionSwitcher' }],
 		sidebar: docs.sidebar(ORDER),
 
 		socialLinks: [
-			{ icon: 'github', link: repoUrl.href, ariaLabel: 'GitHub' },
-			{ icon: 'npm', link: `https://npm.im/${repo.name}`, ariaLabel: 'NPM' },
+			{
+				icon: 'github',
+				link: repoUrl.href,
+				ariaLabel: 'GitHub',
+			},
+			{
+				icon: 'npm',
+				link: `https://npm.im/${repo.name}`,
+				ariaLabel: 'NPM',
+			},
 			{
 				icon: {
 					svg: '<svg role="img" viewBox="0 0 24 12.924" xmlns="http://www.w3.org/2000/svg"><title>JSR</title><path fill="#f7df1e" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Z"/><path fill="#083344" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Zm1.846 1.847h1.847v7.384H1.846v-3.692h1.846v1.846h1.846zm3.693 0h5.538V3.692h-3.692v1.846h3.692v5.538H9.231V9.232h3.692v-1.846H9.231Zm7.384 1.846h5.539v3.692h-1.846v-1.846h-1.846v5.538h-1.847z"/></svg>',

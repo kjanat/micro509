@@ -1,7 +1,19 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon-light.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon.svg">
-  <img alt="" src="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon.svg" width="64" height="64" align="left">
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon-light.svg"
+  >
+  <source
+    media="(prefers-color-scheme: light)"
+    srcset="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon.svg"
+  >
+  <img
+    alt=""
+    src="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon.svg"
+    width="64"
+    height="64"
+    align="left"
+  >
 </picture>
 
 # micro509
@@ -61,32 +73,32 @@ certificate index, and structured failure details instead of `false`.
 import { createSelfSignedCertificate, unwrap, verifyCertificateChain } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'app.example.com' },
-  extensions: {
-    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
-  },
+	subject: { commonName: 'app.example.com' },
+	extensions: {
+		subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
+	},
 });
 
 const result = await verifyCertificateChain({
-  leaf: certificate.pem,
-  roots: [certificate.pem],
-  allowSelfSignedLeaf: true,
-  serviceIdentity: { type: 'dns', value: 'evil.example.com' },
+	leaf: certificate.pem,
+	roots: [certificate.pem],
+	allowSelfSignedLeaf: true,
+	serviceIdentity: { type: 'dns', value: 'evil.example.com' },
 });
 
 if (!result.ok) {
-  switch (result.error.code) {
-    case 'certificate_expired':
-      console.log('renew the certificate at index', result.error.index);
-      break;
-    case 'subject_alt_name_mismatch': {
-      const { expected, actual } = result.error.details ?? {};
-      console.log(`identity mismatch: wanted ${expected}, presented ${actual}`);
-      break;
-    }
-    default:
-      unwrap(result); // rethrows the typed error
-  }
+	switch (result.error.code) {
+		case 'certificate_expired':
+			console.log('renew the certificate at index', result.error.index);
+			break;
+		case 'subject_alt_name_mismatch': {
+			const { expected, actual } = result.error.details ?? {};
+			console.log(`identity mismatch: wanted ${expected}, presented ${actual}`);
+			break;
+		}
+		default:
+			unwrap(result); // rethrows the typed error
+	}
 }
 ```
 
@@ -115,19 +127,19 @@ Create a self-signed certificate:
 import { createSelfSignedCertificate } from 'micro509';
 
 const { certificate, keyPair } = await createSelfSignedCertificate({
-  subject: {
-    commonName: 'example.com',
-    organization: 'Acme',
-    country: 'US',
-  },
-  validity: { days: 30 },
-  extensions: {
-    keyUsage: ['digitalSignature', 'keyEncipherment'],
-    subjectAltNames: [
-      { type: 'dns', value: 'example.com' },
-      { type: 'dns', value: 'www.example.com' },
-    ],
-  },
+	subject: {
+		commonName: 'example.com',
+		organization: 'Acme',
+		country: 'US',
+	},
+	validity: { days: 30 },
+	extensions: {
+		keyUsage: ['digitalSignature', 'keyEncipherment'],
+		subjectAltNames: [
+			{ type: 'dns', value: 'example.com' },
+			{ type: 'dns', value: 'www.example.com' },
+		],
+	},
 });
 
 console.log(certificate.pem);
@@ -141,12 +153,12 @@ import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
-  subject: { commonName: 'csr.example' },
-  publicKey: keyPair.publicKey,
-  signerPrivateKey: keyPair.privateKey,
-  extensions: {
-    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
-  },
+	subject: { commonName: 'csr.example' },
+	publicKey: keyPair.publicKey,
+	signerPrivateKey: keyPair.privateKey,
+	extensions: {
+		subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
+	},
 });
 
 console.log(csr.pem);
@@ -158,8 +170,8 @@ Parse a certificate:
 import { createSelfSignedCertificate, parseCertificatePem, unwrap } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'example.com' },
-  extensions: { extendedKeyUsage: ['serverAuth'] },
+	subject: { commonName: 'example.com' },
+	extensions: { extendedKeyUsage: ['serverAuth'] },
 });
 
 const parsed = unwrap(parseCertificatePem(certificate.pem));
@@ -177,26 +189,26 @@ Verify a chain:
 import { createSelfSignedCertificate, verifyCertificateChain } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'example.com' },
-  extensions: {
-    extendedKeyUsage: ['serverAuth'],
-    subjectAltNames: [{ type: 'dns', value: 'example.com' }],
-  },
+	subject: { commonName: 'example.com' },
+	extensions: {
+		extendedKeyUsage: ['serverAuth'],
+		subjectAltNames: [{ type: 'dns', value: 'example.com' }],
+	},
 });
 
 // Self-signed leaf as its own root: development shape, explicit opt-in
 const result = await verifyCertificateChain({
-  leaf: certificate.pem,
-  roots: [certificate.pem],
-  purpose: 'serverAuth',
-  serviceIdentity: { type: 'dns', value: 'example.com' },
-  allowSelfSignedLeaf: true,
+	leaf: certificate.pem,
+	roots: [certificate.pem],
+	purpose: 'serverAuth',
+	serviceIdentity: { type: 'dns', value: 'example.com' },
+	allowSelfSignedLeaf: true,
 });
 
 if (result.ok) {
-  console.log(result.value.chain.length, result.value.leaf.serialNumberHex);
+	console.log(result.value.chain.length, result.value.leaf.serialNumberHex);
 } else {
-  console.log(result.error.code);
+	console.log(result.error.code);
 }
 ```
 
@@ -288,10 +300,10 @@ them. See [`.github/openssl/README.md`](./.github/openssl/README.md).
 [npm]: https://npm.im/micro509
 [jsr]: https://jsr.io/@kjanat/micro509
 [socket]: https://socket.dev/npm/package/micro509
-[browser-example]: ./examples/browser/README.md 'GitHub'
-[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser 'Stackblitz'
-[vite-example]: ./examples/vite/README.md 'GitHub'
-[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite 'Stackblitz'
+[browser-example]: ./examples/browser/README.md "GitHub"
+[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser "Stackblitz"
+[vite-example]: ./examples/vite/README.md "GitHub"
+[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite "Stackblitz"
 [a typed error code for every failure mode]: https://micro509.kjanat.dev/guide/verification#error-codes
 [rfc5280]: https://www.rfc-editor.org/rfc/rfc5280.html
 [rfc5652]: https://www.rfc-editor.org/rfc/rfc5652.html

@@ -9,14 +9,19 @@
 	},
 	"scripts": {
 		"build": "vitepress build ..",
+		"deploy": "wrangler deploy",
+		"deploy:version": "wrangler versions upload",
 		"dev": "vitepress dev .. --host",
-		"fmt": "cd ../ && dprint fmt",
+		"fmt": "run --dir=.. dprint fmt",
 		"preview": "vitepress preview ..",
-		"typecheck": "vue-tsc --noEmit -p tsconfig.json",
+		"test": "bun test live-code.test.ts",
+		"typecheck": "bun typecheck.ts",
 		"wrangler:types": "wrangler types"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "catalog:cloudflare",
+		"@kjanat/tsc-bridge": "workspace:*",
+		"@kjanat/tsc-vue-mapper": "workspace:*",
 		"@micro509/vitepress-api-docs": "workspace:*",
 		"@micro509/vitepress-doc-examples": "workspace:*",
 		"@micro509/vitepress-github-links": "workspace:*",
@@ -28,13 +33,13 @@
 		"dprint": "catalog:",
 		"importmapify": "catalog:deno",
 		"markdown-it-task-lists": "catalog:site",
-		"typescript": "catalog:ts",
-		"typescript-7": "catalog:ts",
+		"micro509": "workspace:*",
+		"runner-run": "catalog:",
+		"typescript": "catalog:ts7",
 		"vite-robots-txt": "catalog:site",
 		"vite-svg-to-ico": "catalog:site",
 		"vitepress": "catalog:site",
 		"vue": "catalog:",
-		"vue-tsc": "catalog:ts",
 		"wrangler": "catalog:cloudflare"
 	}
 }

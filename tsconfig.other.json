@@ -28,6 +28,7 @@
 	},
 	"include": [
 		".config",
+		".dprint.json",
 		"src",
 		"src/**/*.json",
 		"test/**/*.ts",

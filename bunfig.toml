@@ -1,12 +1,15 @@
 [install]
 linker = "hoisted"
 
+[install.scopes]
+jsr = "https://npm.jsr.io"
+
 [test]
 concurrentTestGlob         = "**/*{differential,fuzz}*.test.ts"
-coveragePathIgnorePatterns = ["test/**", "dist/**", "packages/**", "scripts/**", ".claude/**"]
+coveragePathIgnorePatterns = ["test/**", "dist/**", "packages/**", "scripts/**", "tsc/**", ".claude/**"]
 coverageReporter           = ["text", "lcov"]
 coverageSkipTestFiles      = true
-coverageThreshold          = 0.80                                                               # prevents bun from exiting non-zero
+coverageThreshold          = 0.80                                                                         # prevents bun from exiting non-zero
 reporter.junit             = "test-results.xml"
 
 [run]

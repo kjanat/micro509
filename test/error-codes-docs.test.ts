@@ -1,54 +1,25 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import ts from 'typescript';
+import { createTscBridge } from '@kjanat/tsc-bridge';
+import pkg from '#pkg' with { type: 'json' };
 import { projectRoot } from '#test/helpers';
 
-const ENTRYPOINTS = [
-	'src/index.ts',
-	'src/crypto/index.ts',
-	'src/der/index.ts',
-	'src/keys/index.ts',
-	'src/pem/index.ts',
-	'src/pkcs/index.ts',
-	'src/result/index.ts',
-	'src/revocation/index.ts',
-	'src/verify/index.ts',
-	'src/x509/index.ts',
-];
+const ENTRYPOINTS = Object.entries(pkg.imports)
+	.filter(([specifier]) => /^#micro509(?:\/\w+)?$/.test(specifier))
+	.map(([, target]) => path.posix.normalize(target));
 
-function exportedCodeUnions(): ReadonlyMap<string, ReadonlySet<string>> {
-	const configPath = path.join(projectRoot, 'tsconfig.src.json');
-	const config = ts.parseJsonConfigFileContent(
-		ts.readConfigFile(configPath, ts.sys.readFile).config,
-		ts.sys,
-		projectRoot,
-	);
-	const program = ts.createProgram(
-		ENTRYPOINTS.map((entry) => path.join(projectRoot, entry)),
-		config.options,
-	);
-	const checker = program.getTypeChecker();
-	const unions = new Map<string, ReadonlySet<string>>();
-	for (const entry of ENTRYPOINTS) {
-		const source = program.getSourceFile(path.join(projectRoot, entry));
-		if (source === undefined) continue;
-		const moduleSymbol = checker.getSymbolAtLocation(source);
-		if (moduleSymbol === undefined) continue;
-		for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
-			const name = symbol.getName();
-			if (!/(ErrorCode|ReasonCode)$/.test(name)) continue;
-			const declared = checker.getDeclaredTypeOfSymbol(symbol);
-			const parts = declared.isUnion() ? declared.types : [declared];
-			const codes = parts
-				.filter((part): part is ts.StringLiteralType => part.isStringLiteral())
-				.map((part) => part.value);
-			if (codes.length === 0) continue;
-			unions.set(name, new Set(codes));
-		}
+async function exportedCodeUnions(): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
+	const bridge = createTscBridge({ cwd: projectRoot });
+	try {
+		const unions = await bridge.exportedCodeUnions('tsconfig.src.json', ENTRYPOINTS);
+		return new Map(unions.map(({ name, codes }) => [name, new Set(codes)]));
+	} finally {
+		await bridge.close();
 	}
-	return unions;
 }
+
+const unions = await exportedCodeUnions();
 
 function codesOnLine(line: string): readonly string[] {
 	const row = line.match(/^\| `([a-z][a-z0-9_]+)`/);
@@ -74,7 +45,6 @@ function documentedSections(markdown: string): ReadonlyMap<string, ReadonlySet<s
 }
 
 describe('error-code reference page', () => {
-	const unions = exportedCodeUnions();
 	const markdown = readFileSync(path.join(projectRoot, 'site/reference/errors.md'), 'utf8');
 	const sections = documentedSections(markdown);
 

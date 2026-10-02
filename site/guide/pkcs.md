@@ -11,10 +11,7 @@ outline: [2, 3]
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
 import { createPfx } from 'micro509/pkcs';
 
 const ca = await createSelfSignedCertificate({
@@ -52,10 +49,7 @@ console.log(pfx.pem);
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
 import { createPfx, parsePfxDer } from 'micro509/pkcs';
 
 // Build a PFX inline to parse back
@@ -76,8 +70,7 @@ const result = await parsePfxDer(pfx.der, {
 });
 
 if (result.ok) {
-  const { certificates, privateKeys, bags, macData } =
-    result.value;
+  const { certificates, privateKeys, bags, macData } = result.value;
   const leafCert = certificates[0];
   console.log(`\
 bags:    ${bags.map((bag) => bag.kind).join(', ')}
@@ -133,10 +126,7 @@ fails with `weak_mac_key_length` below 20 octets. Any other MAC returns
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
 import { createPkcs7CertBag } from 'micro509/pkcs';
 
 // Two real certificates to bundle
@@ -148,12 +138,7 @@ const b = await createSelfSignedCertificate({
 });
 
 // createPkcs7CertBag returns a typed result; unwrap on the success path
-const bag = unwrap(
-  createPkcs7CertBag([
-    a.certificate.pem,
-    b.certificate.pem,
-  ]),
-);
+const bag = unwrap(createPkcs7CertBag([a.certificate.pem, b.certificate.pem]));
 
 console.log(`der bytes: ${bag.der.length}`);
 console.log(bag.pem);
@@ -166,14 +151,8 @@ console.log(bag.pem);
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
-import {
-  createPkcs7CertBag,
-  parsePkcs7CertBagPem,
-} from 'micro509/pkcs';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
+import { createPkcs7CertBag, parsePkcs7CertBagPem } from 'micro509/pkcs';
 
 // Build a real cert bag inline
 const a = await createSelfSignedCertificate({
@@ -182,12 +161,7 @@ const a = await createSelfSignedCertificate({
 const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
-const bag = unwrap(
-  createPkcs7CertBag([
-    a.certificate.pem,
-    b.certificate.pem,
-  ]),
-);
+const bag = unwrap(createPkcs7CertBag([a.certificate.pem, b.certificate.pem]));
 
 const result = parsePkcs7CertBagPem(bag.pem);
 
@@ -212,10 +186,7 @@ if (result.ok) {
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import {
-  createPkcs7SignedData,
-  verifyPkcs7SignedData,
-} from 'micro509/pkcs';
+import { createPkcs7SignedData, verifyPkcs7SignedData } from 'micro509/pkcs';
 
 // A signer is a certificate + its matching private key
 const signer = await createSelfSignedCertificate({
@@ -239,9 +210,7 @@ const signed = await createPkcs7SignedData({
 if (!signed.ok) {
   console.log(`sign failed: ${signed.error.code}`);
 } else {
-  const result = await verifyPkcs7SignedData(
-    signed.value.pem,
-  );
+  const result = await verifyPkcs7SignedData(signed.value.pem);
   if (result.ok) {
     // result.signers pairs each SignerInfo with the
     // certificate that verified its signature
@@ -273,10 +242,7 @@ blob in the commit header and provides the commit bytes at verification time.
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import {
-  createPkcs7SignedData,
-  verifyPkcs7SignedData,
-} from 'micro509/pkcs';
+import { createPkcs7SignedData, verifyPkcs7SignedData } from 'micro509/pkcs';
 
 const signer = await createSelfSignedCertificate({
   subject: { commonName: 'detached.example' },
@@ -299,25 +265,19 @@ if (!signed.ok) {
   console.log(`sign failed: ${signed.error.code}`);
 } else {
   // Without the content, verification fails typed:
-  const missing = await verifyPkcs7SignedData(
-    signed.value.der,
-  );
+  const missing = await verifyPkcs7SignedData(signed.value.der);
 
   // Tampered content: digest check catches it
-  const forged = await verifyPkcs7SignedData(
-    signed.value.der,
-    { content: new TextEncoder().encode('tree evil…') },
-  );
+  const forged = await verifyPkcs7SignedData(signed.value.der, {
+    content: new TextEncoder().encode('tree evil…'),
+  });
 
   // The externally-held original bytes verify
-  const result = await verifyPkcs7SignedData(
-    signed.value.der,
-    { content },
-  );
+  const result = await verifyPkcs7SignedData(signed.value.der, {
+    content,
+  });
 
-  const info = result.ok
-    ? result.value.signerInfos[0]
-    : undefined;
+  const info = result.ok ? result.value.signerInfos[0] : undefined;
   console.log(`\
 blob size:   ${signed.value.der.length} bytes (no eContent)
 no content:  ok=${missing.ok} (${missing.ok ? '' : missing.error.code})
@@ -338,10 +298,7 @@ embedded content is what gets verified and `options.content` is ignored.
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
 import {
   categorizePemBlocks,
   pemDecode,
@@ -366,14 +323,13 @@ const multiPem = `${pem}\n${pem}`;
 const blocks = unwrap(splitPemBlocks(multiPem));
 
 // Categorize blocks by type
-const { certificates, certificateRequests, privateKeys } =
-  unwrap(categorizePemBlocks(multiPem));
+const { certificates, certificateRequests, privateKeys } = unwrap(
+  categorizePemBlocks(multiPem),
+);
 
 console.log(`\
 der bytes:    ${der.length}
-der tail:     ${[...der.slice(-8)]
-  .map((byte) => byte.toString(16).padStart(2, '0'))
-  .join(' ')}
+der tail:     ${[...der.slice(-8)].map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}
 round-trip:   ${pemEncoded === pem}
 blocks:       ${blocks.map((block) => block.label).join(', ')}
 certs:        ${certificates.length}

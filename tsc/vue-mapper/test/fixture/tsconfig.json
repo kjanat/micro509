@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"noEmit": true,
+		"noUnusedLocals": true,
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"jsx": "preserve",
+		"lib": ["ESNext", "DOM"],
+		"types": [],
+		"skipLibCheck": true
+	},
+	"include": ["./*.ts", "./*.vue"],
+	"contentMappers": [
+		{
+			"package": "@kjanat/tsc-vue-mapper",
+			"extensions": [".vue"]
+		}
+	]
+}

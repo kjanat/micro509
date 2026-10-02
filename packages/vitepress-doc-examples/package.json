@@ -9,10 +9,10 @@
 		"./package.json": "./package.json"
 	},
 	"dependencies": {
-		"biome": "catalog:",
-		"typescript": "catalog:ts"
+		"@kjanat/tsc-bridge": "workspace:*",
+		"biome": "catalog:"
 	},
 	"peerDependencies": {
-		"vitepress": ">=2.0.0-alpha.18"
+		"vitepress": "catalog:site"
 	}
 }

@@ -2,7 +2,8 @@ import { describe, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import ts from 'typescript';
+import type { Diagnostic } from '@kjanat/tsc-bridge';
+import { createTscBridge } from '@kjanat/tsc-bridge';
 import { projectRoot } from '#test/helpers';
 
 const scratchDir = path.join(projectRoot, 'node_modules/.cache/readme-examples');
@@ -20,48 +21,54 @@ function rewriteBareImports(code: string): string {
 	);
 }
 
-function compilerOptions(): ts.CompilerOptions {
-	const configPath = path.join(projectRoot, 'tsconfig.src.json');
-	const parsed = ts.parseJsonConfigFileContent(
-		ts.readConfigFile(configPath, ts.sys.readFile).config,
-		ts.sys,
-		projectRoot,
-	);
-	return {
-		...parsed.options,
-		noEmit: true,
-		composite: false,
-		incremental: false,
-		tsBuildInfoFile: undefined,
-		rootDir: undefined,
-		paths: {
-			micro509: [path.join(projectRoot, 'src/index.ts')],
-			'micro509/*': [path.join(projectRoot, 'src/*/index.ts')],
-		},
-	};
+const fences = tsFences(readFileSync(path.join(projectRoot, 'README.md'), 'utf8'));
+const targets = fences.map((_, index) => path.join(scratchDir, `readme-${index + 1}.ts`));
+
+async function checkFences(): Promise<readonly Diagnostic[]> {
+	await fsp.mkdir(scratchDir, { recursive: true });
+	await Promise.all(fences.map((code, index) => fsp.writeFile(targets[index] ?? '', code)));
+	const bridge = createTscBridge({ cwd: projectRoot });
+	try {
+		return await bridge.checkProject('tsconfig.src.json', {
+			files: targets,
+			compilerOptions: {
+				noEmit: true,
+				composite: false,
+				incremental: false,
+				tsBuildInfoFile: null,
+				rootDir: null,
+				paths: {
+					micro509: [path.join(projectRoot, 'src/index.ts')],
+					'micro509/*': [path.join(projectRoot, 'src/*/index.ts')],
+				},
+			},
+		});
+	} finally {
+		await bridge.close();
+	}
 }
 
+const diagnostics = await checkFences();
+
 describe('README ts examples', () => {
-	const markdown = readFileSync(path.join(projectRoot, 'README.md'), 'utf8');
-	const fences = tsFences(markdown);
-	const options = compilerOptions();
+	it('checks the blocks under a configuration with no diagnostics of its own', () => {
+		const configuration = diagnostics.filter(
+			(diagnostic) => diagnostic.fileName === undefined || diagnostic.fileName.endsWith('.json'),
+		);
+		if (configuration.length > 0) {
+			throw new Error(configuration.map((diagnostic) => diagnostic.messageText).join('\n'));
+		}
+	});
 
 	for (const [index, code] of fences.entries()) {
-		it(`block ${index + 1} of ${fences.length} compiles with zero diagnostics`, async () => {
-			const target = path.join(scratchDir, `readme-${index + 1}.ts`);
-			await fsp.mkdir(scratchDir, { recursive: true });
-			await fsp.writeFile(target, code);
-			const program = ts.createProgram([target], options);
-			const diagnostics = ts
-				.getPreEmitDiagnostics(program)
-				.filter((diagnostic) => diagnostic.file?.fileName === target.replaceAll('\\', '/'));
-			if (diagnostics.length > 0) {
-				const rendered = diagnostics
-					.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
-					.join('\n');
+		it(`block ${index + 1} of ${fences.length} compiles with zero diagnostics`, () => {
+			const target = (targets[index] ?? '').replaceAll('\\', '/');
+			const own = diagnostics.filter((diagnostic) => diagnostic.fileName === target);
+			if (own.length > 0) {
+				const rendered = own.map((diagnostic) => diagnostic.messageText).join('\n');
 				throw new Error(`README block ${index + 1} has diagnostics:\n${rendered}`);
 			}
-		}, 60_000);
+		});
 
 		it(`block ${index + 1} of ${fences.length} executes`, async () => {
 			const target = path.join(scratchDir, `readme-run-${index + 1}.ts`);

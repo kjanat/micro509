@@ -3,7 +3,7 @@
  *
  * Every fenced block the `block` pattern matches is extracted into a standalone
  * module under `outDir`, given a tsconfig that maps the library's bare specifier
- * onto its sources, and put through `tsc` and `biome`. An example that no longer
+ * onto its sources, and put through the TypeScript compiler bridge and `biome`. An example that no longer
  * compiles against the code it demonstrates is API drift, and it is caught here
  * rather than in a reader's browser.
  *
@@ -22,10 +22,11 @@
 import proc from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { checkProjectSync, formatDiagnostic } from '@kjanat/tsc-bridge';
 import type { Plugin } from 'vitepress';
 
 export interface DocExamplesOptions {
-	/** Directory the checks run from — where `tsc` and `biome` resolve config. */
+	/** Directory the checks run from — where the bridge and `biome` resolve paths. */
 	readonly root: string;
 	/** Pages to extract examples from, absolute. */
 	readonly pages: readonly string[];
@@ -103,6 +104,21 @@ function emit(examples: readonly Example[], options: DocExamplesOptions): void {
 	);
 }
 
+function typecheck(options: DocExamplesOptions): Failure | undefined {
+	try {
+		const errors = checkProjectSync(path.join(options.outDir, 'tsconfig.json'), {
+			cwd: options.root,
+		}).filter((diagnostic) => diagnostic.category === 1);
+		if (errors.length === 0) return undefined;
+		return {
+			check: 'tsc',
+			output: errors.map((diagnostic) => formatDiagnostic(diagnostic, options.root)).join('\n'),
+		};
+	} catch (error) {
+		return { check: 'tsc', output: error instanceof Error ? error.message : String(error) };
+	}
+}
+
 function run(check: string, cmd: readonly string[], root: string): Failure | undefined {
 	const result = proc.spawnSync(cmd[0] ?? '', cmd.slice(1), { cwd: root, encoding: 'utf8' });
 	if (result.status === 0) return undefined;
@@ -129,11 +145,7 @@ export function checkDocExamples(options: DocExamplesOptions): ExamplesResult {
 
 	emit(examples, options);
 	const failures = [
-		run(
-			'tsc',
-			['bunx', 'tsc', '--noEmit', '-p', path.join(options.outDir, 'tsconfig.json')],
-			options.root,
-		),
+		typecheck(options),
 		run(
 			'biome',
 			['bunx', '@biomejs/biome', 'lint', '--vcs-use-ignore-file=false', options.outDir],

@@ -1,24 +1,26 @@
 name: Setup Js Runtime
 description: Setup Deno, Node.js, and/or Bun runtimes
 
+# pretty-yaml-ignore
 inputs:
-  install-runner: { description: Install runner-run, required: false, default: "true" }
-  install-deno: { description: Install Deno, required: false, default: "false" }
-  deno-version: { description: Deno version to install, required: false, default: "2.x" }
-  install-bun: { description: Install Bun, required: false, default: "true" }
-  bun-version: { description: Bun version to install, required: false, default: "latest" }
-  install-node: { description: Install Node.js, required: false, default: "true" }
-  node-version: { description: Node version to install, required: false, default: "file" }
-  node-registry-url: { description: "npm registry URL for Node (writes auth-enabled .npmrc reading NODE_AUTH_TOKEN)", required: false, default: "" }
-  update-npm: { description: "Update npm to 11", required: false, default: "true" }
+  install-runner:    { description: Install runner-run,          required: false, default: "true"   }
+  install-deno:      { description: Install Deno,                required: false, default: "false"  }
+  deno-version:      { description: Deno version to install,     required: false, default: "2.x"    }
+  install-bun:       { description: Install Bun,                 required: false, default: "true"   }
+  bun-version:       { description: Bun version to install,      required: false, default: "latest" }
+  install-node:      { description: Install Node.js,             required: false, default: "true"   }
+  node-version:      { description: Node version to install,     required: false, default: "file"   }
+  node-registry-url: { description: "npm registry URL for Node", required: false, default: ""       }
+  update-npm:        { description: "Update npm to 11",          required: false, default: "true"   }
 
+# pretty-yaml-ignore
 outputs:
-  runner-version: { description: The installed runner-run version, value: "${{ steps.setup-runner.outputs.version }}" }
-  deno-version: { description: The installed Deno version, value: "${{ steps.setup-deno.outputs.deno-version }}" }
-  bun-version: { description: The installed Bun version (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-version }}" }
-  bun-path: { description: The installed Bun path (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-path }}" }
-  node-version: { description: The installed Node.js version (if install-node is true), value: "${{ steps.setup-node.outputs.node-version }}" }
-  npm-version: { description: The installed npm version (if update-npm is true), value: "${{ steps.update-npm.outputs.npm-version }}" }
+  runner-version: { description: The installed runner version,  value: "${{ steps.setup-runner.outputs.version    }}" }
+  deno-version:   { description: The installed Deno version,    value: "${{ steps.setup-deno.outputs.deno-version }}" }
+  bun-version:    { description: The installed Bun version,     value: "${{ steps.setup-bun.outputs.bun-version   }}" }
+  bun-path:       { description: The installed Bun path,        value: "${{ steps.setup-bun.outputs.bun-path      }}" }
+  node-version:   { description: The installed Node.js version, value: "${{ steps.setup-node.outputs.node-version }}" }
+  npm-version:    { description: The installed npm version,     value: "${{ steps.update-npm.outputs.npm-version  }}" }
 
 runs:
   using: composite
@@ -26,7 +28,7 @@ runs:
     - name: Setup runner-run
       id: setup-runner
       if: ${{ inputs.install-runner == 'true' }}
-      uses: kjanat/runner@b6ffeff9bf51c5d7aba975433fabdf375eb1515c # v0.19.1
+      uses: kjanat/runner@ad30f34c7352d89884b6d03febd9b16b4807ed56 # v0.27.1
 
     - name: Setup dprint
       uses: kjanat/dprint-check@2a71b9c51a4bd9935243a16de38fa830dbaa30be # v3
@@ -43,8 +45,8 @@ runs:
       if: ${{ inputs.install-node == 'true' }}
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
       with:
-        node-version: ${{ inputs.node-version != 'file' && inputs.node-version || '' }}
-        node-version-file: ${{ inputs.node-version == 'file' && '.node-version' || '' }}
+        node-version: ${{ case(inputs.node-version != 'file', inputs.node-version, '') }}
+        node-version-file: ${{ case(inputs.node-version == 'file','.node-version', '') }}
         package-manager-cache: false
         registry-url: ${{ inputs.node-registry-url }}
 

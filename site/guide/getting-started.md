@@ -45,12 +45,10 @@ import it straight from a CDN.
 <script type="module">
   import { createSelfSignedCertificate } from 'https://esm.run/micro509';
 
-  const { certificate } = await createSelfSignedCertificate(
-    {
-      subject: { commonName: 'example.com' },
-      validity: { days: 30 },
-    },
-  );
+  const { certificate } = await createSelfSignedCertificate({
+    subject: { commonName: 'example.com' },
+    validity: { days: 30 },
+  });
   console.log(certificate.pem);
 </script>
 ```
@@ -62,10 +60,10 @@ you want in production, so a release cannot change under you.
 - [`examples/browser`][browser-example] is that, in full: one HTML file that issues a certificate and parses it back, with nothing installed and nothing built. [open in stackblitz][browser-example:stackblitz]
 - [`examples/vite`][vite-example]: the same demo with types and a dev server. [open in stackblitz][vite-example:stackblitz]
 
-[browser-example]: https://github.com/kjanat/micro509/tree/master/examples/browser/README.md 'GitHub'
-[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser 'Stackblitz'
-[vite-example]: https://github.com/kjanat/micro509/tree/master/examples/vite/README.md 'GitHub'
-[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite 'Stackblitz'
+[browser-example]: https://github.com/kjanat/micro509/tree/master/examples/browser/README.md "GitHub"
+[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser "Stackblitz"
+[vite-example]: https://github.com/kjanat/micro509/tree/master/examples/vite/README.md "GitHub"
+[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite "Stackblitz"
 
 ### Deno
 
@@ -85,22 +83,21 @@ import * as micro509 from 'jsr:@kjanat/micro509';
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: {
-      commonName: 'example.com',
-      organization: 'Acme',
-      country: 'US',
-    },
-    validity: { days: 30 },
-    extensions: {
-      keyUsage: ['digitalSignature', 'keyEncipherment'],
-      subjectAltNames: [
-        { type: 'dns', value: 'example.com' },
-        { type: 'dns', value: 'www.example.com' },
-      ],
-    },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: {
+    commonName: 'example.com',
+    organization: 'Acme',
+    country: 'US',
+  },
+  validity: { days: 30 },
+  extensions: {
+    keyUsage: ['digitalSignature', 'keyEncipherment'],
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+      { type: 'dns', value: 'www.example.com' },
+    ],
+  },
+});
 
 console.log(certificate.pem);
 console.log(await keyPair.exportPkcs8Pem());
@@ -113,10 +110,7 @@ console.log(await keyPair.exportPkcs8Pem());
 <LiveCode>
 
 ```ts
-import {
-  createCertificateSigningRequest,
-  generateKeyPair,
-} from 'micro509';
+import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
@@ -124,9 +118,7 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
@@ -212,9 +204,7 @@ const leaf = await createCertificate({
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'app.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
   },
 });
 
@@ -245,10 +235,7 @@ verified ${parsed.subject.values.commonName}
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  verifyCertificateChain,
-} from 'micro509';
+import { createSelfSignedCertificate, verifyCertificateChain } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'rogue.example' },
@@ -310,13 +297,8 @@ if (parsed.ok) {
 const known = unwrap(parseCertificatePem(certificate.pem));
 
 // ...or unwrapOr() for a fallback value.
-const fallback = unwrapOr(
-  parseCertificatePem('not a pem'),
-  known,
-);
-console.log(
-  `fallback:    ${fallback.subject.values.commonName}`,
-);
+const fallback = unwrapOr(parseCertificatePem('not a pem'), known);
+console.log(`fallback:    ${fallback.subject.values.commonName}`);
 
 // An unwrap() throw still carries the typed code.
 try {
@@ -351,10 +333,7 @@ Use domain entrypoints for exhaustive advanced types or a narrower workflow surf
 
 ```ts
 import { parseCertificatePem } from 'micro509/x509';
-import {
-  verifyCertificateChain,
-  matchServiceIdentity,
-} from 'micro509/verify';
+import { verifyCertificateChain, matchServiceIdentity } from 'micro509/verify';
 import {
   createOcspRequest,
   checkCertificateRevocation,

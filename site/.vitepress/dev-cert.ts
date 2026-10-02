@@ -13,14 +13,20 @@ interface DevCertificate {
 	readonly key: string;
 }
 
-function machineNames(): { readonly ips: readonly string[]; readonly hosts: readonly string[] } {
+function machineNames(): {
+	readonly ips: readonly string[];
+	readonly hosts: readonly string[];
+} {
 	const ips = new Set(['127.0.0.1', '::1']);
 	for (const entries of Object.values(os.networkInterfaces())) {
 		for (const entry of entries ?? []) {
 			ips.add(entry.address.replace(/%.*$/, ''));
 		}
 	}
-	return { ips: [...ips], hosts: ['localhost', os.hostname().toLowerCase()] };
+	return {
+		ips: [...ips],
+		hosts: ['localhost', os.hostname().toLowerCase()],
+	};
 }
 
 function covers(certPem: string, ips: readonly string[], hosts: readonly string[]): boolean {
@@ -50,7 +56,10 @@ export async function devServerCertificate(cacheDir: string): Promise<DevCertifi
 	if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
 		const cert = fs.readFileSync(certPath, 'utf8');
 		if (covers(cert, ips, hosts)) {
-			return { cert, key: fs.readFileSync(keyPath, 'utf8') };
+			return {
+				cert,
+				key: fs.readFileSync(keyPath, 'utf8'),
+			};
 		}
 	}
 	const subjectAltNames: readonly SubjectAltName[] = [

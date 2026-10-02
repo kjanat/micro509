@@ -20,7 +20,7 @@
 		"noEmit": true,
 		"isolatedDeclarations": true,
 		"stripInternal": true,
-		"types": [],
+		"types": ["*"],
 		"paths": {
 			"micro509": ["./src/index.ts"]
 		}
