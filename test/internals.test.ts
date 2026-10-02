@@ -1595,6 +1595,72 @@ describe('extensions encoding', () => {
 				{ type: 'otherName', typeId: OIDS.ntPrincipalName, value },
 			]);
 		});
+
+		it('keeps a UPN UTF8String holding invalid UTF-8 as a generic otherName', () => {
+			const value = tlv(0x0c, Uint8Array.of(0xc3, 0x28));
+			const names = sequence([
+				implicitConstructedContext(
+					0,
+					concatBytes([objectIdentifier(OIDS.ntPrincipalName), explicitContext(0, value)]),
+				),
+			]);
+			expect(parseGeneralNames(names, readRootElement(names))).toEqual([
+				{ type: 'otherName', typeId: OIDS.ntPrincipalName, value },
+			]);
+		});
+	});
+
+	describe('KRB5PrincipalName values outside the RFC 4556 and RFC 4120 types stay generic otherNames', () => {
+		const kerberosString = (octets: readonly number[]) => tlv(0x1b, Uint8Array.from(octets));
+		const alice = kerberosString([0x61, 0x6c, 0x69, 0x63, 0x65]);
+		const principal = (
+			realm: Uint8Array,
+			nameType: Uint8Array,
+			names: readonly Uint8Array[] = [alice],
+		) =>
+			sequence([
+				explicitContext(0, realm),
+				explicitContext(
+					1,
+					sequence([explicitContext(0, nameType), explicitContext(1, sequence(names))]),
+				),
+			]);
+		const realm = kerberosString([0x45, 0x58]);
+
+		it.each([
+			['a realm octet above 0x7f', principal(kerberosString([0x45, 0x80]), integerFromNumber(1))],
+			['a realm holding ESC', principal(kerberosString([0x45, 0x1b]), integerFromNumber(1))],
+			['a realm holding NUL', principal(kerberosString([0x45, 0x00]), integerFromNumber(1))],
+			[
+				'a component outside IA5String',
+				principal(realm, integerFromNumber(1), [kerberosString([0xff])]),
+			],
+			[
+				'a component that is not a GeneralString',
+				principal(realm, integerFromNumber(1), [utf8String('a')]),
+			],
+			['a non-minimal name type', principal(realm, tlv(0x02, Uint8Array.of(0x00, 0x01)))],
+			[
+				'a name type longer than Int32',
+				principal(realm, tlv(0x02, Uint8Array.of(0x01, 0, 0, 0, 0))),
+			],
+			['an empty name type', principal(realm, tlv(0x02, new Uint8Array()))],
+			[
+				'a realm wrapper holding two elements',
+				principal(concatBytes([realm, realm]), integerFromNumber(1)),
+			],
+			['a value that is not a SEQUENCE', utf8String('EXAMPLE.COM')],
+		] as const)('keeps %s', (_label, value) => {
+			const names = sequence([
+				implicitConstructedContext(
+					0,
+					concatBytes([objectIdentifier(OIDS.idPkinitSan), explicitContext(0, value)]),
+				),
+			]);
+			expect(parseGeneralNames(names, readRootElement(names))).toEqual([
+				{ type: 'otherName', typeId: OIDS.idPkinitSan, value },
+			]);
+		});
 	});
 
 	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {

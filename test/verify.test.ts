@@ -2579,6 +2579,12 @@ describe('chain verification', () => {
 		}
 
 		const upnSan = { type: 'upn', value: 'u@example.com' } as const;
+		const krb5San = {
+			type: 'krb5PrincipalName',
+			realm: 'EXAMPLE.COM',
+			nameType: 1,
+			nameString: ['u'],
+		} as const;
 
 		it('accepts a chain when the constrained form never appears', async () => {
 			// RFC 5280 §4.2.1.10: "If no name of the type is in the
@@ -2612,12 +2618,30 @@ describe('chain verification', () => {
 			const leaf = await issueLeaf(root, [
 				{ type: 'srv', value: '_imaps.unsupported-nc.example' },
 				{ type: 'smtpUtf8Mailbox', value: '用户@unsupported-nc.example' },
+				krb5San,
 			]);
 			const result = await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [root.certificate.pem],
 			});
 			expect(result.ok).toBe(true);
+		});
+
+		it('fails closed when a critical KRB5PrincipalName constraint meets a KRB5PrincipalName SAN', async () => {
+			const root = await createConstrainedRoot(
+				buildRawConstraintDer(encodeSubjectAltName({ ...krb5San, nameString: ['v'] })),
+				true,
+			);
+			const leaf = await issueLeaf(root, [upnSan, krb5San]);
+			const result = await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+			});
+			expect(result).toMatchObject({
+				ok: false,
+				code: 'unsupported_name_constraints',
+				details: { actual: `otherName ${OIDS.idPkinitSan}` },
+			});
 		});
 
 		it('fails closed on a UPN SAN beside an acceptable SRV-ID SAN', async () => {
