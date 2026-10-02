@@ -589,7 +589,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			revokedCertificates: [
 				{ serialNumber: hexToBytes(responderSerial), reasonCode: 'superseded' },
 			],

@@ -4081,7 +4081,7 @@ describe('crl', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Critical Entry Extension CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 1,
 			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -4157,7 +4157,7 @@ describe('crl', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Unrecognized Reason CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 1,
 			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -4199,12 +4199,12 @@ describe('crl', () => {
 			subject: { commonName: 'unrecognized-reason.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Unrecognized Reason Policy CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 1,
 			revokedCertificates: [
 				{

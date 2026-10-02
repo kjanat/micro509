@@ -579,7 +579,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			revokedCertificates: [
 				{ serialNumber: hexToBytes(certificate.serialNumberHex), reasonCode: 'keyCompromise' },
 			],
