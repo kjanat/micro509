@@ -286,6 +286,7 @@ cannot settle the status as `good`.
 | Code                              | Meaning                                                  |
 | --------------------------------- | -------------------------------------------------------- |
 | `invalid_date`                    | A response date is an invalid `Date`                     |
+| `invalid_revocation_reason_code`  | `revocationReasonCode` is negative or not an integer     |
 | `signer_certificate_key_mismatch` | Signer certificate's SPKI does not match the signing key |
 
 ## micro509/keys
