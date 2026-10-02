@@ -1496,7 +1496,7 @@ function isNewerDeltaCrl(
 	const candidateTime = candidate.thisUpdate.getTime();
 	const currentTime = current.thisUpdate.getTime();
 	if (candidateTime !== currentTime) return candidateTime > currentTime;
-	return (candidate.crlNumber ?? 0) > (current.crlNumber ?? 0);
+	return (candidate.crlNumber ?? 0n) > (current.crlNumber ?? 0n);
 }
 
 /** The direct issuer first, then deduplicated indirect CRL-issuer candidates. */

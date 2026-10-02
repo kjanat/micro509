@@ -78,7 +78,7 @@ describe('crl', () => {
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsedCrl.issuer.values.commonName).toBe('CRL Issuer');
-		expect(parsedCrl.crlNumber).toBe(7);
+		expect(parsedCrl.crlNumber).toBe(7n);
 		expect(parsedCrl.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
 		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
@@ -252,7 +252,7 @@ describe('crl', () => {
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
-		expect(parsed.baseCrlNumber).toBe(8);
+		expect(parsed.baseCrlNumber).toBe(8n);
 		expect(parsed.issuingDistributionPoint).toEqual({
 			distributionPoint: {
 				type: 'fullName',
@@ -1708,7 +1708,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			value: { status: 'revoked', reasonCode: 'keyCompromise', crl: { crlNumber: 5 } },
+			value: { status: 'revoked', reasonCode: 'keyCompromise', crl: { crlNumber: 5n } },
 		});
 	});
 
@@ -1807,7 +1807,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			value: { status: 'good', crl: { crlNumber: 10 } },
+			value: { status: 'good', crl: { crlNumber: 10n } },
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1822,7 +1822,7 @@ describe('crl', () => {
 			value: {
 				status: 'revoked',
 				reasonCode: 'keyCompromise',
-				crl: { crlNumber: 10 },
+				crl: { crlNumber: 10n },
 			},
 		});
 		expect(
@@ -1835,7 +1835,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			value: { status: 'good', crl: { crlNumber: 10 } },
+			value: { status: 'good', crl: { crlNumber: 10n } },
 		});
 	});
 

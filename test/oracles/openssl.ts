@@ -21,7 +21,7 @@ export interface OpenSslCrlStatusResult {
 	readonly exitCode: number;
 	readonly output: string;
 	readonly issuer?: string;
-	readonly crlNumber?: number;
+	readonly crlNumber?: bigint;
 }
 
 export interface OpenSslIdentityResult {
@@ -527,13 +527,13 @@ function classifyVerifyFailure(
 	return 'other';
 }
 
-function parseCrlNumber(output: string): number | undefined {
+function parseCrlNumber(output: string): bigint | undefined {
 	const line = output.split('\n').find((value) => value.toLowerCase().startsWith('crlnumber='));
-	if (line === undefined) {
-		return undefined;
-	}
-	const value = Number.parseInt(line.slice('crlnumber='.length), 16);
-	return Number.isNaN(value) ? undefined : value;
+	const hex = line
+		?.slice('crlnumber='.length)
+		.trim()
+		.replace(/^0x/i, '');
+	return hex !== undefined && /^[0-9a-f]+$/i.test(hex) ? BigInt(`0x${hex}`) : undefined;
 }
 
 function parseCrlIssuer(output: string): string | undefined {
