@@ -5280,7 +5280,7 @@ describe('CRL maximum age', () => {
 			issuerCertificate: ca.certificate.pem,
 			at,
 		});
-		expect(unbounded.ok).toBe(true);
+		expect(unbounded).toMatchObject({ ok: false, code: 'stale_crl' });
 
 		const bounded = await validateCertificateRevocationList({
 			crl: crl.pem,
@@ -5360,5 +5360,31 @@ describe('CRL maximum age', () => {
 		if (!result.ok) {
 			expect(result.code).toBe('stale_crl');
 		}
+	});
+
+	it('fails a CRL without nextUpdate in checkCertificateRevocationAgainstCrl unless maxAgeMs is set', async () => {
+		const { ca, crl } = await issueOpenEndedCrl();
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Max Age CRL CA' },
+			subject: { commonName: 'open-ended-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const check = (maxAgeMs?: number) =>
+			checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: crl.pem,
+				at: new Date('2020-06-01T00:00:00Z'),
+				...(maxAgeMs === undefined ? {} : { maxAgeMs }),
+			});
+
+		expect(await check()).toMatchObject({ ok: false, code: 'stale_crl' });
+		expect(await check(365 * 24 * 60 * 60 * 1000)).toMatchObject({
+			ok: true,
+			value: { status: 'good' },
+		});
 	});
 });

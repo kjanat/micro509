@@ -125,8 +125,8 @@ and CRL Number extensions in every CRL, so `issuerPublicKey` and `crlNumber` are
 
 [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify how a client handles a received CRL
 without `nextUpdate`, and [§3.3][rfc5280-section-3.3] leaves the required recency of revocation data
-to local policy. By default micro509 applies no age limit, so a replayed pre-revocation CRL without
-`nextUpdate` still validates.
+to local policy. micro509 fails such a CRL with `stale_crl` unless you set a maximum age, which then
+governs it.
 
 Bound the age of `thisUpdate` with these options. A CRL older than the bound
 fails with `stale_crl`, and the chain reports it as `crl_expired`.
