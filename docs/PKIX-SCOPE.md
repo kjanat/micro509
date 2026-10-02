@@ -457,6 +457,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       and `crlNumber`, and refuses a CRL number or base CRL number longer than 20
       octets. Parsing reads CRL numbers of any length as `bigint`, since verifiers
       must handle values up to 20 octets.
+- [x] Refuse a CRL whose revoked entry carries a critical extension other
+      than reasonCode, invalidityDate or certificateIssuer
+      ([RFC 5280 §5.3][rfc5280-section-5.3]).
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
@@ -606,6 +609,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
 [rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
+[rfc5280-section-5.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3
 [rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
 [rfc5280-section-6.3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.3.3
 [rfc5280-section-7.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-7.1
