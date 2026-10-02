@@ -112,6 +112,46 @@ describe('ocsp', () => {
 		);
 	});
 
+	it('createOcspResponse encodes revocationReasonCode as a DER ENUMERATED of any non-negative size', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Reason CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Reason CA' },
+			subject: { commonName: 'ocsp-reason.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const respond = (revocationReasonCode: number) =>
+			createOcspResponse({
+				signerPrivateKey: issuer.keyPair.privateKey,
+				signerCertificate: issuer.certificate.pem,
+				responses: [
+					{
+						certificate: leaf.pem,
+						issuerCertificate: issuer.certificate.pem,
+						certStatus: 'revoked',
+						revokedAt: new Date('2024-01-01T00:00:00Z'),
+						revocationReasonCode,
+					},
+				],
+			});
+
+		for (const code of [0, 11, 128, 300]) {
+			const parsed = parseOcspResponseDerOrThrow((await respond(code)).der);
+			expect(parsed.responses?.[0]).toMatchObject({
+				certStatus: 'revoked',
+				revocationReasonCode: code,
+			});
+		}
+		for (const code of [-1, 1.5, Number.NaN]) {
+			await expectRejectedErrorCode(respond(code), 'invalid_revocation_reason_code');
+		}
+	});
+
 	it('builds, parses, and verifies OCSP responses', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP CA' },

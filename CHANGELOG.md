@@ -342,6 +342,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `createOcspResponse` wrote `revocationReasonCode` as a single octet, so a code
+  of 128 or more became a negative or truncated ENUMERATED. It now encodes the
+  minimal DER ENUMERATED and throws `ResultError` code
+  `invalid_revocation_reason_code` for a negative or non-integer code.
 - CRL parsing accepted a revoked entry carrying a critical extension other
   than reasonCode, invalidityDate or certificateIssuer. [RFC 5280 §5.3][rfc5280-section-5.3]
   forbids using such a CRL for any certificate, and parsing now refuses it as
