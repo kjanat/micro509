@@ -123,7 +123,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'ocsp-reason.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const respond = (revocationReasonCode: number) =>
 			createOcspResponse({

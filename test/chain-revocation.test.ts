@@ -1094,7 +1094,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 				crlNumber: 1,
 				issuer: { commonName: caName },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				...fresh,
 				revokedCertificates: [
 					{
