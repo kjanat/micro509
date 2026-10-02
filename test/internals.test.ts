@@ -1271,9 +1271,17 @@ describe('extensions encoding', () => {
 		const names = [
 			{
 				type: 'otherName',
-				typeId: '1.3.6.1.4.1.311.20.2.3',
+				typeId: '1.3.6.1.5.5.7.8.5',
 				value: utf8String('user@example.com'),
 			},
+			{ type: 'upn', value: 'user@example.com' },
+			{
+				type: 'krb5PrincipalName',
+				realm: 'EXAMPLE.COM',
+				nameType: -128,
+				nameString: ['host', 'www.example.com'],
+			},
+			{ type: 'krb5PrincipalName', realm: 'EXAMPLE.COM', nameType: 1, nameString: [] },
 			{ type: 'x400Address', value: validOrAddress() },
 			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
 			{ type: 'registeredID', value: '1.2.840.113549' },
@@ -1460,25 +1468,133 @@ describe('extensions encoding', () => {
 		);
 	});
 
-	it('encodeSubjectAltName encodes an RFC 4556 KRB5PrincipalName otherName', () => {
+	describe('RFC 4556 §3.2.2 KRB5PrincipalName otherName', () => {
 		const kerberosString = (value: string) => tlv(0x1b, new TextEncoder().encode(value));
-		const krb5PrincipalName = sequence([
-			explicitContext(0, kerberosString('EXAMPLE.COM')),
-			explicitContext(
-				1,
-				sequence([
-					explicitContext(0, integerFromNumber(1)),
-					explicitContext(1, sequence([kerberosString('alice')])),
-				]),
-			),
-		]);
-		expect(
-			encodeSubjectAltName({
+		const krb5PrincipalName = (nameType: Uint8Array, realm = kerberosString('EXAMPLE.COM')) =>
+			sequence([
+				explicitContext(0, realm),
+				explicitContext(
+					1,
+					sequence([
+						explicitContext(0, nameType),
+						explicitContext(1, sequence([kerberosString('alice')])),
+					]),
+				),
+			]);
+
+		it('encodes the krb5PrincipalName variant with EXPLICIT tags and GeneralString components', () => {
+			expect(
+				encodeSubjectAltName({
+					type: 'krb5PrincipalName',
+					realm: 'EXAMPLE.COM',
+					nameType: 1,
+					nameString: ['alice'],
+				}),
+			).toEqual(
+				implicitConstructedContext(
+					0,
+					concatBytes([
+						objectIdentifier(OIDS.idPkinitSan),
+						explicitContext(0, krb5PrincipalName(integerFromNumber(1))),
+					]),
+				),
+			);
+		});
+
+		it('encodes a negative name type as a minimal two-complement Int32', () => {
+			for (const [nameType, contents] of [
+				[-1, [0xff]],
+				[-128, [0x80]],
+				[-129, [0xff, 0x7f]],
+				[128, [0x00, 0x80]],
+				[-2147483648, [0x80, 0x00, 0x00, 0x00]],
+				[2147483647, [0x7f, 0xff, 0xff, 0xff]],
+			] as const) {
+				const encoded = encodeSubjectAltName({
+					type: 'krb5PrincipalName',
+					realm: 'EXAMPLE.COM',
+					nameType,
+					nameString: ['alice'],
+				});
+				expect(encoded).toEqual(
+					implicitConstructedContext(
+						0,
+						concatBytes([
+							objectIdentifier(OIDS.idPkinitSan),
+							explicitContext(0, krb5PrincipalName(tlv(0x02, Uint8Array.from(contents)))),
+						]),
+					),
+				);
+			}
+		});
+
+		it('refuses a name type outside Int32, a NUL in the realm and a component outside IA5String', () => {
+			for (const name of [
+				{ realm: 'EXAMPLE.COM', nameType: 2147483648, nameString: ['alice'] },
+				{ realm: 'EXAMPLE.COM', nameType: 1.5, nameString: ['alice'] },
+				{ realm: 'EXAMPLE\0COM', nameType: 1, nameString: ['alice'] },
+				{ realm: 'EXAMPLE.COM', nameType: 1, nameString: ['älice'] },
+				{ realm: 'EXAMPLE.COM', nameType: 1, nameString: ['a\x1bb'] },
+			]) {
+				expectEncoderErrorCode(
+					() => encodeSubjectAltName({ type: 'krb5PrincipalName', ...name }),
+					'invalid_krb5_principal_name',
+				);
+			}
+		});
+
+		it('refuses the same value as a generic otherName and keeps one that does not fit the variant', () => {
+			expectEncoderErrorCode(
+				() =>
+					encodeSubjectAltName({
+						type: 'otherName',
+						typeId: OIDS.idPkinitSan,
+						value: krb5PrincipalName(integerFromNumber(1)),
+					}),
+				'other_name_type_id_has_variant',
+			);
+			const outsideVariant = krb5PrincipalName(integerFromNumber(1), utf8String('EXAMPLE.COM'));
+			const encoded = encodeSubjectAltName({
 				type: 'otherName',
-				typeId: '1.3.6.1.5.2.2',
-				value: krb5PrincipalName,
-			})[0],
-		).toBe(0xa0);
+				typeId: OIDS.idPkinitSan,
+				value: outsideVariant,
+			});
+			expect(parseGeneralNames(sequence([encoded]), readRootElement(sequence([encoded])))).toEqual([
+				{ type: 'otherName', typeId: OIDS.idPkinitSan, value: outsideVariant },
+			]);
+		});
+	});
+
+	describe('[MS-WCCE] §2.2.2.7.5 user principal name otherName', () => {
+		it('encodes the upn variant as a UTF8String and refuses it as a generic otherName', () => {
+			const value = utf8String('user@example.com');
+			expect(encodeSubjectAltName({ type: 'upn', value: 'user@example.com' })).toEqual(
+				implicitConstructedContext(
+					0,
+					concatBytes([objectIdentifier(OIDS.ntPrincipalName), explicitContext(0, value)]),
+				),
+			);
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'otherName', typeId: OIDS.ntPrincipalName, value }),
+				'other_name_type_id_has_variant',
+			);
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'upn', value: '' }),
+				'empty_general_name_value',
+			);
+		});
+
+		it('keeps an RFC 6806 Appendix A KerberosString UPN as a generic otherName', () => {
+			const value = tlv(0x1b, new TextEncoder().encode('user@example.com'));
+			const encoded = encodeSubjectAltName({
+				type: 'otherName',
+				typeId: OIDS.ntPrincipalName,
+				value,
+			});
+			expect(parseGeneralNames(sequence([encoded]), readRootElement(sequence([encoded])))).toEqual([
+				{ type: 'otherName', typeId: OIDS.ntPrincipalName, value },
+			]);
+		});
 	});
 
 	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {

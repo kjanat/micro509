@@ -2538,7 +2538,7 @@ describe('crl', () => {
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
 			{ type: 'registeredID', value: '1.2.3.4' },
-			{ type: 'otherName', typeId: '1.3.6.1.4.1.311.20.2.3', value: utf8String('u@example.test') },
+			{ type: 'upn', value: 'u@example.test' },
 			{ type: 'x400Address', value: sequence([]) },
 			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
 		] as const;

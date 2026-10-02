@@ -12,6 +12,7 @@ import {
 	decodeString,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
@@ -124,10 +125,128 @@ export function otherNameValueDer(source: Uint8Array, value: DerElement): Uint8A
 	return source.slice(value.start - value.headerLength, value.end);
 }
 
+/** [MS-WCCE] §2.2.2.7.5: a user principal name is a UTF8String. */
+function decodeUpn(value: DerElement): SubjectAltName | undefined {
+	if (value.tag !== 0x0c || value.value.length === 0) {
+		return undefined;
+	}
+	try {
+		return { type: 'upn', value: decodeString(value.tag, value.value) };
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
+		return undefined;
+	}
+}
+
 /**
- * Decode an otherName [0], typing SRV-ID (RFC 4985) and SmtpUTF8Mailbox
- * (RFC 9598) and keeping any other type-id with its value element. A malformed
- * payload of a recognised type-id throws.
+ * RFC 4120 §5.2.1: a KerberosString is a GeneralString holding IA5String
+ * characters only. The code-extension controls of X.690 §8.23.9 are left out,
+ * since a GeneralString reads them as escape sequences.
+ */
+function decodeKerberosString(element: DerElement | undefined): string | undefined {
+	if (
+		element?.tag !== 0x1b ||
+		element.value.some(
+			(octet) => octet > 0x7f || octet === 0x0e || octet === 0x0f || octet === 0x1b,
+		)
+	) {
+		return undefined;
+	}
+	return String.fromCharCode(...element.value);
+}
+
+/** RFC 4120 §5.2.4: `Int32 ::= INTEGER (-2147483648..2147483647)`, DER-minimal. */
+function decodeInt32(element: DerElement | undefined): number | undefined {
+	const contents = element?.tag === 0x02 ? element.value : undefined;
+	const [first, second] = contents ?? [];
+	if (
+		contents === undefined ||
+		first === undefined ||
+		contents.length > 4 ||
+		(second !== undefined &&
+			((first === 0x00 && second < 0x80) || (first === 0xff && second >= 0x80)))
+	) {
+		return undefined;
+	}
+	return contents
+		.slice(1)
+		.reduce((value, octet) => value * 256 + octet, first >= 0x80 ? first - 256 : first);
+}
+
+/** The single element under an EXPLICIT context tag. */
+function explicitChild(
+	source: Uint8Array,
+	element: DerElement | undefined,
+	tag: number,
+): DerElement | undefined {
+	if (element?.tag !== tag) {
+		return undefined;
+	}
+	const children = childrenOf(source, element);
+	return children.length === 1 ? children[0] : undefined;
+}
+
+/**
+ * RFC 4556 §3.2.2 KRB5PrincipalName with RFC 4120's PrincipalName, Realm and
+ * KerberosString, all EXPLICIT-tagged. A realm holds no NUL (RFC 4120 §5.2.2).
+ */
+function decodeKrb5PrincipalName(
+	source: Uint8Array,
+	value: DerElement,
+): SubjectAltName | undefined {
+	try {
+		const fields = value.tag === 0x30 ? childrenOf(source, value) : [];
+		const realm = decodeKerberosString(explicitChild(source, fields[0], 0xa0));
+		const principal = explicitChild(source, fields[1], 0xa1);
+		const principalFields = principal?.tag === 0x30 ? childrenOf(source, principal) : [];
+		const nameType = decodeInt32(explicitChild(source, principalFields[0], 0xa0));
+		const names = explicitChild(source, principalFields[1], 0xa1);
+		const nameString =
+			names?.tag === 0x30 ? childrenOf(source, names).map(decodeKerberosString) : [undefined];
+		if (
+			fields.length !== 2 ||
+			principalFields.length !== 2 ||
+			realm === undefined ||
+			realm.includes('\0') ||
+			nameType === undefined
+		) {
+			return undefined;
+		}
+		const components = nameString.filter((component) => component !== undefined);
+		return components.length === nameString.length
+			? { type: 'krb5PrincipalName', realm, nameType, nameString: components }
+			: undefined;
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
+		return undefined;
+	}
+}
+
+/**
+ * The typed {@linkcode SubjectAltName} variant of a UPN or KRB5PrincipalName
+ * otherName, or `undefined` when the value does not fit that variant's type
+ * and stays a plain `otherName`.
+ */
+export function typedOtherName(
+	typeId: string,
+	source: Uint8Array,
+	value: DerElement,
+): SubjectAltName | undefined {
+	switch (typeId) {
+		case OIDS.ntPrincipalName:
+			return decodeUpn(value);
+		case OIDS.idPkinitSan:
+			return decodeKrb5PrincipalName(source, value);
+		default:
+			return undefined;
+	}
+}
+
+/**
+ * Decode an otherName [0], typing SRV-ID (RFC 4985), SmtpUTF8Mailbox
+ * (RFC 9598), UPN ([MS-WCCE]) and KRB5PrincipalName (RFC 4556) and keeping any
+ * other type-id with its value element. A malformed SRV-ID or SmtpUTF8Mailbox
+ * payload throws.
  */
 function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName {
 	const { typeId, value } = readOtherName(source, element);
@@ -140,6 +259,12 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 			}
 			return { type: 'smtpUtf8Mailbox', value: decodeString(value.tag, value.value) };
 		default:
-			return { type: 'otherName', typeId, value: otherNameValueDer(source, value) };
+			return (
+				typedOtherName(typeId, source, value) ?? {
+					type: 'otherName',
+					typeId,
+					value: otherNameValueDer(source, value),
+				}
+			);
 	}
 }

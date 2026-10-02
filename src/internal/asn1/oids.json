@@ -257,6 +257,38 @@
 														}
 													}
 												}
+											},
+											"kerberosV5": {
+												"arc": "2",
+												"oids": {
+													"idPkinitSan": "2"
+												}
+											}
+										}
+									},
+									"private": {
+										"arc": "4",
+										"children": {
+											"enterprise": {
+												"arc": "1",
+												"children": {
+													"microsoft": {
+														"arc": "311",
+														"children": {
+															"msEnrollment": {
+																"arc": "20",
+																"children": {
+																	"msPrincipalNameForms": {
+																		"arc": "2",
+																		"oids": {
+																			"ntPrincipalName": "3"
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
 											}
 										}
 									}

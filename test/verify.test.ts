@@ -1103,7 +1103,7 @@ describe('chain verification', () => {
 
 		const withUpn = await issueLeaf([
 			{ type: 'registeredID', value: '1.2.3.4' },
-			{ type: 'otherName', typeId: UPN_TYPE_ID, value: utf8String('u@example.com') },
+			{ type: 'upn', value: 'u@example.com' },
 		]);
 		expect(
 			await verifyCertificateChain({ leaf: withUpn.pem, roots: [ca.certificate.pem] }),
@@ -2578,11 +2578,7 @@ describe('chain verification', () => {
 			});
 		}
 
-		const upnSan = {
-			type: 'otherName',
-			typeId: UPN_TYPE_ID,
-			value: utf8String('u@example.com'),
-		} as const;
+		const upnSan = { type: 'upn', value: 'u@example.com' } as const;
 
 		it('accepts a chain when the constrained form never appears', async () => {
 			// RFC 5280 §4.2.1.10: "If no name of the type is in the

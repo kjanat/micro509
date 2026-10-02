@@ -69,6 +69,7 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
+import { typedOtherName } from '#micro509/internal/x509/general-name';
 import type { GeneralNameContentCheck } from '#micro509/internal/x509/general-name-profile';
 import {
 	checkEdiPartyName,
@@ -170,13 +171,29 @@ export type SubjectAltName =
 			readonly value: string;
 	  }
 	| {
+			/** User principal name otherName (szOID_NT_PRINCIPAL_NAME, [MS-WCCE] §2.2.2.7.5), a UTF8String. */
+			readonly type: 'upn';
+			/** User principal name, e.g. `"user@example.com"`. */
+			readonly value: string;
+	  }
+	| {
+			/** Kerberos principal name otherName (id-pkinit-san, RFC 4556 §3.2.2). */
+			readonly type: 'krb5PrincipalName';
+			/** Kerberos realm, e.g. `"EXAMPLE.COM"`. */
+			readonly realm: string;
+			/** RFC 4120 §6.2 name type, e.g. `1` for NT-PRINCIPAL. */
+			readonly nameType: number;
+			/** Principal name components, e.g. `["host", "www.example.com"]`. */
+			readonly nameString: readonly string[];
+	  }
+	| {
 			/** X.500 directory name (directoryName [4]). */
 			readonly type: 'directoryName';
 			/** Hex-encoded DER of the Name SEQUENCE. */
 			readonly derHex: string;
 	  }
 	| {
-			/** otherName [0] of a type-id without a dedicated variant, e.g. a Microsoft UPN. */
+			/** otherName [0] of a type-id without a dedicated variant, or a UPN or KRB5PrincipalName value that does not fit its variant. */
 			readonly type: 'otherName';
 			/** Dotted-decimal type-id OID. */
 			readonly typeId: string;
@@ -1301,7 +1318,14 @@ function resolveEffectiveKeyUsage(
 
 /** Whether a typed GeneralName carries a non-empty identity value. */
 function subjectAltNameHasIdentity(name: SubjectAltName): boolean {
-	return name.type === 'directoryName' ? name.derHex.length > 0 : name.value.length > 0;
+	switch (name.type) {
+		case 'directoryName':
+			return name.derHex.length > 0;
+		case 'krb5PrincipalName':
+			return name.realm.length > 0 || name.nameString.length > 0;
+		default:
+			return name.value.length > 0;
+	}
 }
 
 /** Whether a custom subjectAltName value decodes to at least one non-empty GeneralName. */
@@ -1636,6 +1660,60 @@ function toAsciiSrvNameConstraint(value: string): string {
 	return ascii;
 }
 
+/** RFC 4120 §5.2.1 KerberosString content: IA5String characters in a GeneralString, without code-extension controls. */
+function kerberosString(value: string, field: string): Uint8Array {
+	const outside = (unit: number) => unit > 0x7f || unit === 0x0e || unit === 0x0f || unit === 0x1b;
+	if ([...value].some((character) => outside(character.codePointAt(0) ?? 0))) {
+		throwExtensionEncoderError(
+			'invalid_krb5_principal_name',
+			`KRB5PrincipalName ${field} must hold IA5String characters other than SO, SI and ESC (RFC 4120 §5.2.1)`,
+		);
+	}
+	return tlv(0x1b, new TextEncoder().encode(value));
+}
+
+/** RFC 4120 §5.2.4 Int32 as a DER-minimal two's-complement INTEGER. */
+function int32(value: number): Uint8Array {
+	if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647) {
+		throwExtensionEncoderError(
+			'invalid_krb5_principal_name',
+			'KRB5PrincipalName nameType must be an Int32 (RFC 4120 §5.2.4)',
+		);
+	}
+	const octets: number[] = [];
+	let rest = value;
+	do {
+		octets.unshift(rest & 0xff);
+		rest >>= 8;
+	} while (!(rest === 0 && (octets[0] ?? 0) < 0x80) && !(rest === -1 && (octets[0] ?? 0) >= 0x80));
+	return tlv(0x02, Uint8Array.from(octets));
+}
+
+/** RFC 4556 §3.2.2 KRB5PrincipalName in the EXPLICIT tagging of RFC 4120's module. */
+function encodeKrb5PrincipalName(
+	name: Extract<SubjectAltName, { readonly type: 'krb5PrincipalName' }>,
+): Uint8Array {
+	if (name.realm.includes('\0')) {
+		throwExtensionEncoderError(
+			'invalid_krb5_principal_name',
+			'KRB5PrincipalName realm must not contain NUL (RFC 4120 §5.2.2)',
+		);
+	}
+	return sequence([
+		explicitContext(0, kerberosString(name.realm, 'realm')),
+		explicitContext(
+			1,
+			sequence([
+				explicitContext(0, int32(name.nameType)),
+				explicitContext(
+					1,
+					sequence(name.nameString.map((component) => kerberosString(component, 'nameString'))),
+				),
+			]),
+		),
+	]);
+}
+
 /** An otherName type-id that has no dedicated {@linkcode SubjectAltName} variant. */
 function validateOtherNameTypeId(typeId: string): string {
 	const oid = validateOid(typeId);
@@ -1724,18 +1802,40 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 					explicitContext(0, utf8String(assertSmtpUtf8Mailbox(value.value))),
 				]),
 			);
+		case 'upn':
+			return implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.ntPrincipalName),
+					explicitContext(0, utf8String(requireNonEmptyName(value.value))),
+				]),
+			);
+		case 'krb5PrincipalName':
+			return implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.idPkinitSan),
+					explicitContext(0, encodeKrb5PrincipalName(value)),
+				]),
+			);
 		case 'ip':
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case 'directoryName':
 			return implicitConstructedContext(4, readDirectoryNameTlv(value.derHex));
-		case 'otherName':
+		case 'otherName': {
+			const typeId = validateOtherNameTypeId(value.typeId);
+			const element = requireSingleDerElement(value.value);
+			if (typedOtherName(typeId, element, readRootElement(element)) !== undefined) {
+				throwExtensionEncoderError(
+					'other_name_type_id_has_variant',
+					`otherName type-id ${typeId} with this value is encoded through its dedicated SubjectAltName variant`,
+				);
+			}
 			return implicitConstructedContext(
 				0,
-				concatBytes([
-					objectIdentifier(validateOtherNameTypeId(value.typeId)),
-					explicitContext(0, requireSingleDerElement(value.value)),
-				]),
+				concatBytes([objectIdentifier(typeId), explicitContext(0, element)]),
 			);
+		}
 		case 'x400Address':
 			return requireGeneralNameContent(
 				implicitConstructedContext(3, value.value),

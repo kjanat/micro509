@@ -1999,6 +1999,17 @@ function compareOpaqueGeneralNames(left: GeneralName, right: GeneralName): boole
 	if (left.type === 'otherName' && right.type === 'otherName') {
 		return left.typeId === right.typeId && bytesEqual(left.value, right.value);
 	}
+	if (left.type === 'upn' && right.type === 'upn') {
+		return left.value === right.value;
+	}
+	if (left.type === 'krb5PrincipalName' && right.type === 'krb5PrincipalName') {
+		return (
+			left.realm === right.realm &&
+			left.nameType === right.nameType &&
+			left.nameString.length === right.nameString.length &&
+			left.nameString.every((component, index) => component === right.nameString[index])
+		);
+	}
 	if (
 		(left.type === 'x400Address' && right.type === 'x400Address') ||
 		(left.type === 'ediPartyName' && right.type === 'ediPartyName')
