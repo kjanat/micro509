@@ -48,6 +48,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_ia5_string'
 	| 'invalid_idn'
 	| 'invalid_ip_name_constraint'
+	| 'invalid_krb5_principal_name'
 	| 'invalid_other_name_value'
 	| 'invalid_oid'
 	| 'invalid_smtp_utf8_mailbox'

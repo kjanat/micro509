@@ -581,7 +581,9 @@ export type StrictDerVerdict = 'valid' | 'malformed' | 'unsupported';
  * whose children follow neither the DER SET order nor the DER SET OF order is
  * `malformed`. Context-specific, application and private elements get framing
  * checks only, as do the rules that depend on a schema: DEFAULT omission and
- * NamedBitList trailing bits.
+ * NamedBitList trailing bits. No value is checked against an ASN.1 type, so
+ * ENUMERATED membership, INTEGER ranges, SIZE constraints, CHOICE alternatives
+ * and SEQUENCE or SET components stay unchecked.
  *
  * @throws `limit_exceeded` past {@linkcode maxDepth} levels of nesting or on a
  * tag number of 2^53 or more.

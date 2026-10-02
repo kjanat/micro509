@@ -1237,7 +1237,7 @@ describe('parse', () => {
 						type: 'unknown',
 						tag: 0xa0,
 						value: concatBytes([
-							objectIdentifier('1.3.6.1.4.1.311.20.2.3'),
+							objectIdentifier('1.3.6.1.5.5.7.8.5'),
 							tlv(0xa0, tlv(0x0c, new TextEncoder().encode('user@example.com'))),
 						]),
 					},
@@ -1249,7 +1249,7 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames).toEqual([
 			{
 				type: 'otherName',
-				typeId: '1.3.6.1.4.1.311.20.2.3',
+				typeId: '1.3.6.1.5.5.7.8.5',
 				value: tlv(0x0c, new TextEncoder().encode('user@example.com')),
 			},
 		]);

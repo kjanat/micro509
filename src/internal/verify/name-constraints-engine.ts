@@ -677,6 +677,10 @@ function unprocessableConstraintFormOf(
 			return otherName(san.typeId);
 		case 'smtpUtf8Mailbox':
 			return otherName(OIDS.idOnSmtpUtf8Mailbox);
+		case 'upn':
+			return otherName(OIDS.ntPrincipalName);
+		case 'krb5PrincipalName':
+			return otherName(OIDS.idPkinitSan);
 		case 'x400Address':
 		case 'ediPartyName':
 		case 'registeredID':
@@ -726,6 +730,8 @@ function sanToConstraintCheckable(san: SubjectAltName): SubjectAltNameCheckableR
 		case 'srv':
 			return { ok: true, value: { type: 'srv', value: san.value } };
 		case 'smtpUtf8Mailbox':
+		case 'upn':
+		case 'krb5PrincipalName':
 		case 'otherName':
 		case 'x400Address':
 		case 'ediPartyName':

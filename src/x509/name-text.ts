@@ -50,7 +50,7 @@ export function subjectAltNameToString(
 
 /**
  * The `openssl x509 -text` label for a {@linkcode SubjectAltName} variant —
- * `DNS`, `IP Address`, `email`, `URI`, `SRV`, `SmtpUTF8Mailbox`, `DirName`, `othername`, `X400Name`,
+ * `DNS`, `IP Address`, `email`, `URI`, `SRV`, `SmtpUTF8Mailbox`, `UPN`, `KRB5PrincipalName`, `DirName`, `othername`, `X400Name`,
  * `EdiPartyName`, `Registered ID`, or `[tag <n>]` for raw `unknown` input.
  */
 export function subjectAltNameLabel(name: SubjectAltName): string {
@@ -67,6 +67,10 @@ export function subjectAltNameLabel(name: SubjectAltName): string {
 			return 'SRV';
 		case 'smtpUtf8Mailbox':
 			return 'SmtpUTF8Mailbox';
+		case 'upn':
+			return 'UPN';
+		case 'krb5PrincipalName':
+			return 'KRB5PrincipalName';
 		case 'directoryName':
 			return 'DirName';
 		case 'otherName':
@@ -146,8 +150,11 @@ function subjectAltNameText(name: SubjectAltName): string {
 		case 'uri':
 		case 'srv':
 		case 'smtpUtf8Mailbox':
+		case 'upn':
 		case 'registeredID':
 			return name.value;
+		case 'krb5PrincipalName':
+			return `${name.nameString.join('/')}@${name.realm}`;
 		case 'directoryName':
 			return directoryNameText(name.derHex);
 		case 'otherName':
