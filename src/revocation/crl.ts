@@ -12,6 +12,7 @@ import {
 	decodeBoolean,
 	decodeIntegerMagnitude,
 	decodeIntegerNumber,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
@@ -2284,8 +2285,12 @@ function applyRevokedCertificateExtensionValue(
 	fields: MutableRevokedCertificateExtensionFields,
 ): void {
 	if (oid === OIDS.cRLReason) {
+		const enumerated = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		if (enumerated.tag !== 0x0a) {
+			throw new Error('cRLReason must use ENUMERATED');
+		}
 		const reasonCode = revocationReasonFromCode(
-			readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }).value[0],
+			decodeNonNegativeIntegerNumber(enumerated.value, 'cRLReason'),
 		);
 		if (reasonCode !== undefined) fields.reasonCode = reasonCode;
 	}
