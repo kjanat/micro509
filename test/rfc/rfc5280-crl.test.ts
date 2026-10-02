@@ -437,7 +437,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 		);
 	});
 
-	it('§5.1.2.5 L3275 "not specified by this profile": without maxAgeMs a CRL that omits nextUpdate stays usable', async () => {
+	it('§5.1.2.5 L3275 "not specified by this profile": micro509 refuses a CRL that omits nextUpdate unless maxAgeMs bounds it', async () => {
 		const { ca, issueCrl } = await crlPki();
 		const crl = await issueCrl({
 			thisUpdate: THIS_UPDATE,
@@ -445,15 +445,33 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			crlNumber: 1,
 			withoutNextUpdate: true,
 		});
-		expect(
-			await staleCode(
+		const validate = (at: Date, maxAgeMs?: number) =>
+			staleCode(
 				validateCertificateRevocationList({
 					crl,
 					issuerCertificate: ca.certificate.pem,
-					at: new Date('2100-01-01T00:00:00Z'),
+					at,
+					...(maxAgeMs === undefined ? {} : { maxAgeMs }),
 				}),
-			),
-		).toBe('ok');
+			);
+		expect(await validate(new Date('2100-01-01T00:00:00Z'))).toBe('stale_crl');
+		expect(await validate(shift(THIS_UPDATE, HOUR_MS))).toBe('stale_crl');
+		expect(await validate(shift(THIS_UPDATE, HOUR_MS), DAY_MS)).toBe('ok');
+	});
+
+	it('chain revocation takes no evidence from a CRL that omits nextUpdate unless crlMaxAgeMs bounds it', async () => {
+		const { chain, issueCrl } = await crlPki();
+		const at = evaluationTime();
+		const crl = await issueCrl({
+			thisUpdate: shift(at, -HOUR_MS),
+			nextUpdate: shift(at, DAY_MS),
+			crlNumber: 1,
+			withoutNextUpdate: true,
+		});
+		const open = await leafRevocation(chain, [crl], at);
+		expect(open?.status).toBe('indeterminate');
+		expect(open?.indeterminateReasons).toContain('crl_expired');
+		expect((await leafRevocation(chain, [crl], at, { crlMaxAgeMs: DAY_MS }))?.status).toBe('good');
 	});
 
 	it('accepts a CRL whose age equals maxAgeMs and rejects one a millisecond older', async () => {
@@ -616,7 +634,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 				[bounded, open],
 				[open, bounded],
 			]) {
-				const status = await leafRevocation(chain, crls, at);
+				const status = await leafRevocation(chain, crls, at, { crlMaxAgeMs: DAY_MS });
 				expect(status?.status).toBe('good');
 				expect(status?.source?.thisUpdate).toEqual(newer);
 			}
