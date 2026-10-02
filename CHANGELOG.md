@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or an `ocsp` authorityInfoAccess entry (`no_rev_avail_conflict`), and path
   validation rejects such a certificate with the new `no_rev_avail_conflict`
   verify code. `checkChainRevocation` and `verifyCertificateChain({
-revocation })` report a certificate carrying `noRevAvail` or
+  revocation })` report a certificate carrying `noRevAvail` or
   `id-pkix-ocsp-nocheck` as the new `status: 'skipped'` with a `skipReason`,
   without consulting evidence ([RFC 9608 §4][rfc9608-section-4]). The exemption is read from the
   certificate's signed DER.
@@ -715,14 +715,14 @@ stricter typed-contract pass.
 
   ```ts
   if (singleResponse.certStatus === 'revoked') {
-    singleResponse.revokedAt; // Date
-    singleResponse.revocationReasonCode; // number | undefined
+  	singleResponse.revokedAt; // Date
+  	singleResponse.revocationReasonCode; // number | undefined
   }
 
   await createSelfSignedCertificate({ subject, keyPair });
   await createSelfSignedCertificate({
-    subject,
-    algorithm: { kind: 'ecdsa', curve: 'P-256' },
+  	subject,
+  	algorithm: { kind: 'ecdsa', curve: 'P-256' },
   });
   ```
 
@@ -1273,7 +1273,7 @@ runnable docs examples that survive client-side navigation.
   root version and a scope per version prefix. Scopes match the URL of the
   importing module, and the injected example module inherits the document URL,
   so resolution follows the page at run time with no map swapping. `run
-site:import-maps` now verifies the map is identical on every page and each
+  site:import-maps` now verifies the map is identical on every page and each
   scope binds its own version, and `run site:live-examples` replays the failing
   flow: enter at the root, navigate client-side to an archive, run its example,
   and require every import to carry that archive's version.
@@ -1743,7 +1743,7 @@ throwing (a bad config is a programmer error, not a runtime condition).
 - **BREAKING** — `parseCertificateDer`, `parseCertificatePem`,
   `parseCertificateSigningRequestDer`, `parseCertificateSigningRequestPem`
   now return a `Result` (`{ ok, value }` / `{ ok, error: { code:
-'malformed' } }`) instead of throwing. Wrap with `unwrap(...)` for the
+  'malformed' } }`) instead of throwing. Wrap with `unwrap(...)` for the
   previous throw-on-error behavior.
 - **BREAKING** — All 16 key `import*` functions now return a `Result` instead
   of throwing. Non-encrypted failures use code `'malformed'`; encrypted

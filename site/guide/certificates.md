@@ -7,22 +7,21 @@
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: {
-      commonName: 'example.com',
-      organization: 'Acme',
-      country: 'US',
-    },
-    validity: { days: 365 },
-    extensions: {
-      keyUsage: ['digitalSignature', 'keyEncipherment'],
-      subjectAltNames: [
-        { type: 'dns', value: 'example.com' },
-        { type: 'dns', value: '*.example.com' },
-      ],
-    },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: {
+    commonName: 'example.com',
+    organization: 'Acme',
+    country: 'US',
+  },
+  validity: { days: 365 },
+  extensions: {
+    keyUsage: ['digitalSignature', 'keyEncipherment'],
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+      { type: 'dns', value: '*.example.com' },
+    ],
+  },
+});
 
 console.log(certificate.pem);
 console.log(await keyPair.exportPkcs8Pem());
@@ -74,9 +73,7 @@ const leaf = await createCertificate({
   issuerPublicKey: ca.keyPair.publicKey,
   extensions: {
     keyUsage: ['digitalSignature'],
-    subjectAltNames: [
-      { type: 'dns', value: 'leaf.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'leaf.example.com' }],
   },
 });
 
@@ -96,10 +93,7 @@ sig:     ${parsed.signatureAlgorithmName}`);
 <LiveCode>
 
 ```ts
-import {
-  createCertificateSigningRequest,
-  generateKeyPair,
-} from 'micro509';
+import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
@@ -107,9 +101,7 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
@@ -157,8 +149,7 @@ const sans = (parsed.subjectAltNames ?? []).map((name) =>
   subjectAltNameToString(name, { prefix: true }),
 );
 const days = Math.round(
-  (parsed.notAfter.getTime() - parsed.notBefore.getTime()) /
-    86_400_000,
+  (parsed.notAfter.getTime() - parsed.notBefore.getTime()) / 86_400_000,
 );
 console.log(`\
 subject:    ${distinguishedNameToString(parsed.subject)}
@@ -169,10 +160,7 @@ validity:   ${days} days from ${parsed.notBefore.toISOString().slice(0, 10)}
 key usage:  ${parsed.keyUsage?.flags.join(', ')}
 SANs:       ${sans.join(', ')}
 extensions: ${parsed.extensions
-  .map(
-    (ext) =>
-      `${ext.oid}${ext.critical ? ' (critical)' : ''}`,
-  )
+  .map((ext) => `${ext.oid}${ext.critical ? ' (critical)' : ''}`)
   .join(', ')}`);
 ```
 
@@ -233,20 +221,14 @@ const bundle = [
 ].join('\n');
 
 const chain = unwrap(parseCertificateChainPem(bundle));
-console.log(
-  `${chain.length} certificates parsed, key block skipped`,
-);
+console.log(`${chain.length} certificates parsed, key block skipped`);
 
 // Sort out who is who: CA flags, then issuer -> subject
 // links by RFC 5280 semantic DN comparison
 for (const cert of chain) {
-  const role =
-    cert.basicConstraints?.ca === true ? 'CA  ' : 'leaf';
+  const role = cert.basicConstraints?.ca === true ? 'CA  ' : 'leaf';
   const issuer = chain.find((candidate) =>
-    compareDistinguishedNames(
-      cert.issuer,
-      candidate.subject,
-    ),
+    compareDistinguishedNames(cert.issuer, candidate.subject),
   );
   const signer =
     issuer === cert
@@ -323,22 +305,14 @@ the digest as raw `bytes`, lowercase `hex`, and uppercase colon-separated
 <LiveCode>
 
 ```ts
-import {
-  certificateFingerprint,
-  createSelfSignedCertificate,
-} from 'micro509';
+import { certificateFingerprint, createSelfSignedCertificate } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'fingerprint.example' },
 });
 
-const sha256 = await certificateFingerprint(
-  certificate.pem,
-);
-const sha1 = await certificateFingerprint(
-  certificate.der,
-  'SHA-1',
-);
+const sha256 = await certificateFingerprint(certificate.pem);
+const sha1 = await certificateFingerprint(certificate.der, 'SHA-1');
 
 console.log(`\
 SHA-256: ${sha256.colonHex}
@@ -370,23 +344,17 @@ import {
   generateKeyPair,
 } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: { commonName: 'match.example' },
-    algorithm: { kind: 'ecdsa', curve: 'P-256' },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: { commonName: 'match.example' },
+  algorithm: { kind: 'ecdsa', curve: 'P-256' },
+});
 
-const { colonHex } = await certificateFingerprint(
-  certificate.pem,
-);
+const { colonHex } = await certificateFingerprint(certificate.pem);
 console.log(`certificate:  ${colonHex.slice(0, 47)}…`);
 
 // The key that issued the certificate matches...
 console.log(
-  `own key:      ${await certificateMatchesPrivateKey(
-    certificate.pem,
-    keyPair.privateKey,
-  )}`,
+  `own key:      ${await certificateMatchesPrivateKey(certificate.pem, keyPair.privateKey)}`,
 );
 
 // ...an unrelated key of the same type does not.
@@ -395,10 +363,7 @@ const impostor = await generateKeyPair({
   curve: 'P-256',
 });
 console.log(
-  `impostor key: ${await certificateMatchesPrivateKey(
-    certificate.pem,
-    impostor.privateKey,
-  )}`,
+  `impostor key: ${await certificateMatchesPrivateKey(certificate.pem, impostor.privateKey)}`,
 );
 ```
 
@@ -435,9 +400,7 @@ const result = await matchCertificatePrivateKey(
   certificate.pem,
   rsa.privateKey,
 );
-const { hex } = await certificateFingerprint(
-  certificate.pem,
-);
+const { hex } = await certificateFingerprint(certificate.pem);
 console.log(
   result.ok ? 'match' : result.code,
   `(certificate ${hex.slice(0, 40)}…)`,
@@ -466,23 +429,15 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
-const parsed = unwrap(
-  parseCertificateSigningRequestPem(csr.pem),
-);
+const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 const sans = (parsed.subjectAltNames ?? []).map((name) =>
   subjectAltNameToString(name),
 );
-const body = csr.pem
-  .trimEnd()
-  .split('\n')
-  .slice(1, -1)
-  .join('');
+const body = csr.pem.trimEnd().split('\n').slice(1, -1).join('');
 console.log(`\
 subject:   ${parsed.subject.values.commonName}
 sig algo:  ${parsed.signatureAlgorithmName}

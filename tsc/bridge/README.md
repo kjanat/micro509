@@ -24,16 +24,16 @@ import { createTscBridge } from '@kjanat/tsc-bridge';
 
 const compiler = createTscBridge();
 try {
-  const emitted = await compiler.transpile('export const answer: number = 42;');
-  console.log(emitted.outputText);
+	const emitted = await compiler.transpile('export const answer: number = 42;');
+	console.log(emitted.outputText);
 
-  const diagnostics = await compiler.checkProject('tsconfig.src.json');
-  console.log(diagnostics);
+	const diagnostics = await compiler.checkProject('tsconfig.src.json');
+	console.log(diagnostics);
 
-  const unions = await compiler.exportedCodeUnions('tsconfig.src.json', ['src/index.ts']);
-  console.log(unions);
+	const unions = await compiler.exportedCodeUnions('tsconfig.src.json', ['src/index.ts']);
+	console.log(unions);
 } finally {
-  await compiler.close();
+	await compiler.close();
 }
 ```
 

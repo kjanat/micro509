@@ -7,6 +7,11 @@
       "devDependencies": {
         "@arethetypeswrong/core": "catalog:build",
         "@deno/doc": "catalog:deno",
+        "@dprint/biome": "catalog:dprint",
+        "@dprint/formatter": "catalog:dprint",
+        "@dprint/json": "catalog:dprint",
+        "@dprint/markdown": "catalog:dprint",
+        "@dprint/typescript": "catalog:dprint",
         "@kjanat/tsc-bridge": "workspace:*",
         "@micro509/doc-render": "workspace:*",
         "@tsconfig/node24": "catalog:ts",
@@ -16,10 +21,14 @@
         "biome": "catalog:",
         "deno": "catalog:deno",
         "dprint": "catalog:",
-        "dreamcli": "npm:@kjanat/dreamcli@4.1.0",
+        "dprint-plugin-malva": "catalog:dprint",
+        "dprint-plugin-markup": "catalog:dprint",
+        "dprint-plugin-yaml": "catalog:dprint",
+        "dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
         "importmapify": "catalog:deno",
         "playwright": "^1.63.0",
         "publint": "catalog:build",
+        "rolldown-plugin-wasm": "catalog:build",
         "runner-run": "catalog:",
         "tombi": "catalog:",
         "tsdown": "catalog:build",
@@ -109,7 +118,9 @@
         "@kjanat/tsc-protocol": "workspace:*",
       },
       "devDependencies": {
+        "@kjanat/dreamcli": "catalog:",
         "runner-run": "catalog:",
+        "tsdown": "catalog:build",
       },
     },
     "tsc/compat": {
@@ -118,10 +129,16 @@
       "dependencies": {
         "typescript": "7.1.0-dev.20260930.4",
       },
+      "devDependencies": {
+        "tsdown": "catalog:build",
+      },
     },
     "tsc/protocol": {
       "name": "@kjanat/tsc-protocol",
       "version": "0.0.0",
+      "devDependencies": {
+        "tsdown": "catalog:build",
+      },
     },
     "tsc/vue-mapper": {
       "name": "@kjanat/tsc-vue-mapper",
@@ -135,6 +152,7 @@
         "@kjanat/tsc-bridge": "workspace:*",
         "@kjanat/tsc-wasm": "workspace:*",
         "@volar/typescript": "catalog:ts",
+        "tsdown": "catalog:build",
       },
     },
     "tsc/wasm": {
@@ -145,6 +163,7 @@
       },
       "devDependencies": {
         "@kjanat/tsc-bridge": "workspace:*",
+        "tsdown": "catalog:build",
       },
     },
   },
@@ -159,6 +178,7 @@
     "micro509": "link:.",
   },
   "catalog": {
+    "@kjanat/dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
     "biome": "npm:@biomejs/biome@^2.5.14",
     "dprint": "^0.58.0",
     "runner-run": "^0.27.1",
@@ -169,6 +189,7 @@
     "build": {
       "@arethetypeswrong/core": "^0.18.4",
       "publint": "^0.3.24",
+      "rolldown-plugin-wasm": "^0.3.2",
       "tsdown": "^0.23.0",
       "unplugin-unused": "^0.6.0",
     },
@@ -181,6 +202,16 @@
       "@types/deno": "^2.7.0",
       "deno": "^2.9.6",
       "importmapify": "^1.7.0",
+    },
+    "dprint": {
+      "@dprint/biome": "^0.13.13",
+      "@dprint/formatter": "^0.5.1",
+      "@dprint/json": "^0.25.0",
+      "@dprint/markdown": "^0.24.0",
+      "@dprint/typescript": "^0.96.1",
+      "dprint-plugin-malva": "^0.16.0",
+      "dprint-plugin-markup": "^0.27.5",
+      "dprint-plugin-yaml": "^0.6.0",
     },
     "site": {
       "markdown-it-task-lists": "^2.1.1",
@@ -279,9 +310,15 @@
 
     "@dprint/android-x64": ["@dprint/android-x64@0.58.0", "", { "os": "android", "cpu": "x64" }, "sha512-BtEU3Yyctk+t0i5U1SM+l11+hz9mcRZh9c8tQDcyAI5cqoOUjXCvjUmI5QCmZ0cL2QwTARj+btU6+rLh6OZX9w=="],
 
+    "@dprint/biome": ["@dprint/biome@0.13.13", "", {}, "sha512-/uGK+7Y6pHMuVFaFea09/d/9JWRPZaBpw7vGoTrxbspgsl+bH0jaLg6UvfRemIrcHRVsBGbqoAkM2mF+Gd5MxA=="],
+
     "@dprint/darwin-arm64": ["@dprint/darwin-arm64@0.58.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-OUsfomDmcPD7bPsdz5cGYD3f7GcoXXDVGTirNz27pdqpjk+Swy5zc9rtIs8abGcrmcgihSCuJqRKbGCM8XuF4g=="],
 
     "@dprint/darwin-x64": ["@dprint/darwin-x64@0.58.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-m62vrDExkJ/UNATybxHYboTyNh3AO+5XMCD93p9K7JZ3N0BsSyDG25I4/KAdMlJrRMA0DiqreMLlLN3MuXaN0A=="],
+
+    "@dprint/formatter": ["@dprint/formatter@0.5.1", "", {}, "sha512-cdZUrm0iv/FnnY3CKE2dEcVhNEzrC551aE2h2mTFwQCRBrqyARLDnb7D+3PlXTUVp3s34ftlnGOVCmhLT9DeKA=="],
+
+    "@dprint/json": ["@dprint/json@0.25.0", "", {}, "sha512-J3RAj2bGwrkI0UyqYlmL0eLEwz9l5AX5Y9hgG8Ra4VEqydw6Is6wXn3SecC7lRWenGQw3Cr6j1FnhkdGtR82vw=="],
 
     "@dprint/linux-arm64-glibc": ["@dprint/linux-arm64-glibc@0.58.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-rEWKREQXX4rwor4bhy7S/JBId0Xs4YTYbO/P4fOG23cvqqVTq4ZRgX4vC8l45TlxJyy1X38iKtt4oD8XfDifcw=="],
 
@@ -300,6 +337,10 @@
     "@dprint/linux-x64-glibc": ["@dprint/linux-x64-glibc@0.58.0", "", { "os": "linux", "cpu": "x64" }, "sha512-/Gkr3FWaTr9hn7W/fo5gWiyAb1Wk7pInwUm+UMXOKcUyKuuFcBbgMTIfEAmUcYZRIPMEbascovH+xcUr2cvV2g=="],
 
     "@dprint/linux-x64-musl": ["@dprint/linux-x64-musl@0.58.0", "", { "os": "linux", "cpu": "x64" }, "sha512-3GEwqb5RTnwCZdbZWP/kRMoSCg5oLB2SyHAaehgQKo6eHvzjHONg/DnLhH0z9Pgwo9Dc+jRhFL4LtxPu6ePYng=="],
+
+    "@dprint/markdown": ["@dprint/markdown@0.24.0", "", {}, "sha512-ohC0iF/k26dyaB8buKR71Ulf+HsBwSopbUTbY1jPwVGYAe/M9TuuGhALOkdmiSVtdrEf2gFkwsvvpDeayYyXzA=="],
+
+    "@dprint/typescript": ["@dprint/typescript@0.96.1", "", {}, "sha512-mz/nINSFQh1R5i2Qy90SWOCCK4SgNGRkNhCZba7LYmUkE4Zi8/45p8l8pqc9yN1fb4XY5Muhrzdh5Q3jFsYimw=="],
 
     "@dprint/win32-arm64": ["@dprint/win32-arm64@0.58.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-7+REvf6MpcHH3EYy4EvtS9Dgy5LwfLRjR9Tkb9Au3gIB+wD02BvWidWuK48FOSnuDmOQS+7gI1jATqo1HAOUCA=="],
 
@@ -444,6 +485,8 @@
     "@jsr/std__io": ["@jsr/std__io@0.225.3", "https://npm.jsr.io/~/11/@jsr/std__io/0.225.3.tgz", { "dependencies": { "@jsr/std__bytes": "^1.0.6" } }, "sha512-IDXY253ipW6FV34CJVxO+3ubfvSEEzw9N2W303KnLe9K/Y9+v/ID1dQYf9VsCCOFMpFtCmOLqzIZsRqv6yQnWw=="],
 
     "@jsr/std__path": ["@jsr/std__path@1.1.6", "https://npm.jsr.io/~/11/@jsr/std__path/1.1.6.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.14" } }, "sha512-H1Cmg6z8jFyIsQbVV+vZB4eOx4k6Qg8lyUM6l7nZysj5MZumg89kb0M1bsPBTGQis3fw6mJFkJELo5+AK6oCFA=="],
+
+    "@kjanat/dreamcli": ["@kjanat/dreamcli@4.1.0", "", { "dependencies": { "ansispeck": "^0.4.2" } }, "sha512-Z8AIe3yZbfcUM933TS/1Ja9d56dtlt6OAMCsJMmpgJl7KLmIIjA0dMgCqDd5L2KzF4++O1UOA2HgukGatDK8cA=="],
 
     "@kjanat/tsc-bridge": ["@kjanat/tsc-bridge@workspace:tsc/bridge"],
 
@@ -779,6 +822,12 @@
 
     "dprint": ["dprint@0.58.0", "", { "optionalDependencies": { "@dprint/android-arm64": "0.58.0", "@dprint/android-x64": "0.58.0", "@dprint/darwin-arm64": "0.58.0", "@dprint/darwin-x64": "0.58.0", "@dprint/linux-arm64-glibc": "0.58.0", "@dprint/linux-arm64-musl": "0.58.0", "@dprint/linux-loong64-glibc": "0.58.0", "@dprint/linux-loong64-musl": "0.58.0", "@dprint/linux-ppc64-glibc": "0.58.0", "@dprint/linux-ppc64-musl": "0.58.0", "@dprint/linux-riscv64-glibc": "0.58.0", "@dprint/linux-x64-glibc": "0.58.0", "@dprint/linux-x64-musl": "0.58.0", "@dprint/win32-arm64": "0.58.0", "@dprint/win32-x64": "0.58.0" }, "bin": { "dprint": "bin.cjs" } }, "sha512-uuryeiUTvMMZerB2AzjMhvxZiDM0ekqeytJ5AxK8Ii3NBnroQQ6zxSzO1argfzVvXJkwY1ITL4TlldxsO7zLXA=="],
 
+    "dprint-plugin-malva": ["dprint-plugin-malva@0.16.0", "", {}, "sha512-cHisdhrNcBHfvTG/jgHUkVyL6zeY+C5yLO+E/UyiTbp6wzauB3d25YyPZeMlsd7M/PDT8W4Yre8jKJ/xMwthiw=="],
+
+    "dprint-plugin-markup": ["dprint-plugin-markup@0.27.5", "", {}, "sha512-kvydX+uwpqVddbC18VJDG8baC6BB4Kdi2GONX3xbMws8ebyy9FL4m7WecJ207eB7oqtFJNdEOw93EklkuJCqag=="],
+
+    "dprint-plugin-yaml": ["dprint-plugin-yaml@0.6.0", "", {}, "sha512-jFCM6LxutTjfiSR7BtDhbZA2OvuqYY9xksULg0vdu0nZV1hiaupvRfJHGZSiQS9aLmqMNc+5WcHpOBSwxCK7qQ=="],
+
     "dreamcli": ["@kjanat/dreamcli@4.1.0", "", { "dependencies": { "ansispeck": "^0.4.2" } }, "sha512-Z8AIe3yZbfcUM933TS/1Ja9d56dtlt6OAMCsJMmpgJl7KLmIIjA0dMgCqDd5L2KzF4++O1UOA2HgukGatDK8cA=="],
 
     "dts-resolver": ["dts-resolver@3.0.0", "", { "peerDependencies": { "oxc-resolver": ">=11.0.0" }, "optionalPeers": ["oxc-resolver"] }, "sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q=="],
@@ -926,6 +975,8 @@
     "rolldown": ["rolldown@1.2.11", "", { "dependencies": { "@oxc-project/types": "=0.151.0", "@rolldown/pluginutils": "^1.0.0" }, "optionalDependencies": { "@rolldown/binding-android-arm-eabi": "1.2.11", "@rolldown/binding-android-arm64": "1.2.11", "@rolldown/binding-darwin-arm64": "1.2.11", "@rolldown/binding-darwin-x64": "1.2.11", "@rolldown/binding-freebsd-x64": "1.2.11", "@rolldown/binding-linux-arm-gnueabihf": "1.2.11", "@rolldown/binding-linux-arm64-gnu": "1.2.11", "@rolldown/binding-linux-arm64-musl": "1.2.11", "@rolldown/binding-linux-ppc64-gnu": "1.2.11", "@rolldown/binding-linux-s390x-gnu": "1.2.11", "@rolldown/binding-linux-x64-gnu": "1.2.11", "@rolldown/binding-linux-x64-musl": "1.2.11", "@rolldown/binding-openharmony-arm64": "1.2.11", "@rolldown/binding-win32-arm64-msvc": "1.2.11", "@rolldown/binding-win32-x64-msvc": "1.2.11" }, "bin": { "rolldown": "./bin/cli.mjs" } }, "sha512-qpSwIyz0jHQq5qXBTNxFmE6664rJ7O+4TvPFOiOaBSrz8IOHc1koKKSqTM2H6u1UG1+TveuC6vaDHKXFOvb1Kw=="],
 
     "rolldown-plugin-dts": ["rolldown-plugin-dts@0.28.6", "", { "dependencies": { "dts-resolver": "^3.0.0", "get-tsconfig": "5.0.0-beta.6", "obug": "^3.0.0", "yuku-ast": "^0.10.1", "yuku-codegen": "^0.10.1", "yuku-parser": "^0.10.1" }, "peerDependencies": { "@typescript/native-preview": "*", "@volar/typescript": "~2.4.0", "@vue/language-core": "~3.2.0 || ~3.3.0", "rolldown": "^1.2.0", "typescript": "^5.0.0 || ^6.0.0 || ~7.0.0", "vue-tsc": "~3.2.0 || ~3.3.0" }, "optionalPeers": ["@typescript/native-preview", "@volar/typescript", "@vue/language-core", "typescript", "vue-tsc"] }, "sha512-qKrFtBfRfR2hP233m7Ic9zf3wv6MSYdZghWKMdEO6dRYZGlNfINJAa1P5ZVvyHh3mrcd7IJQvIY8L9vnm+v5rQ=="],
+
+    "rolldown-plugin-wasm": ["rolldown-plugin-wasm@0.3.2", "", { "peerDependencies": { "rolldown": "^1.0.0" } }, "sha512-WYjcRNvX8i3PoAPIbmENebUhn1b3nbkorLSGMBGBP5mPaSE5Jh5JWuVhRm3Nl5n6VL23OtWh3TOm0wwMYYV+8Q=="],
 
     "runner-run": ["runner-run@0.27.1", "", { "dependencies": { "ansispeck": "^0.4.1" }, "optionalDependencies": { "@runner-run/android-arm64": "0.27.1", "@runner-run/darwin-arm64": "0.27.1", "@runner-run/darwin-x64": "0.27.1", "@runner-run/freebsd-arm64": "0.27.1", "@runner-run/freebsd-x64": "0.27.1", "@runner-run/linux-arm64-gnu": "0.27.1", "@runner-run/linux-arm64-musl": "0.27.1", "@runner-run/linux-armv7-gnueabihf": "0.27.1", "@runner-run/linux-x64-gnu": "0.27.1", "@runner-run/linux-x64-musl": "0.27.1", "@runner-run/netbsd-x64": "0.27.1", "@runner-run/win32-arm64-msvc": "0.27.1", "@runner-run/win32-ia32-msvc": "0.27.1", "@runner-run/win32-x64-msvc": "0.27.1" }, "bin": { "run": "bin/run.cjs", "runner": "bin/runner.cjs", "runner-run": "bin/runner.cjs" } }, "sha512-3yc3dmQ+BSP7/f3ysj0SNmfTrlBeZemBXP/BMQhFz7Go0ufSt6XOgC3mPne123Onx8PEtn6V8Tjhx6JM2sFYxw=="],
 

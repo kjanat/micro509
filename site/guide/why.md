@@ -47,9 +47,7 @@ const leaf = await createCertificate({
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'app.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
   },
 });
 

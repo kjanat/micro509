@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { platform } from 'node:process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import type {
@@ -25,10 +26,7 @@ function executableOf(executable?: string): string {
 	return (
 		executable ??
 		fileURLToPath(
-			new URL(
-				process.platform === 'win32' ? './bin/tsc-bridge.exe' : './bin/tsc-bridge',
-				import.meta.url,
-			),
+			new URL(`../bin/tsc-bridge${platform === 'win32' ? '.exe' : ''}`, import.meta.url),
 		)
 	);
 }

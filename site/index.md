@@ -48,16 +48,13 @@ npm install micro509
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: { commonName: 'example.com' },
-    validity: { days: 365 },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: { commonName: 'example.com' },
+  validity: { days: 365 },
+});
 
 console.log(certificate.pem);
-console.log(
-  `key type: ${keyPair.publicKey.algorithm.name}`,
-);
+console.log(`key type: ${keyPair.publicKey.algorithm.name}`);
 ```
 
 </LiveCode>

@@ -286,7 +286,7 @@ test.skipIf(Bun.which('dprint') === null)(
 	'root Errata.md is discovered and formatted by the repository config',
 	async () => {
 		await scratch(async (root) => {
-			await cp(path.join(repositoryRoot, '.dprint.jsonc'), path.join(root, '.dprint.jsonc'));
+			await cp(path.join(repositoryRoot, '.dprint.json'), path.join(root, '.dprint.json'));
 			await cp(path.join(repositoryRoot, '.gitignore'), path.join(root, '.gitignore'));
 			await symlink(
 				path.join(repositoryRoot, 'node_modules'),

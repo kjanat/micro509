@@ -1,13 +1,8 @@
 import path from 'node:path';
-import type {
-	Node,
-	NodeArray,
-	ScriptTarget,
-	SourceFile as SyntaxTree,
-} from 'typescript/unstable/ast';
-import { ScriptKind, SyntaxKind } from 'typescript/unstable/ast';
-import { compiler, decodeSourceFile, encodeWtf8, unwrap } from './runtime.ts';
-import type { ParseConfigHost } from './sys.ts';
+import type { Node, NodeArray, SourceFile as SyntaxTree } from 'typescript/unstable/ast';
+import { ScriptKind, ScriptTarget, SyntaxKind } from 'typescript/unstable/ast';
+import { compiler, decodeSourceFile, encodeWtf8, unwrap } from '#runtime';
+import type { ParseConfigHost } from '#sys';
 
 export type {
 	CommentRange,
@@ -22,13 +17,11 @@ export {
 	getLeadingCommentRanges,
 	getTokenPosOfNode,
 	getTrailingCommentRanges,
-	ScriptKind,
-	ScriptTarget,
-	SyntaxKind,
 } from 'typescript/unstable/ast';
 export * from 'typescript/unstable/ast/is';
-export type { FileSystemEntries, ParseConfigHost, System } from './sys.ts';
-export { sys } from './sys.ts';
+export type { FileSystemEntries, ParseConfigHost, System } from '#sys';
+export { sys } from '#sys';
+export { ScriptKind, ScriptTarget, SyntaxKind };
 
 export interface Diagnostic {
 	readonly fileName?: string;

@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { BridgeRequest, BridgeResponse, TscBridge } from '@kjanat/tsc-protocol';
 import { clientFor, readResponse } from '@kjanat/tsc-protocol';
-import { createHost } from './host.ts';
+import { createHost } from '#host';
+import initBridge from '../bin/tsc-bridge.wasm?init';
 
 export type {
 	CodeUnion,
@@ -46,7 +47,7 @@ function isExported(value: unknown): value is Exported {
 
 async function goRuntime(): Promise<new () => GoRuntime> {
 	if (Reflect.get(globalThis, 'fs') === undefined) Reflect.set(globalThis, 'fs', fs);
-	await import(new URL('./bin/wasm_exec.js', import.meta.url).href);
+	await import(new URL('../bin/wasm_exec.js', import.meta.url).href);
 	const Go: unknown = Reflect.get(globalThis, 'Go');
 	if (!isGoConstructor(Go)) throw new Error('wasm_exec.js did not define Go');
 	return Go;
@@ -58,13 +59,15 @@ async function goRuntime(): Promise<new () => GoRuntime> {
  */
 export async function createWasmBridge(options: WasmBridgeOptions = {}): Promise<TscBridge> {
 	const Go = await goRuntime();
-	const bytes = await readFile(options.wasm ?? new URL('./bin/tsc-bridge.wasm', import.meta.url));
 	const go = new Go();
 	const name = `tscWasm${++instances}`;
 	go.env = { ...go.env, TSC_WASM_GLOBAL: name };
 	const host = createHost();
 	Reflect.set(globalThis, name, { spawn: host.spawn });
-	const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
+	const instance =
+		options.wasm === undefined
+			? await initBridge(go.importObject)
+			: (await WebAssembly.instantiate(await readFile(options.wasm), go.importObject)).instance;
 	const running = go.run(instance);
 	const api: unknown = Reflect.get(globalThis, name);
 	if (!isExported(api)) throw new Error('The WASM bridge did not start');

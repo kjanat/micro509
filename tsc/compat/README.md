@@ -31,14 +31,14 @@ Code that compares kinds through this module's `SyntaxKind` works unchanged.
 
 ## How it works
 
-`build.ts` compiles [`main.go`](./main.go) to `bin/compat.wasm` and bundles the
-TypeScript sources into `compat.js`. Bun imports `index.ts`; Node and other
-runtimes import `compat.js`. [`examples/tsc-compat`](../../examples/tsc-compat/README.md)
-runs it on Node, and pkg-pr-new opens it in StackBlitz for every pull request.
+`build.ts` compiles [`main.go`](./main.go) to `bin/compat.wasm`, and `build:tsc`
+inlines it into the `dist/index.mjs` bundle that Bun and Node both import.
+[`examples/tsc-compat`](../../examples/tsc-compat/README.md) is an AST explorer
+on Node, and pkg-pr-new opens it in StackBlitz for every pull request.
 
 Importing the package instantiates the module synchronously, and its exports run
-synchronously, so a caller gets a parsed file back without awaiting. Text crosses into the module as
-WTF-8, and the compiler returns each file in the binary AST encoding of its
+synchronously, so a caller gets a parsed file back without awaiting. Text crosses
+into the module as WTF-8, and the compiler returns each file in the binary AST encoding of its
 `internal/api/encoder`. The `RemoteSourceFile` decoder of the npm nightly
 `typescript@7.1.0-dev.20260930.4` reads that encoding lazily. The nightly was
 built from the pinned commit, so the encoder and the decoder agree. Moving the pin

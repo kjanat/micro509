@@ -4,13 +4,17 @@
 	"description": "Experimental in-process WebAssembly version of the TypeScript Go bridge.",
 	"type": "module",
 	"imports": {
-		"#wasm": "./index.ts"
+		"#wasm": "./dist/index.mjs",
+		"#*": "./src/*.ts"
 	},
 	"exports": {
-		".": "./index.ts",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		},
 		"./package.json": "./package.json"
 	},
-	"files": ["/bin/", "/host.ts", "/index.ts"],
+	"files": ["/bin/", "/dist/"],
 	"scripts": {
 		"build": "bun build.ts",
 		"test": "bun probe.ts"
@@ -19,12 +23,13 @@
 		"@kjanat/tsc-protocol": "workspace:*"
 	},
 	"devDependencies": {
-		"@kjanat/tsc-bridge": "workspace:*"
+		"@kjanat/tsc-bridge": "workspace:*",
+		"tsdown": "catalog:build"
 	},
 	"engines": {
-		"bun": ">=1.4.2"
+		"bun": ">=1.4.2",
+		"node": ">=24"
 	},
-	"engineStrict": true,
 	"devEngines": {
 		"packageManager": {
 			"name": "bun",

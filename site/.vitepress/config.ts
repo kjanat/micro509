@@ -57,7 +57,10 @@ const repoUrl = new URL(repo.repository.url.replace('git+', '').replace(/\.git$/
 
 function git(...args: readonly string[]): string | undefined {
 	try {
-		const out = execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+		const out = execFileSync('git', args, {
+			cwd: repoRoot,
+			encoding: 'utf8',
+		}).trim();
 		return out === '' ? undefined : out;
 	} catch (error) {
 		console.warn(`[versions] git ${args.join(' ')}: ${String(error)}`);
@@ -145,7 +148,9 @@ async function pullRequestOf(sha: string): Promise<string | undefined> {
 			return undefined;
 		}
 
-		const pulls: ReadonlyArray<{ readonly number: number }> = await response.json();
+		const pulls: ReadonlyArray<{
+			readonly number: number;
+		}> = await response.json();
 		const first = pulls[0];
 		return first === undefined ? undefined : String(first.number);
 	} catch (error) {
@@ -272,7 +277,10 @@ function versionPrefixOfPath(pathname: string): string {
 /** Reading order within each section. Unlisted pages append to the last group. */
 const ORDER: SidebarOrder = {
 	guide: [
-		{ text: 'Introduction', slugs: ['getting-started', 'why'] },
+		{
+			text: 'Introduction',
+			slugs: ['getting-started', 'why'],
+		},
 		{
 			text: 'Workflows',
 			slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs', 'extensions'],
@@ -295,7 +303,10 @@ export default defineConfig<DocsThemeConfig>({
 			apiDocsPlugin({
 				watchDir: path.join(repoRoot, 'src'),
 				regenerate: () =>
-					generateApi({ root: repoRoot, outDir: path.join(repoRoot, siteRoot, 'api') }),
+					generateApi({
+						root: repoRoot,
+						outDir: path.join(repoRoot, siteRoot, 'api'),
+					}),
 			}),
 			docExamplesPlugin(examples),
 			docs.plugin,
@@ -374,14 +385,26 @@ export default defineConfig<DocsThemeConfig>({
 	],
 
 	themeConfig: {
-		logo: { light: '/icon.svg', dark: '/icon-light.svg', alt: repo.name },
+		logo: {
+			light: '/icon.svg',
+			dark: '/icon-light.svg',
+			alt: repo.name,
+		},
 		versions: docs.versions,
 		nav: [{ component: 'VersionedNav' }, { component: 'VersionSwitcher' }],
 		sidebar: docs.sidebar(ORDER),
 
 		socialLinks: [
-			{ icon: 'github', link: repoUrl.href, ariaLabel: 'GitHub' },
-			{ icon: 'npm', link: `https://npm.im/${repo.name}`, ariaLabel: 'NPM' },
+			{
+				icon: 'github',
+				link: repoUrl.href,
+				ariaLabel: 'GitHub',
+			},
+			{
+				icon: 'npm',
+				link: `https://npm.im/${repo.name}`,
+				ariaLabel: 'NPM',
+			},
 			{
 				icon: {
 					svg: '<svg role="img" viewBox="0 0 24 12.924" xmlns="http://www.w3.org/2000/svg"><title>JSR</title><path fill="#f7df1e" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Z"/><path fill="#083344" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Zm1.846 1.847h1.847v7.384H1.846v-3.692h1.846v1.846h1.846zm3.693 0h5.538V3.692h-3.692v1.846h3.692v5.538H9.231V9.232h3.692v-1.846H9.231Zm7.384 1.846h5.539v3.692h-1.846v-1.846h-1.846v5.538h-1.847z"/></svg>',

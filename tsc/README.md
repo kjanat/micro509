@@ -3,7 +3,7 @@
 Workspace packages that give micro509's tooling access to TypeScript's native compiler. The compiler is the Go code in [microsoft/TypeScript] under `tsc/`, pinned to commit [`9adc871ff47f79b3e99ff2b1cbe9efb140d76af8`]. npm publishes that commit as the nightly `typescript@7.1.0-dev.20260930.4`. Its Go API is internal.
 
 [microsoft/TypeScript]: https://github.com/microsoft/TypeScript
-[`9adc871ff47f79b3e99ff2b1cbe9efb140d76af8`]: https://github.com/microsoft/TypeScript/commit/9adc871ff47f79b3e99ff2b1cbe9efb140d76af8 'Update Azure pipeline Node installation task (#64547)'
+[`9adc871ff47f79b3e99ff2b1cbe9efb140d76af8`]: https://github.com/microsoft/TypeScript/commit/9adc871ff47f79b3e99ff2b1cbe9efb140d76af8 "Update Azure pipeline Node installation task (#64547)"
 
 | Package                    | Directory       | Contents                                                                         |
 | -------------------------- | --------------- | -------------------------------------------------------------------------------- |
@@ -51,24 +51,24 @@ To get the same `.vue` resolution in Zed with the [`typescript`][kjanat/zed-type
 
 ```jsonc
 {
-  "lsp": {
-    "typescript": {
-      "binary": {
-        "path": "go",
-        "arguments": [
-          "-C",
-          "tsc/bridge",
-          "run",
-          "github.com/microsoft/TypeScript/tsc/cmd/tsc",
-          "--lsp",
-          "--stdio",
-        ],
-      },
-      "initialization_options": {
-        "runExternalCode": true,
-      },
-    },
-  },
+	"lsp": {
+		"typescript": {
+			"binary": {
+				"path": "go",
+				"arguments": [
+					"-C",
+					"tsc/bridge",
+					"run",
+					"github.com/microsoft/TypeScript/tsc/cmd/tsc",
+					"--lsp",
+					"--stdio"
+				]
+			},
+			"initialization_options": {
+				"runExternalCode": true
+			}
+		}
+	}
 }
 ```
 
@@ -88,12 +88,19 @@ Inside `.vue` files the editor uses upstream's placement rules alone, because th
 
 ## Build and test
 
-Requires Go 1.27 or newer and Bun 1.4.2 or newer. `bun install` builds the native helper and both
-WebAssembly modules through the root `prepare` script. Each push to `master` or a pull request
+Requires Go 1.27 or newer and Bun 1.4.2 or newer. Each package keeps its TypeScript in `src/` and
+ships only the bundle in `dist/`, which runs on Node 24 and newer as well as Bun. The root
+[`tsdown.config.ts`](../tsdown.config.ts) builds the packages as a `tsc/*` workspace next to
+micro509, each package's own `tsdown.config.ts` names its entries, and tsdown writes the
+`exports` and `bin` of every `package.json`. `build:tsc` builds the five packages alone.
+`bun install` runs `build:tsc` and then builds the native
+helper and both WebAssembly modules through the root `prepare` script. Each push to `master` or a pull request
 publishes all five packages with their built binaries to [pkg.pr.new] through [`.github/workflows/pkg-pr-new.yml`][wf/pkg-pr-new].
-Under Cloudflare Workers Builds, where `WORKERS_CI` is set, `prepare` builds nothing and
+Under Cloudflare Workers Builds, where `WORKERS_CI` is set, `prepare` skips the Go builds and
 `@kjanat/tsc-bridge:fetch` downloads the native helper pkg.pr.new published for the commit, its
-branch, or `master`, in that order. The site build needs no Go. From the repository root:
+branch, or `master`, in that order. It reads the commit and branch from `WORKERS_CI_COMMIT_SHA` and
+`WORKERS_CI_BRANCH`, and `--sha` and `--branch` override them for a local run. The site build
+needs no Go. From the repository root:
 
 [pkg.pr.new]: https://pkg.pr.new
 [wf/pkg-pr-new]: ../.github/workflows/pkg-pr-new.yml

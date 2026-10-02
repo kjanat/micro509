@@ -1,0 +1,28 @@
+{
+	"extends": "../.dprint.json",
+	"lineWidth": 80,
+	"useTabs": false,
+	"typescript": { "lineWidth": 80 },
+	"biome": {
+		"lineWidth": 80,
+		"javascript.lineWidth": 80,
+		"javascript.indentStyle": "space",
+		"overrides": [
+			{
+				"files": [".vitepress/**/*.ts"],
+				"lineWidth": 100,
+				"javascript.lineWidth": 100,
+				"javascript.indentStyle": "tab"
+			}
+		]
+	},
+	"markup": {
+		"printWidth": 80
+	},
+	"markdown": {
+		"textWrap": "maintain",
+		"codeBlock.useTabs": false,
+		"codeBlock.preserveIndentation": false,
+		"html.useTabs": false
+	}
+}

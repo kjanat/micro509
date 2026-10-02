@@ -14,25 +14,18 @@ bytes:
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
 import {
   derIntegerFromNumber,
   derSequence,
   derUtf8String,
   toHex,
 } from 'micro509/der';
-import {
-  findExtension,
-  parseCertificatePem,
-} from 'micro509/x509';
+import { findExtension, parseCertificatePem } from 'micro509/x509';
 
 // A private extension: SEQUENCE { tier UTF8String, seats INTEGER }
 const LICENSE_OID = '1.3.6.1.4.1.55555.1';
-const seats =
-  crypto.getRandomValues(new Uint32Array(1))[0] ?? 25;
+const seats = crypto.getRandomValues(new Uint32Array(1))[0] ?? 25;
 const payload = derSequence([
   derUtf8String('enterprise'),
   derIntegerFromNumber(seats),
@@ -41,9 +34,7 @@ const payload = derSequence([
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'licensed.example' },
   extensions: {
-    customExtensions: [
-      { oid: LICENSE_OID, value: payload },
-    ],
+    customExtensions: [{ oid: LICENSE_OID, value: payload }],
   },
 });
 
@@ -68,10 +59,7 @@ built-in fields:
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, unwrap } from 'micro509';
 import {
   decodeDerIntegerOrThrow,
   decodeDerStringOrThrow,
@@ -80,19 +68,14 @@ import {
   derUtf8String,
   readDerSequenceOrThrow,
 } from 'micro509/der';
-import {
-  defineExtensionDecoder,
-  parseCertificatePem,
-} from 'micro509/x509';
+import { defineExtensionDecoder, parseCertificatePem } from 'micro509/x509';
 
 const LICENSE_OID = '1.3.6.1.4.1.55555.1';
 
 const license = defineExtensionDecoder({
   oid: LICENSE_OID,
   decode(extension) {
-    const [tier, seats] = readDerSequenceOrThrow(
-      extension.valueDer,
-    );
+    const [tier, seats] = readDerSequenceOrThrow(extension.valueDer);
     if (tier === undefined || seats === undefined) {
       throw new Error('license needs tier and seats');
     }
@@ -104,8 +87,7 @@ const license = defineExtensionDecoder({
 });
 
 // Same certificate shape as the previous example
-const seats =
-  crypto.getRandomValues(new Uint32Array(1))[0] ?? 25;
+const seats = crypto.getRandomValues(new Uint32Array(1))[0] ?? 25;
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'licensed.example' },
   extensions: {
@@ -163,23 +145,13 @@ const { certificate } = await createSelfSignedCertificate({
 
 // Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signature }
 const root = readDerRootOrThrow(certificate.der);
-const [tbs, sigAlg, sig] = derChildrenOrThrow(
-  certificate.der,
-  root,
-);
-if (
-  tbs === undefined ||
-  sigAlg === undefined ||
-  sig === undefined
-) {
+const [tbs, sigAlg, sig] = derChildrenOrThrow(certificate.der, root);
+if (tbs === undefined || sigAlg === undefined || sig === undefined) {
   throw new Error('expected three certificate fields');
 }
 
 // AlgorithmIdentifier ::= SEQUENCE { algorithm OBJECT IDENTIFIER, ... }
-const [algorithm] = derChildrenOrThrow(
-  certificate.der,
-  sigAlg,
-);
+const [algorithm] = derChildrenOrThrow(certificate.der, sigAlg);
 if (algorithm === undefined) {
   throw new Error('empty AlgorithmIdentifier');
 }

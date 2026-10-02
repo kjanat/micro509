@@ -7,9 +7,9 @@
 		"skipLibCheck": true,
 		"allowImportingTsExtensions": true,
 		"noEmit": true,
-		"types": ["node", "@volar/typescript"],
+		"types": ["node", "@volar/typescript", "rolldown-plugin-wasm/types"],
 		"paths": {
-			"typescript": ["../compat/index.ts"]
+			"typescript": ["../compat/src/index.ts"]
 		}
 	},
 	"include": ["./**/*.ts"],

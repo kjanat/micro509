@@ -33,16 +33,16 @@ protocol:
 
 ```json
 {
-  "configFileName": "/abs/tsconfig.json",
-  "options": {},
-  "files": [
-    {
-      "fileName": "/abs/App.vue",
-      "content": "<original text>",
-      "virtualText": "<generated text the compiler checked>",
-      "diagnostics": [{ "start": 120, "length": 4, "code": 2322 }]
-    }
-  ]
+	"configFileName": "/abs/tsconfig.json",
+	"options": {},
+	"files": [
+		{
+			"fileName": "/abs/App.vue",
+			"content": "<original text>",
+			"virtualText": "<generated text the compiler checked>",
+			"diagnostics": [{ "start": 120, "length": 4, "code": 2322 }]
+		}
+	]
 }
 ```
 

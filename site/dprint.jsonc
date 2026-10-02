@@ -1,7 +1,0 @@
-{
-	"extends": "../.dprint.jsonc",
-	"lineWidth": 60,
-	"useTabs": false,
-	"typescript": { "lineWidth": 60 },
-	"biome": { "lineWidth": 60 }
-}

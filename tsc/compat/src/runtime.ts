@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { SourceFile } from 'typescript/unstable/ast';
+import initCompat from '../bin/compat.wasm?init&sync';
 
 interface GoRuntime {
 	env: Record<string, string>;
@@ -66,16 +67,13 @@ const require = createRequire(import.meta.url);
 
 function startCompiler(): Compiler {
 	if (Reflect.get(globalThis, 'fs') === undefined) Reflect.set(globalThis, 'fs', fs);
-	require('./bin/wasm_exec.cjs');
+	require('../bin/wasm_exec.cjs');
 	const Go: unknown = Reflect.get(globalThis, 'Go');
 	if (!isGoConstructor(Go)) throw new Error('wasm_exec.cjs did not define Go');
 	const go = new Go();
 	const name = 'tscCompat';
 	go.env = { ...go.env, TSC_COMPAT_GLOBAL: name };
-	const module = new WebAssembly.Module(
-		fs.readFileSync(new URL('./bin/compat.wasm', import.meta.url)),
-	);
-	void go.run(new WebAssembly.Instance(module, go.importObject));
+	void go.run(initCompat(go.importObject));
 	const compiler: unknown = Reflect.get(globalThis, name);
 	Reflect.deleteProperty(globalThis, name);
 	if (!isCompiler(compiler)) throw new Error('The compat WebAssembly module did not start');

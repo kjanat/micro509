@@ -58,8 +58,8 @@ COPY --from=ghcr.io/kjanat/openssl:4.0.2 /usr/local/ /usr/local/
 
 ## Tarballs
 
-`ghcr.io/kjanat/openssl-prebuilt:<tag>` holds one tarball per platform: \
-`openssl-<version>-<platform>.tar.gz` for `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `windows-x64` and `windows-arm64`. \
+`ghcr.io/kjanat/openssl-prebuilt:<tag>` holds one tarball per platform:\
+`openssl-<version>-<platform>.tar.gz` for `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `windows-x64` and `windows-arm64`.\
 Each tarball contains `bin/`, `lib/`, `include/` and `ssl/`.
 
 Download all six with [ORAS]:

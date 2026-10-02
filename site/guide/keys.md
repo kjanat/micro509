@@ -46,10 +46,7 @@ rsa:     ${rsa.publicKey.algorithm.name} (${rsa.privateKey.usages.join('/')}), s
 
 ```ts
 import { generateKeyPair, unwrap } from 'micro509';
-import {
-  exportPkcs8Pem,
-  importPkcs8Pem,
-} from 'micro509/keys';
+import { exportPkcs8Pem, importPkcs8Pem } from 'micro509/keys';
 
 const keys = await generateKeyPair({
   kind: 'ecdsa',
@@ -65,11 +62,7 @@ const privateKey = unwrap(
 );
 const exported = await exportPkcs8Pem(privateKey);
 
-const body = pem
-  .trimEnd()
-  .split('\n')
-  .slice(1, -1)
-  .join('');
+const body = pem.trimEnd().split('\n').slice(1, -1).join('');
 console.log(`\
 algorithm:  ${JSON.stringify(privateKey.algorithm)}
 usages:     ${privateKey.usages.join(', ')}
@@ -103,10 +96,7 @@ something else.
 
 ```ts
 import { generateKeyPair, unwrap } from 'micro509';
-import {
-  exportSpkiPem,
-  importSpkiPem,
-} from 'micro509/keys';
+import { exportSpkiPem, importSpkiPem } from 'micro509/keys';
 
 const keys = await generateKeyPair({
   kind: 'ecdsa',
@@ -122,11 +112,7 @@ const publicKey = unwrap(
 );
 const exported = await exportSpkiPem(publicKey);
 
-const body = pem
-  .trimEnd()
-  .split('\n')
-  .slice(1, -1)
-  .join('');
+const body = pem.trimEnd().split('\n').slice(1, -1).join('');
 console.log(`\
 algorithm:  ${JSON.stringify(publicKey.algorithm)}
 usages:     ${publicKey.usages.join(', ')}
@@ -247,10 +233,7 @@ PKCS#1 v1.5 with SHA-256.
 
 ```ts
 import { generateKeyPair, unwrap } from 'micro509';
-import {
-  exportPkcs1Pem,
-  importPkcs1Pem,
-} from 'micro509/keys';
+import { exportPkcs1Pem, importPkcs1Pem } from 'micro509/keys';
 
 const keys = await generateKeyPair({
   kind: 'rsa',
@@ -281,10 +264,7 @@ round-trip: ${exported === pem}`);
 
 ```ts
 import { generateKeyPair, unwrap } from 'micro509';
-import {
-  exportSec1Pem,
-  importSec1Pem,
-} from 'micro509/keys';
+import { exportSec1Pem, importSec1Pem } from 'micro509/keys';
 
 const keys = await generateKeyPair({
   kind: 'ecdsa',
@@ -337,14 +317,10 @@ const pem = await exportEncryptedPkcs8Pem(keys.privateKey, {
 });
 
 // Import with the same password — returns a Result
-const result = await importEncryptedPkcs8Pem(
-  pem,
-  'password',
-  {
-    kind: 'ecdsa',
-    curve: 'P-256',
-  },
-);
+const result = await importEncryptedPkcs8Pem(pem, 'password', {
+  kind: 'ecdsa',
+  curve: 'P-256',
+});
 
 if (!result.ok) {
   // result.error.code is 'invalid_password' on a wrong password,
@@ -355,11 +331,7 @@ if (!result.ok) {
 // A wrong password is a typed failure, not an exception
 const wrong = await importEncryptedPkcs8Pem(pem, 'nope');
 
-const body = pem
-  .trimEnd()
-  .split('\n')
-  .slice(1, -1)
-  .join('');
+const body = pem.trimEnd().split('\n').slice(1, -1).join('');
 console.log(`\
 algorithm:  ${JSON.stringify(result.value.algorithm)}
 ciphertext: …${body.slice(-44)}
@@ -403,9 +375,7 @@ const der = await exportEncryptedPkcs8Der(keys.privateKey, {
 const params = inspectEncryptedPkcs8Der(der);
 
 const hex = (bytes: Uint8Array) =>
-  Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 console.log(`\
 cipher:     ${params.cipher}
 prf:        ${params.prf}
@@ -450,9 +420,7 @@ const privateKey = unwrap(
 );
 
 // The DEK-Info header carries the (random) AES-CBC IV
-const dekInfo = pem
-  .split('\n')
-  .find((line) => line.startsWith('DEK-Info'));
+const dekInfo = pem.split('\n').find((line) => line.startsWith('DEK-Info'));
 
 console.log(`\
 DEK-Info:  ${dekInfo?.slice('DEK-Info: '.length)}
@@ -479,10 +447,7 @@ ciphertext was wrong.
 
 ```ts
 import { generateKeyPair, unwrap } from 'micro509';
-import {
-  decryptRsaOaep,
-  encryptRsaOaep,
-} from 'micro509/keys';
+import { decryptRsaOaep, encryptRsaOaep } from 'micro509/keys';
 
 const keys = await generateKeyPair({
   kind: 'rsa',
@@ -506,10 +471,7 @@ const plaintext = unwrap(
 );
 
 // Wrong label: opaque failure, never a partial plaintext
-const wrongLabel = await decryptRsaOaep(
-  keys.privateKey,
-  ciphertext,
-);
+const wrongLabel = await decryptRsaOaep(keys.privateKey, ciphertext);
 
 console.log(`\
 ciphertext:  ${ciphertext.length} bytes, starts ${[...ciphertext.slice(0, 4)].join(' ')}

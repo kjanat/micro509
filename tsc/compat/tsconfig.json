@@ -7,7 +7,7 @@
 		"skipLibCheck": true,
 		"allowImportingTsExtensions": true,
 		"noEmit": true,
-		"types": ["node", "bun"]
+		"types": ["node", "rolldown-plugin-wasm/types"]
 	},
 	"include": ["./**/*.ts"]
 }

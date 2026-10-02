@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { connect } from '#vue-mapper';
 
 const connection = connect((chunk) => process.stdout.write(chunk));

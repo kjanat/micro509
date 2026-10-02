@@ -4,17 +4,23 @@
 	"description": "Wire contract and request handling shared by the native and WebAssembly TypeScript compiler bridges.",
 	"type": "module",
 	"exports": {
-		".": "./index.ts",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		},
 		"./package.json": "./package.json"
 	},
-	"files": ["/index.ts"],
+	"files": ["/dist/"],
 	"scripts": {
 		"test": "go test -race -count=1 ./..."
 	},
-	"engines": {
-		"bun": ">=1.4.2"
+	"devDependencies": {
+		"tsdown": "catalog:build"
 	},
-	"engineStrict": true,
+	"engines": {
+		"bun": ">=1.4.2",
+		"node": ">=24"
+	},
 	"devEngines": {
 		"packageManager": {
 			"name": "bun",

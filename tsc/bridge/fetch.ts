@@ -1,12 +1,21 @@
+#!/usr/bin/env bun
 import { chmod } from 'node:fs/promises';
-import { env, exit } from 'node:process';
+import { exit } from 'node:process';
+import { flag, isCLIError, readFlags } from '@kjanat/dreamcli';
+
+const { sha, branch } = await readFlags({
+	sha: flag.string().env('WORKERS_CI_COMMIT_SHA').describe('Commit to fetch the helper from'),
+	branch: flag.string().env('WORKERS_CI_BRANCH').describe('Branch to try when the commit has none'),
+}).catch((error: unknown) => {
+	if (!isCLIError(error)) throw error;
+	console.error(error.message);
+	return exit(error.exitCode);
+});
 
 const entry = 'package/bin/tsc-bridge';
 const binary = new URL('./bin/tsc-bridge', import.meta.url);
 const refs = new Set(
-	[env.WORKERS_CI_COMMIT_SHA, env.WORKERS_CI_BRANCH, 'master'].filter(
-		(ref): ref is string => ref !== undefined && ref !== '',
-	),
+	[sha, branch, 'master'].filter((ref): ref is string => ref !== undefined && ref !== ''),
 );
 
 async function download(ref: string): Promise<Uint8Array | undefined> {

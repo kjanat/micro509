@@ -4,13 +4,16 @@
 	"description": "Experimental JS access to the native TypeScript compiler.",
 	"type": "module",
 	"imports": {
-		"#bridge": "./index.ts"
+		"#bridge": "./src/index.ts"
 	},
 	"exports": {
-		".": "./index.ts",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		},
 		"./package.json": "./package.json"
 	},
-	"files": ["/bin/tsc-bridge", "/index.ts"],
+	"files": ["/bin/tsc-bridge", "/dist/"],
 	"scripts": {
 		"build": "go build -p 2 -trimpath -o bin/tsc-bridge .",
 		"fetch": "bun fetch.ts",
@@ -22,12 +25,14 @@
 		"@kjanat/tsc-protocol": "workspace:*"
 	},
 	"devDependencies": {
-		"runner-run": "catalog:"
+		"@kjanat/dreamcli": "catalog:",
+		"runner-run": "catalog:",
+		"tsdown": "catalog:build"
 	},
 	"engines": {
-		"bun": ">=1.4.2"
+		"bun": ">=1.4.2",
+		"node": ">=24"
 	},
-	"engineStrict": true,
 	"devEngines": {
 		"packageManager": {
 			"name": "bun",

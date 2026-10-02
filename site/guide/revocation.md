@@ -42,9 +42,7 @@ const crl = await createCertificateRevocationList({
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
   thisUpdate: new Date(),
-  nextUpdate: new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000,
-  ),
+  nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
     {
       serialNumber: Uint8Array.of(0x01),
@@ -83,9 +81,7 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
-  nextUpdate: new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000,
-  ),
+  nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
     {
       serialNumber: Uint8Array.of(0x01),
@@ -94,24 +90,17 @@ const crl = await createCertificateRevocationList({
   ],
 });
 
-const validationResult =
-  await validateCertificateRevocationList({
-    crl: crl.pem,
-    issuerCertificate: ca.certificate.pem,
-  });
+const validationResult = await validateCertificateRevocationList({
+  crl: crl.pem,
+  issuerCertificate: ca.certificate.pem,
+});
 
 if (!validationResult.ok) {
-  console.log(
-    `validation failed: ${validationResult.code}`,
-  );
+  console.log(`validation failed: ${validationResult.code}`);
 } else {
   const parsed = validationResult.value;
   const entry = parsed.revokedCertificates[0];
-  const body = crl.pem
-    .trimEnd()
-    .split('\n')
-    .slice(1, -1)
-    .join('');
+  const body = crl.pem.trimEnd().split('\n').slice(1, -1).join('');
   console.log(`\
 validated:  true
 sig algo:   ${parsed.signatureAlgorithmName}
@@ -193,8 +182,7 @@ const request = await createOcspRequest({
 });
 
 // Parse it back to see the CertID the responder will look up
-const certId = parseOcspRequestDerOrThrow(request.der)
-  .requests[0];
+const certId = parseOcspRequestDerOrThrow(request.der).requests[0];
 console.log(`\
 serial:   ${certId?.serialNumberHex}
 hashed:   with ${certId?.hashAlgorithmName} (RFC 9919 default)
@@ -356,9 +344,8 @@ const leaf = await createCertificate({
 // Leaf serial as bytes for the CRL entry
 const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 const serialHex = parsedLeaf.serialNumberHex;
-const leafSerial = Uint8Array.from(
-  serialHex.match(/.{2}/g) ?? [],
-  (byte) => parseInt(byte, 16),
+const leafSerial = Uint8Array.from(serialHex.match(/.{2}/g) ?? [], (byte) =>
+  parseInt(byte, 16),
 );
 
 // CRL evidence that revokes the leaf
@@ -366,9 +353,7 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'Demo CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
-  nextUpdate: new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000,
-  ),
+  nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
     {
       serialNumber: leafSerial,
@@ -413,9 +398,7 @@ if (result.value.status === 'revoked') {
   // the same name so either path yields one answer
   const reason =
     result.value.revocationReason ??
-    revocationReasonFromCode(
-      result.value.revocationReasonCode,
-    );
+    revocationReasonFromCode(result.value.revocationReasonCode);
   console.log(`\
 status:     revoked
 serial:     ${serialHex}

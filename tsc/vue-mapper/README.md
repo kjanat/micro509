@@ -2,7 +2,7 @@
 
 Type-checks Vue single-file components with the pinned TypeScript compiler of
 [`@kjanat/tsc-bridge`](../bridge/README.md). It implements TypeScript's content
-mapper protocol. The compiler starts `bun server.ts` and asks it to turn each
+mapper protocol. The compiler starts `node dist/server.mjs` and asks it to turn each
 `.vue` file into TypeScript with `@vue/language-core`, the code generator behind
 vue-tsc.
 
@@ -12,7 +12,7 @@ Declare the mapper in the project's tsconfig:
 
 ```json
 {
-  "contentMappers": [{ "package": "@kjanat/tsc-vue-mapper", "extensions": [".vue"] }]
+	"contentMappers": [{ "package": "@kjanat/tsc-vue-mapper", "extensions": [".vue"] }]
 }
 ```
 
@@ -22,15 +22,15 @@ Then check the project with external code enabled:
 import { checkProjectSync, formatDiagnostic } from '@kjanat/tsc-bridge';
 
 for (const diagnostic of checkProjectSync('tsconfig.json', { runExternalCode: true })) {
-  console.log(formatDiagnostic(diagnostic, process.cwd()));
+	console.log(formatDiagnostic(diagnostic, process.cwd()));
 }
 ```
 
 Vue options come from `vueCompilerOptions` in that configuration and the
-configurations it extends. The native bridge starts the mapper as `bun server.ts`,
-so `bun` must be on `PATH`. The WebAssembly bridge imports `index.ts`, named by
-`tscBridge.module`, and runs the mapper inside the calling process through
-`connect(send)`.
+configurations it extends. The native bridge starts the mapper as
+`node dist/server.mjs`, so `node` must be on `PATH`. The WebAssembly bridge imports
+`dist/index.mjs`, named by `tscBridge.module`, and runs the mapper inside the
+calling process through `connect(send)`.
 
 `@vue/language-core` parses `<script>` blocks and reads `vueCompilerOptions`
 through TypeScript 6's synchronous JavaScript API, which TypeScript 7 does not

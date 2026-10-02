@@ -11,11 +11,11 @@ import { createWasmBridge } from '@kjanat/tsc-wasm';
 
 const compiler = await createWasmBridge();
 try {
-  const emitted = await compiler.transpile('export const answer: number = 42;');
-  const diagnostics = await compiler.checkProject('tsconfig.src.json');
-  const unions = await compiler.exportedCodeUnions('tsconfig.src.json', ['src/index.ts']);
+	const emitted = await compiler.transpile('export const answer: number = 42;');
+	const diagnostics = await compiler.checkProject('tsconfig.src.json');
+	const unions = await compiler.exportedCodeUnions('tsconfig.src.json', ['src/index.ts']);
 } finally {
-  await compiler.close();
+	await compiler.close();
 }
 ```
 

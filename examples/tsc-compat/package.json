@@ -1,10 +1,10 @@
 {
 	"name": "tsc-compat-demo",
 	"private": true,
-	"description": "Parse TypeScript with the TypeScript Go compiler's parser, compiled to WebAssembly, through the TypeScript 6 API.",
+	"description": "Explore the TypeScript AST that the TypeScript Go compiler's parser builds, through the TypeScript 6 API, in the browser.",
 	"type": "module",
 	"scripts": {
-		"start": "node index.js"
+		"start": "node server.js"
 	},
 	"dependencies": {
 		"@kjanat/tsc-compat": "latest"

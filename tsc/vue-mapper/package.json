@@ -8,11 +8,16 @@
 		"#*": "./src/*.ts"
 	},
 	"exports": {
-		".": "./src/index.ts",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		},
 		"./package.json": "./package.json"
 	},
-	"bin": "server.ts",
-	"files": ["/server.ts", "/src/"],
+	"bin": {
+		"tsc-vue-mapper": "./dist/server.mjs"
+	},
+	"files": ["/dist/"],
 	"scripts": {
 		"test": "bun test"
 	},
@@ -23,12 +28,13 @@
 	"devDependencies": {
 		"@kjanat/tsc-bridge": "workspace:*",
 		"@kjanat/tsc-wasm": "workspace:*",
-		"@volar/typescript": "catalog:ts"
+		"@volar/typescript": "catalog:ts",
+		"tsdown": "catalog:build"
 	},
 	"engines": {
-		"bun": ">=1.4.2"
+		"bun": ">=1.4.2",
+		"node": ">=24"
 	},
-	"engineStrict": true,
 	"devEngines": {
 		"packageManager": {
 			"name": "bun",
@@ -43,11 +49,11 @@
 	},
 	"tscBridge": {
 		"verify": true,
-		"module": "./src/index.ts"
+		"module": "./dist/index.mjs"
 	},
 	"typescript": {
 		"contentMapper": {
-			"exec": ["bun", "server.ts"],
+			"exec": ["node", "dist/server.mjs"],
 			"compilerOptions": [],
 			"dynamicConfig": false
 		}
