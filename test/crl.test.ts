@@ -4055,7 +4055,7 @@ describe('crl', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Number Type CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 7,
 			baseCrlNumber: 5,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
