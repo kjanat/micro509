@@ -39,7 +39,7 @@ async function checkFences(): Promise<readonly Diagnostic[]> {
 				rootDir: null,
 				paths: {
 					micro509: [path.join(projectRoot, 'src/index.ts')],
-					'micro509/*': [path.join(projectRoot, 'src/*/index.ts')],
+					'micro509/*': [path.join(projectRoot, 'src/*.ts')],
 				},
 			},
 		});

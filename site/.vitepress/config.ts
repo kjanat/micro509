@@ -200,7 +200,7 @@ const examples: DocExamplesOptions = {
 	block: /<LiveCode[^>]*>\s*\n\n```ts\n([\s\S]*?)```/g,
 	paths: {
 		[repo.name]: [path.join(repoRoot, 'src/index.ts')],
-		[`${repo.name}/*`]: [path.join(repoRoot, 'src/*/index.ts')],
+		[`${repo.name}/*`]: [path.join(repoRoot, 'src/*.ts')],
 	},
 };
 
