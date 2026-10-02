@@ -28,7 +28,7 @@ const intermediate = await createCertificate({
   subject: { commonName: 'Demo Intermediate CA' },
   publicKey: intKeys.publicKey,
   signerPrivateKey: root.keyPair.privateKey,
-  issuerPublicKey: root.keyPair.publicKey,
+  issuerCertificate: root.certificate.pem,
   extensions: {
     basicConstraints: { ca: true },
     keyUsage: ['keyCertSign', 'cRLSign'],
@@ -42,7 +42,7 @@ const leaf = await createCertificate({
   subject: { commonName: 'api.example.com' },
   publicKey: leafKeys.publicKey,
   signerPrivateKey: intKeys.privateKey,
-  issuerPublicKey: intKeys.publicKey,
+  issuerCertificate: intermediate.pem,
   extensions: {
     extendedKeyUsage: ['serverAuth'],
     subjectAltNames: [{ type: 'dns', value: 'api.example.com' }],
@@ -135,7 +135,7 @@ async function issue(cn = '', eku = '') {
     subject: { commonName: cn },
     publicKey: keys.publicKey,
     signerPrivateKey: root.keyPair.privateKey,
-    issuerPublicKey: root.keyPair.publicKey,
+    issuerCertificate: root.certificate.pem,
     extensions: {
       extendedKeyUsage: [eku],
       subjectAltNames: [{ type: 'dns', value: cn }],
@@ -173,7 +173,7 @@ const intermediate = await createCertificate({
   subject: { commonName: 'Demo Intermediate CA' },
   publicKey: caKeys.publicKey,
   signerPrivateKey: root.keyPair.privateKey,
-  issuerPublicKey: root.keyPair.publicKey,
+  issuerCertificate: root.certificate.pem,
   extensions: {
     basicConstraints: { ca: true },
     keyUsage: ['keyCertSign', 'cRLSign'],

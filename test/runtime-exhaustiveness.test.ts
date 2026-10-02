@@ -226,7 +226,7 @@ describe('runtime exhaustiveness guards', () => {
 					{
 						issuer: { commonName: 'Runtime Guard Signer' },
 						signerPrivateKey: signer.keyPair.privateKey,
-						issuerPublicKey: signer.keyPair.publicKey,
+						issuerCertificate: signer.certificate.der,
 						crlNumber: 1,
 						nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 						issuingDistributionPoint: {

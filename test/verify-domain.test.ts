@@ -52,7 +52,7 @@ describe('verify domain', () => {
 				subject: { commonName: 'issued.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 			});
 
 			expect(verify.isSelfIssuedCertificate(unwrap(parseCertificatePem(ca.certificate.pem)))).toBe(
@@ -111,7 +111,7 @@ describe('verify domain', () => {
 				subject: { commonName: 'eku-leaf.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: {
 					extendedKeyUsage: ['serverAuth'],
 				},
@@ -138,7 +138,7 @@ describe('verify domain', () => {
 				subject: { commonName: 'eku-leaf.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: {
 					extendedKeyUsage: ['serverAuth'],
 				},
@@ -170,7 +170,7 @@ describe('verify domain', () => {
 				subject: { commonName: 'tls.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: {
 					keyUsage: ['digitalSignature'],
 					extendedKeyUsage: ['serverAuth'],
@@ -201,7 +201,7 @@ describe('verify domain', () => {
 				subject: { commonName: 'tls.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: {
 					keyUsage: ['digitalSignature'],
 					extendedKeyUsage: ['serverAuth'],

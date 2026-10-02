@@ -82,6 +82,7 @@ import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tag
 import { isResultError } from '#micro509/result/result';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
 import { encodeRelativeDistinguishedName } from '#micro509/x509/name';
+import type { ParsedCertificate } from '#micro509/x509/parse';
 
 export type { ExtensionEncoderErrorCode } from '#micro509/internal/x509/extension-errors';
 export type {
@@ -838,12 +839,12 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
 /**
  * Build the v3 extensions block for a certificate.
  *
- * Automatically adds SKI, AKI (when issuer key is available), and
+ * Automatically adds SKI, AKI (when a key identifier is given), and
  * basicConstraints (defaults to `{ ca: false }`). Additional extensions
  * come from the caller's {@linkcode CertificateExtensionsInput}.
  *
  * @param subjectPublicKeyInfo DER-encoded SPKI of the subject.
- * @param issuerPublicKeyInfo DER-encoded SPKI of the issuer, or `undefined` for self-signed.
+ * @param authorityKeyIdentifier Key identifier for the AKI, or `undefined` to omit it.
  * @param input Optional extension configuration.
  * @param subjectIsEmpty Whether the certificate subject DN is empty. When `true`, a
  *   subjectAltName extension is required and marked critical per RFC 5280 §4.2.1.6.
@@ -851,7 +852,7 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
  */
 export function buildCertificateExtensions(
 	subjectPublicKeyInfo: Uint8Array,
-	issuerPublicKeyInfo: Uint8Array | undefined,
+	authorityKeyIdentifier: Uint8Array | undefined,
 	input: CertificateExtensionsInput | undefined,
 	subjectIsEmpty = false,
 ): Uint8Array[] {
@@ -872,12 +873,12 @@ export function buildCertificateExtensions(
 		SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 		buildSubjectKeyIdentifier(subjectPublicKeyInfo),
 	);
-	if (issuerPublicKeyInfo !== undefined) {
+	if (authorityKeyIdentifier !== undefined) {
 		pushKnownExtension(
 			extensions,
 			seen,
 			AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
-			buildSubjectKeyIdentifier(issuerPublicKeyInfo),
+			authorityKeyIdentifier,
 		);
 	}
 	appendConfiguredExtensions(extensions, seen, input, {
@@ -2421,6 +2422,18 @@ export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uin
 	}
 	const publicKeyBytes = subjectPublicKey.value.slice(1);
 	return sha1(publicKeyBytes);
+}
+
+/**
+ * The key identifier a certificate or CRL issued by `issuer` carries in its
+ * authority key identifier: the issuer's subject key identifier (RFC 5280
+ * §4.2.1.2, §5.2.1), or a method (1) identifier over its public key when it
+ * has none (§4.2.1.1).
+ */
+export function issuerKeyIdentifier(issuer: ParsedCertificate): Uint8Array {
+	return issuer.subjectKeyIdentifier === undefined
+		? buildSubjectKeyIdentifier(issuer.subjectPublicKeyInfoDer)
+		: hexToBytes(issuer.subjectKeyIdentifier);
 }
 
 /**

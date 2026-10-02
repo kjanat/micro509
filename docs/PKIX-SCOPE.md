@@ -137,6 +137,11 @@ Current conformance evidence:
       critical extension whose contents cannot be processed.
 - [x] Process recognized non-critical extensions when relevant to path processing.
 - [x] Expose raw extension data so callers can layer application-specific policy on top. (IETF Datatracker[^rfc5280])
+- [x] Take the authority key identifier of a generated certificate or CRL from
+      the issuer certificate's subject key identifier ([RFC 5280 §4.2.1.2][rfc5280-section-4.2.1.2],
+      [§5.2.1][rfc5280-section-5.2.1]), whatever method produced it. An issuer certificate without one
+      gets a method (1) identifier over its public key. A self-signed certificate
+      carries its own subject key identifier ([§4.2.1.1][rfc5280-section-4.2.1.1]).
 
 ## 5. Name constraints
 
@@ -454,7 +459,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       X.509 do not specify an order between the two fields.
 - [x] Always encode the Authority Key Identifier, by the key identifier method,
       and a non-critical CRL Number in generated CRLs ([RFC 5280 §5.2.1][rfc5280-section-5.2.1],
-      [§5.2.3][rfc5280-section-5.2.3]). `createCertificateRevocationList` requires `issuerPublicKey`
+      [§5.2.3][rfc5280-section-5.2.3]). `createCertificateRevocationList` requires `issuerCertificate`
       and `crlNumber`, and refuses a CRL number or base CRL number longer than 20
       octets. Parsing reads CRL numbers of any length as `bigint`, since verifiers
       must handle values up to 20 octets.
@@ -616,6 +621,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc5280-appendix-B]: https://www.rfc-editor.org/rfc/rfc5280.html#appendix-B
 [rfc5280-section-3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-3.3
 [rfc5280-section-4.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2
+[rfc5280-section-4.2.1.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.1
+[rfc5280-section-4.2.1.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.2
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5

@@ -493,21 +493,18 @@ describe('keys', () => {
 			subject: { commonName: 'imported-leaf' },
 			publicKey: importedPublic,
 			signerPrivateKey: importedPrivate,
-			issuerPublicKey: importedPublic,
 		});
 		const certificateFromBase64 = await createCertificate({
 			issuer: { commonName: 'imported-ca-2' },
 			subject: { commonName: 'imported-leaf-2' },
 			publicKey: base64Public,
 			signerPrivateKey: base64Private,
-			issuerPublicKey: base64Public,
 		});
 		const certificateFromJwk = await createCertificate({
 			issuer: { commonName: 'imported-ca-3' },
 			subject: { commonName: 'imported-leaf-3' },
 			publicKey: jwkPublic,
 			signerPrivateKey: jwkPrivate,
-			issuerPublicKey: jwkPublic,
 		});
 
 		expect(new X509Certificate(certificate.pem).subject).toContain('CN=imported-leaf');

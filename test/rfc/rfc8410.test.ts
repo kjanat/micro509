@@ -514,7 +514,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'ed25519-crl.example' },
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -912,13 +912,12 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			publicKey: CryptoKey,
 			extensions: CertificateExtensionsInput,
 		): Promise<CertificateMaterial> {
-			const { privateKey, publicKey: issuerPublicKey } = await issuerKeyPair();
+			const { privateKey } = await issuerKeyPair();
 			return createCertificate({
 				issuer: { commonName: 'IETF Test Demo' },
 				subject: { commonName: 'IETF Test Demo' },
 				publicKey,
 				signerPrivateKey: privateKey,
-				issuerPublicKey,
 				extensions,
 			});
 		}
@@ -1244,11 +1243,11 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				expect(parsed.basicConstraints).toEqual({ ca });
 				expect(parsed.keyUsage?.flags).toEqual([...flags]);
 
-				const { privateKey, publicKey } = await issuerKeyPair();
+				const { privateKey } = await issuerKeyPair();
 				const crl = await createCertificateRevocationList({
 					issuer: { commonName: 'IETF Test Demo' },
 					signerPrivateKey: privateKey,
-					issuerPublicKey: publicKey,
+					issuerCertificate: certificate.der,
 					crlNumber: 1,
 					revokedCertificates: [],
 					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -1392,7 +1391,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: `${label}.example` },
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -1499,7 +1498,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					[],
 				),
 				signerPrivateKey,
-				issuerPublicKey: await derivePublicKey(signerPrivateKey),
 			});
 			const parsed = parseCertificateDerOrThrow(issued.der);
 			const signerIdentifier = childAt(pemDecodeOrThrow('PUBLIC KEY', blockAt(597)), 0);
@@ -2183,7 +2181,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'names.example' },
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -2367,7 +2365,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'key-agree.example' },
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -2843,7 +2841,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					subject: { commonName: dumpQuoted(654) },
 					publicKey: await importSpkiPemOrThrow(PUBLIC_KEY, ED25519),
 					signerPrivateKey,
-					issuerPublicKey: await derivePublicKey(signerPrivateKey),
 				};
 				const extensions = {
 					keyUsage: ['digitalSignature'],
@@ -2882,7 +2879,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					subject: { commonName: dumpQuoted(654) },
 					publicKey: await importSpkiPemOrThrow(PUBLIC_KEY, ED25519),
 					signerPrivateKey,
-					issuerPublicKey: await derivePublicKey(signerPrivateKey),
 				});
 				const subjectPublicKey = fieldAt(pemDecodeOrThrow('PUBLIC KEY', PUBLIC_KEY), 1);
 				const digest = await globalThis.crypto.subtle.digest(
@@ -3061,7 +3057,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					subject: { commonName: dumpQuoted(654) },
 					publicKey: await importSpkiPemOrThrow(PUBLIC_KEY, ED25519),
 					signerPrivateKey,
-					issuerPublicKey: await derivePublicKey(signerPrivateKey),
 					validity: { notBefore: dumpUtcTime(647), notAfter: dumpUtcTime(648) },
 				});
 				const parsed = parseCertificateDerOrThrow(issued.der);
@@ -3760,7 +3755,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'IETF Test Demo' },
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -3837,7 +3832,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 						subject: { commonName: 'IETF Test Demo' },
 						publicKey: await importSpkiPemOrThrow(blockAt(597), ED25519),
 						signerPrivateKey,
-						issuerPublicKey: await derivePublicKey(signerPrivateKey),
 						extensions: { keyUsage: ['digitalSignature', flag] },
 					}),
 					'edwards_key_usage_forbids_agreement_bit',
@@ -3875,7 +3869,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'malleability.example' },
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -5359,7 +5353,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					issuer: { commonName: issuingAuthor.organization, emailAddress: email },
 					publicKey: subject.publicKey,
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.pem,
 				});
 				return leaf.der;
 			}
@@ -5413,7 +5407,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					issuer: { commonName: excluded.organization, emailAddress: excluded.email },
 					publicKey: subject.publicKey,
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.pem,
 					extensions: { subjectAltNames: [{ type: 'email', value: email }] },
 				});
 				const result = await verifyCertificateChain({ leaf: leaf.der, roots: [ca.pem] });

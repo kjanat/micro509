@@ -63,7 +63,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'Diff Intermediate CA' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -75,7 +75,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'Diff Sub CA' },
 			publicKey: subCaKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -87,7 +87,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'diff.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: subCaKeys.privateKey,
-			issuerPublicKey: subCaKeys.publicKey,
+			issuerCertificate: subCa.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -126,13 +126,13 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'crl.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const goodCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Diff CRL CA' },
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			crlNumber: 7,
 			thisUpdate: now,
 			nextUpdate: nextUpdate,
@@ -140,7 +140,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		const revokedCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Diff CRL CA' },
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			crlNumber: 8,
 			thisUpdate: now,
 			nextUpdate: nextUpdate,
@@ -199,7 +199,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'diff-rsa-pss.example' },
 			publicKey: rsaPssLeafKeys.publicKey,
 			signerPrivateKey: rsaPssRoot.keyPair.privateKey,
-			issuerPublicKey: rsaPssRoot.keyPair.publicKey,
+			issuerCertificate: rsaPssRoot.certificate.der,
 			signature: { kind: 'rsa-pss' },
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'diff-rsa-pss.example' }],
@@ -230,7 +230,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'diff-p521.example' },
 			publicKey: p521LeafKeys.publicKey,
 			signerPrivateKey: p521Root.keyPair.privateKey,
-			issuerPublicKey: p521Root.keyPair.publicKey,
+			issuerCertificate: p521Root.certificate.der,
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'diff-p521.example' }],
 			},
@@ -261,7 +261,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const issuerPrivateKeyPem = await exportPkcs8Pem(issuer.keyPair.privateKey);
 
@@ -344,7 +344,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			subject: { commonName: 'reverse-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const material = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,

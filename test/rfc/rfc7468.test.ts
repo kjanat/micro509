@@ -2142,7 +2142,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				crlNumber: 1,
 				issuer: { commonName: 'label-conformance CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			expect(splitPemBlocksOrThrow(crl.pem).map((b) => b.label)).toEqual(['X509 CRL']);
@@ -2163,7 +2163,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'structure CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				crlNumber: 1,
 				revokedCertificates: [{ serialNumber: Uint8Array.of(0x2a) }],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -2191,7 +2191,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				const crl = await createCertificateRevocationList({
 					issuer: { commonName: 'empty list CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					crlNumber: 1,
 					nextUpdate: new Date('2030-01-01T00:00:00Z'),
 					...(revokedCertificates === undefined ? {} : { revokedCertificates }),
@@ -2230,7 +2230,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				const crl = await createCertificateRevocationList({
 					issuer: { commonName: 'time encoding CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					crlNumber: 1,
 					thisUpdate: new Date(window.thisUpdate),
 					nextUpdate: new Date(window.nextUpdate),
@@ -2266,7 +2266,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				createCertificateRevocationList({
 					issuer: {},
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					crlNumber: 1,
 					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				}),
@@ -2276,7 +2276,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				createCertificateRevocationList({
 					issuer: [],
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					crlNumber: 1,
 					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				}),

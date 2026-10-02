@@ -46,7 +46,7 @@ async function issueLeaf(
 		subject: { commonName: 'rfc9608-leaf.example' },
 		publicKey: keys.publicKey,
 		signerPrivateKey: ca.keyPair.privateKey,
-		issuerPublicKey: ca.keyPair.publicKey,
+		issuerCertificate: ca.certificate.der,
 		...(extensions === undefined ? {} : { extensions }),
 	});
 	return leaf.der;

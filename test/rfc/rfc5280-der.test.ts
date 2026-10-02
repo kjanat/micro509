@@ -61,7 +61,7 @@ async function crlDerWithIdp(
 		crlNumber: 1,
 		issuer: { commonName: 'DER CRL CA' },
 		signerPrivateKey: ca.keyPair.privateKey,
-		issuerPublicKey: ca.keyPair.publicKey,
+		issuerCertificate: ca.certificate.der,
 		issuingDistributionPoint,
 		nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 	});

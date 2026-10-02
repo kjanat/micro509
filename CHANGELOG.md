@@ -307,11 +307,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second than `thisUpdate`, which defaults to now. This ordering is a micro509
   builder invariant. `CrlEncoderErrorCode` gains
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
-- **BREAKING** `createCertificateRevocationList` requires `issuerPublicKey` and
+- **BREAKING** `createCertificateRevocationList` requires `issuerCertificate` and
   `crlNumber` and always encodes the Authority Key Identifier and CRL Number
-  extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]). An `issuerPublicKey` that is not an
-  extractable public `CryptoKey` throws `ResultError` code
-  `issuer_public_key_invalid`.
+  extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]).
 - **BREAKING** CRL numbers are `bigint`. `crlNumber` and `baseCrlNumber` on
   `createCertificateRevocationList` take a `number` or `bigint` up to 20
   octets and throw `ResultError` code `crl_number_invalid` past that, when
@@ -324,6 +322,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cRLReason or invalidityDate value, and requires cRLReason to be a minimal,
   non-negative ENUMERATED ([RFC 5280 §5.3.1][rfc5280-section-5.3.1]). It read
   the first content octet of any element as the reason code.
+- **BREAKING** `createCertificate` takes `issuerCertificate` (PEM, DER or a
+  parsed certificate) in place of `issuerPublicKey`, and both builders copy
+  that certificate's subject key identifier into the authority key identifier
+  ([RFC 5280 §4.2.1.2][rfc5280-section-4.2.1.2], [§5.2.1][rfc5280-section-5.2.1]). They derived it from the issuer key
+  by method (1) before, so an issuer whose subject key identifier came from
+  another method got certificates and CRLs whose authority key identifier
+  matched nothing, and `validateCertificateRevocationList` refused those CRLs
+  with `issuer_mismatch`. An issuer certificate without a subject key
+  identifier gets a method (1) identifier over its public key. An
+  `issuerCertificate` that does not parse throws `ResultError` code
+  `issuer_certificate_invalid`, which `CreateCertificateErrorCode` and
+  `CrlEncoderErrorCode` gain.
 - An [RFC 7292][rfc7292] MAC password containing a UTF-16 surrogate (a non-BMP character
   or a lone surrogate), U+FFFE or U+FFFF is not a BMPString ([RFC 7292 Appendix
   B.1][rfc7292-appendix-B.1], X.680 §41.15).

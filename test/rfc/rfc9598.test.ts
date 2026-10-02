@@ -56,7 +56,7 @@ async function leafWith(root: Root, subjectAltNames?: readonly SubjectAltName[])
 		subject: { commonName: 'rfc9598-leaf' },
 		publicKey: keys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		...(subjectAltNames === undefined ? {} : { extensions: { subjectAltNames } }),
 	});
 	return leaf.der;
@@ -215,7 +215,7 @@ describe('RFC 9598 §3 and §4: the mailbox domain is IDNA2008 in A-labels', () 
 					subject: { commonName: 'rfc9598-leaf' },
 					publicKey: keys.publicKey,
 					signerPrivateKey: root.keyPair.privateKey,
-					issuerPublicKey: root.keyPair.publicKey,
+					issuerCertificate: root.certificate.der,
 					extensions: {
 						customExtensions: [{ oid: OIDS.subjectAltName, value: sequence([otherName]) }],
 					},
@@ -411,7 +411,7 @@ describe('RFC 9598 §6: rfc822Name name constraints apply to SmtpUTF8Mailbox by 
 					subject: { commonName: 'rfc9598-leaf' },
 					publicKey: keys.publicKey,
 					signerPrivateKey: root.keyPair.privateKey,
-					issuerPublicKey: root.keyPair.publicKey,
+					issuerCertificate: root.certificate.der,
 					extensions: {
 						customExtensions: [{ oid: OIDS.subjectAltName, value: sequence([otherName]) }],
 					},
