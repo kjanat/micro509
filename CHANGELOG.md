@@ -462,6 +462,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **BREAKING** A complete CRL without `nextUpdate` stayed usable for any
+  evaluation time after its `thisUpdate` unless the caller set a maximum age,
+  so a replayed CRL from before a revocation reported the certificate `good`.
+  `validateCertificateRevocationList` and `checkCertificateRevocationAgainstCrl`
+  now fail it with `stale_crl` unless `maxAgeMs` is set, and chain revocation
+  takes no evidence from it unless `crlMaxAgeMs` is set, for chain
+  certificates, CRL signers and delegated OCSP responders alike. When set, that
+  bound governs the CRL. A delta CRL without `nextUpdate` is refused as before.
 - A received dNSName or rfc822Name ending in the root dot, such as
   `evil.example.com.`, matched no dNSName or rfc822Name constraint, so an
   excluded `example.com` did not exclude it. While constraints of its type are

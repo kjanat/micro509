@@ -333,8 +333,9 @@ export interface ValidateCertificateRevocationListInput {
 	/**
 	 * Maximum age of `thisUpdate` at `at`, in milliseconds. A CRL older than
 	 * this fails with `stale_crl` even when `nextUpdate` is absent or later.
-	 * Unbounded by default. RFC 5280 §3.3 leaves the required recency of
-	 * revocation data to local policy.
+	 * Unbounded by default, in which case a CRL without `nextUpdate` fails with
+	 * `stale_crl`. RFC 5280 §3.3 leaves the required recency of revocation data
+	 * to local policy.
 	 */
 	readonly maxAgeMs?: number;
 }
@@ -894,8 +895,8 @@ export async function verifyCertificateRevocationListSignature(
  * a v3 issuer certificate's key usage must be present and assert cRLSign
  * (RFC 10007 §4), signature verification, `thisUpdate`/`nextUpdate`
  * freshness check (with optional clock-skew tolerance), and the optional
- * `maxAgeMs` bound on `thisUpdate`. Without `maxAgeMs`, a CRL that omits
- * `nextUpdate` stays usable for any `at` after its `thisUpdate`.
+ * `maxAgeMs` bound on `thisUpdate`. A CRL that omits `nextUpdate` fails with
+ * `stale_crl` unless `maxAgeMs` is set.
  */
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
@@ -1036,6 +1037,9 @@ function crlFreshnessFailure(
 		(crl.nextUpdate !== undefined && crl.nextUpdate.getTime() + skew < at.getTime())
 	) {
 		return 'CRL is not valid at requested time';
+	}
+	if (crl.nextUpdate === undefined && maxAgeMs === undefined) {
+		return 'CRL has no nextUpdate and no maximum age is set';
 	}
 	if (maxAgeMs !== undefined && at.getTime() - crl.thisUpdate.getTime() > maxAgeMs + skew) {
 		return 'CRL thisUpdate is older than the maximum age';

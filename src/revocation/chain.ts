@@ -112,8 +112,9 @@ export interface RevocationPolicy {
 	 * Maximum age of a CRL's `thisUpdate` at the evaluation time, in
 	 * milliseconds. An older CRL yields no evidence even when it carries no
 	 * `nextUpdate`. Applies to CRLs for chain certificates, CRL signers and
-	 * delegated OCSP responders. Unbounded by default. RFC 5280 §3.3 leaves
-	 * the required recency of revocation data to local policy.
+	 * delegated OCSP responders. Unbounded by default, in which case a CRL
+	 * without `nextUpdate` yields no evidence. RFC 5280 §3.3 leaves the
+	 * required recency of revocation data to local policy.
 	 */
 	readonly crlMaxAgeMs?: number;
 	/**
