@@ -99,8 +99,9 @@ publishes all five packages with their built binaries to [pkg.pr.new] through [`
 Under Cloudflare Workers Builds, where `WORKERS_CI` is set, `prepare` skips the Go builds and
 `@kjanat/tsc-bridge:fetch` downloads the native helper pkg.pr.new published for the commit, its
 branch, or `master`, in that order. It reads the commit and branch from `WORKERS_CI_COMMIT_SHA` and
-`WORKERS_CI_BRANCH`, and `--sha` and `--branch` override them for a local run. The site build
-needs no Go. From the repository root:
+`WORKERS_CI_BRANCH`, and `--sha` and `--branch` override them for a local run. Only the protocol
+and bridge packages are bundled there, since compat and wasm need the WebAssembly modules that Go
+builds. The site build needs no Go. From the repository root:
 
 [pkg.pr.new]: https://pkg.pr.new
 [wf/pkg-pr-new]: ../.github/workflows/pkg-pr-new.yml
