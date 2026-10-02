@@ -38,7 +38,7 @@ describe('RFC 5280 §6.1.3 as kept by RFC 9618 §5.3: policy mapping (§6.1.4(b)
 			subject: { commonName: 'RFC 9618 CA' },
 			publicKey: caKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -52,7 +52,7 @@ describe('RFC 5280 §6.1.3 as kept by RFC 9618 §5.3: policy mapping (§6.1.4(b)
 			subject: { commonName: 'rfc9618-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: caKeys.privateKey,
-			issuerPublicKey: caKeys.publicKey,
+			issuerCertificate: ca.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: P1 }],
@@ -93,7 +93,7 @@ describe('RFC 5280 §6.1.1(c): the special value any-policy in user-initial-poli
 			subject: { commonName: 'rfc5280-policy-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: P1 }],

@@ -51,6 +51,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 | Code                                   | Meaning                                                                             |
 | -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `issuer_certificate_invalid`           | `issuerCertificate` is not a PEM, DER or parsed certificate                         |
 | `issuer_distinguished_name_empty`      | [RFC 5280 §4.1.2.4][rfc5280-section-4.1.2.4] requires a non-empty issuer DN         |
 | `serial_number_not_positive`           | Serial must be a positive integer ([RFC 5280 §4.1.2.2][rfc5280-section-4.1.2.2])    |
 | `serial_number_too_long`               | Serial DER INTEGER exceeds 20 octets ([RFC 5280 §4.1.2.2][rfc5280-section-4.1.2.2]) |
@@ -276,8 +277,8 @@ cannot settle the status as `good`.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | `crl_number_invalid`                 | `crlNumber` or `baseCrlNumber` is negative, not an integer, or over 20 octets ([RFC 5280 §5.2.3][rfc5280-section-5.2.3]) |
 | `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName                                                                          |
+| `issuer_certificate_invalid`         | `issuerCertificate` is not a PEM, DER or parsed certificate                                                              |
 | `issuer_distinguished_name_empty`    | [RFC 5280 §5.1.2.3][rfc5280-section-5.1.2.3] requires a non-empty issuer DN                                              |
-| `issuer_public_key_invalid`          | `issuerPublicKey` is not an extractable public `CryptoKey`                                                               |
 | `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`                                                                         |
 | `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate`                                                            |
 

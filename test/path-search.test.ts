@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { TrustAnchor } from '#micro509';
+import type { CertificateMaterial, TrustAnchor } from '#micro509';
 import {
 	buildCandidatePath,
 	createCertificate,
@@ -37,14 +37,12 @@ const VALIDITY = {
  */
 async function issueSameSubjectCandidates(count: number) {
 	const shared = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
-	const intermediates: string[] = [];
-	for (let index = 1; index <= count; index += 1) {
-		const certificate = await createCertificate({
+	const issueCandidate = (index: number) =>
+		createCertificate({
 			issuer: SHARED_NAME,
 			subject: SHARED_NAME,
 			publicKey: shared.publicKey,
 			signerPrivateKey: shared.privateKey,
-			issuerPublicKey: shared.publicKey,
 			serialNumber: Uint8Array.of(1, index),
 			validity: VALIDITY,
 			extensions: {
@@ -52,15 +50,18 @@ async function issueSameSubjectCandidates(count: number) {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		intermediates.push(certificate.pem);
+	const candidates: CertificateMaterial[] = [];
+	for (let index = 1; index <= count; index += 1) {
+		candidates.push(await issueCandidate(index));
 	}
+	const [first] = candidates;
 	const leafKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 	const leaf = await createCertificate({
 		issuer: SHARED_NAME,
 		subject: { commonName: 'same-subject-leaf.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: shared.privateKey,
-		issuerPublicKey: shared.publicKey,
+		...(first === undefined ? {} : { issuerCertificate: first.der }),
 		serialNumber: Uint8Array.of(2, 1),
 		validity: VALIDITY,
 	});
@@ -70,7 +71,11 @@ async function issueSameSubjectCandidates(count: number) {
 		validity: VALIDITY,
 		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
 	});
-	return { leaf: leaf.pem, intermediates, root: unrelatedRoot.certificate.pem };
+	return {
+		leaf: leaf.pem,
+		intermediates: candidates.map((candidate) => candidate.pem),
+		root: unrelatedRoot.certificate.pem,
+	};
 }
 
 /** A bare anchor whose subject matches the candidates but whose key verifies none of them. */
@@ -185,7 +190,7 @@ async function issueThreeCertificateChain() {
 		subject: { commonName: 'Budget Intermediate' },
 		publicKey: intermediateKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		validity: VALIDITY,
 		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
 	});
@@ -195,7 +200,7 @@ async function issueThreeCertificateChain() {
 		subject: { commonName: 'budget-leaf.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: intermediateKeys.privateKey,
-		issuerPublicKey: intermediateKeys.publicKey,
+		issuerCertificate: intermediate.der,
 		validity: VALIDITY,
 	});
 	return { leaf: leaf.pem, intermediate: intermediate.pem, root: root.certificate.pem };

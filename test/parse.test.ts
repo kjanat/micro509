@@ -909,7 +909,7 @@ describe('parse', () => {
 			subject: { commonName: 'eku-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				extendedKeyUsage: [
 					'serverAuth',
@@ -1156,7 +1156,7 @@ describe('parse', () => {
 			subject: { commonName: 'dirname-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [
@@ -1187,7 +1187,7 @@ describe('parse', () => {
 			subject: { commonName: 'unknown-san-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [

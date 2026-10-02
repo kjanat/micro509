@@ -3495,7 +3495,7 @@ describe('ecdsaSignatureToDer', () => {
 				crlNumber: 1,
 				issuer: { commonName: `DER Sig CA ${i}` },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				revokedCertificates: [],
 				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});

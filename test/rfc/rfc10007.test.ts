@@ -22,7 +22,7 @@ async function crlSignedBy(
 		crlNumber: 1,
 		issuer: { commonName },
 		signerPrivateKey: issuer.keyPair.privateKey,
-		issuerPublicKey: issuer.keyPair.publicKey,
+		issuerCertificate: issuer.certificate.der,
 		thisUpdate: THIS_UPDATE,
 		nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 	});

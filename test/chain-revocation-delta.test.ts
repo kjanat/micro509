@@ -32,7 +32,7 @@ async function scenario() {
 		subject: { commonName: 'revoked.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: ca.keyPair.privateKey,
-		issuerPublicKey: ca.keyPair.publicKey,
+		issuerCertificate: ca.certificate.der,
 	});
 	const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 	const chain = [parsedLeaf, unwrap(parseCertificatePem(ca.certificate.pem))];
@@ -50,12 +50,12 @@ async function scenario() {
 	const crl = (
 		fields: Omit<
 			Parameters<typeof createCertificateRevocationList>[0],
-			'issuer' | 'issuerPublicKey' | 'nextUpdate'
+			'issuer' | 'issuerCertificate' | 'nextUpdate'
 		>,
 	): ReturnType<typeof createCertificateRevocationList> =>
 		createCertificateRevocationList({
 			issuer: { commonName: CA_NAME },
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			nextUpdate,
 			...fields,
 		});
@@ -405,7 +405,7 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 				subject: crlIssuerName,
 				publicKey: crlIssuerKeys.publicKey,
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 				extensions: { keyUsage: ['cRLSign'] },
 			});
 		const genuineSigner = await signerFrom(root, 'Delta Budget Root');
@@ -417,7 +417,7 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 			subject: { commonName: 'delta-budget.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -442,7 +442,7 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 		) =>
 			createCertificateRevocationList({
 				issuer: crlIssuerName,
-				issuerPublicKey: crlIssuerKeys.publicKey,
+				issuerCertificate: genuineSigner.der,
 				thisUpdate,
 				nextUpdate: new Date(at.getTime() + 24 * HOUR_MS),
 				issuingDistributionPoint: {

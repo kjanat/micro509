@@ -83,7 +83,7 @@ describe('certificate', () => {
 			subject: { commonName: 'leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth', { type: 'oid', value: '1.2.3.4.5' }],
@@ -161,7 +161,7 @@ describe('certificate', () => {
 			subject: { commonName: 'rsa-pss-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			signature: { kind: 'rsa-pss', saltLength: 48 },
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'rsa-pss-leaf.example' }],
@@ -193,7 +193,7 @@ describe('certificate', () => {
 			subject: { commonName: 'rsa-pss-spliced.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			signature: { kind: 'rsa-pss', saltLength: 48 },
 			extensions: {
 				customExtensions: [
@@ -248,7 +248,7 @@ describe('certificate', () => {
 			subject: { commonName: 'p521-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'p521-leaf.example' }],
 			},
@@ -286,7 +286,7 @@ describe('certificate', () => {
 			subject: { commonName: 'structured-dp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -542,7 +542,7 @@ describe('certificate', () => {
 			subject: {},
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
 			},
@@ -567,7 +567,7 @@ describe('certificate', () => {
 				subject: {},
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 			}),
 			'empty_subject_requires_subject_alt_name',
 		);
@@ -577,7 +577,7 @@ describe('certificate', () => {
 				subject: {},
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				extensions: { subjectAltNames: [] },
 			}),
 			'empty_subject_requires_subject_alt_name',
@@ -587,7 +587,7 @@ describe('certificate', () => {
 			subject: {},
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				customExtensions: [
 					{
@@ -759,7 +759,6 @@ describe('certificate', () => {
 				subject: { commonName: 'empty-issuer-leaf' },
 				publicKey: keys.publicKey,
 				signerPrivateKey: keys.privateKey,
-				issuerPublicKey: keys.publicKey,
 			}),
 			'issuer_distinguished_name_empty',
 		);

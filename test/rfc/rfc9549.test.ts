@@ -70,7 +70,7 @@ describe('RFC 9549 §1: all IDNs are carried and processed as A-labels', () => {
 					subject: { commonName: 'rfc9549-leaf' },
 					publicKey: keys.publicKey,
 					signerPrivateKey: root.keyPair.privateKey,
-					issuerPublicKey: root.keyPair.publicKey,
+					issuerCertificate: root.certificate.der,
 					extensions: { subjectAltNames },
 				})
 			).der;
