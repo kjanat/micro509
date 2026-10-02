@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Last updated:** 2026-09-28
+**Last updated:** 2026-10-02
 
 ## OVERVIEW
 
@@ -38,6 +38,23 @@ and structured `details`.
   parse boundary maps onto its result codes. Other DER decode guards and
   `_exhaustive` invariants stay bare `throw new Error`, and a boundary reports
   them as `malformed`.
+
+How strict a check is belongs to the caller:
+
+- Where a standard leaves a choice to the relying party or to local policy,
+  expose every alternative the standard allows as a typed option. Never
+  hardcode one of them as micro509 policy.
+- Every such option has a safe default: the alternative that fails closed and
+  complies with the standard. Document the default and cite the section that
+  leaves the choice open.
+- Parsing keeps every value the input carries, unrecognized ones included, as a
+  typed variant. A value dropped at parse time leaves the caller nothing to
+  decide on.
+- Where the standard requires a behaviour (MUST, MUST NOT, a fixed rule),
+  implement it unconditionally. An option exists only where the standard
+  leaves room.
+- Existing examples: `ocspProfile`, `responderRevocationPolicy`,
+  `crlMaxAgeMs`, `unrecognizedReasonCode`.
 
 ## STRUCTURE
 
