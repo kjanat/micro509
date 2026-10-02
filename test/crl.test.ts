@@ -4044,6 +4044,32 @@ describe('crl', () => {
 		).toEqual(new Date('2024-01-01T00:00:00Z'));
 	});
 
+	it('parseCertificateRevocationListDerOrThrow rejects a CRLNumber or deltaCRLIndicator that is not an INTEGER', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'CRL Number Type CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Number Type CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+			baseCrlNumber: 5,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+
+		for (const oid of [OIDS.cRLNumber, OIDS.deltaCRLIndicator]) {
+			expect(() =>
+				parseCertificateRevocationListDerOrThrow(
+					rewriteCrlExtensionValuePayload(crl.der, oid, octetString(Uint8Array.of(7))),
+				),
+			).toThrow('CRLNumber must be an INTEGER');
+		}
+	});
+
 	it('parseCertificateRevocationListDerOrThrow refuses an unrecognized critical entry extension (RFC 5280 §5.3)', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Critical Entry Extension CA' },

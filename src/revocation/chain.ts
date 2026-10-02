@@ -1040,32 +1040,27 @@ function recordOcspEvidence(
 	state: OcspEvidenceState,
 	evidence: Exclude<ClassifiedOcspEvidence, { readonly kind: 'revoked' }>,
 ): void {
-	switch (evidence.kind) {
-		case 'good':
-			state.freshestGoodThisUpdate = laterEvidenceDate(
-				state.freshestGoodThisUpdate,
-				evidence.thisUpdate,
-			);
-			return;
-		case 'hold':
-			if (
-				state.freshestHold === undefined ||
-				evidence.evidence.thisUpdate.getTime() > state.freshestHold.thisUpdate.getTime()
-			) {
-				state.freshestHold = evidence.evidence;
-			}
-			return;
-		case 'unrecognized_reason':
-			state.sawUnrecognizedReason = true;
-			return;
-		case 'unknown':
-			state.reasons.add('ocsp_status_unknown');
-			return;
-		default: {
-			const _exhaustive: never = evidence;
-			throw new Error(`Unhandled OCSP evidence: ${String(_exhaustive)}`);
-		}
+	if (evidence.kind === 'good') {
+		state.freshestGoodThisUpdate = laterEvidenceDate(
+			state.freshestGoodThisUpdate,
+			evidence.thisUpdate,
+		);
+		return;
 	}
+	if (evidence.kind === 'hold') {
+		if (
+			state.freshestHold === undefined ||
+			evidence.evidence.thisUpdate.getTime() > state.freshestHold.thisUpdate.getTime()
+		) {
+			state.freshestHold = evidence.evidence;
+		}
+		return;
+	}
+	if (evidence.kind === 'unrecognized_reason') {
+		state.sawUnrecognizedReason = true;
+		return;
+	}
+	state.reasons.add('ocsp_status_unknown');
 }
 
 /** The OCSP verdict once no response revoked the certificate outright. */
