@@ -214,6 +214,25 @@ describe('RFC 5280', () => {
 			);
 		});
 
+		it('refuses an issuerPublicKey that is missing, private or not a CryptoKey as issuer_public_key_invalid', async () => {
+			const ca = await crlIssuer();
+			for (const issuerPublicKey of [undefined, ca.keyPair.privateKey, {}]) {
+				await expectRejectedErrorCode(
+					Reflect.apply(createCertificateRevocationList, undefined, [
+						{
+							issuer: { commonName: 'RFC 5280 CRL CA' },
+							signerPrivateKey: ca.keyPair.privateKey,
+							issuerPublicKey,
+							crlNumber: 1,
+							thisUpdate: THIS_UPDATE,
+							nextUpdate: new Date('2025-01-08T00:00:00Z'),
+						},
+					]),
+					'issuer_public_key_invalid',
+				);
+			}
+		});
+
 		it('§5.2.1 L3348-3349: encodes the issuer key identifier as the Authority Key Identifier', async () => {
 			const { ca, crl } = await issuedCrl();
 			const issuerKeyIdentifier = unwrap(
@@ -268,6 +287,22 @@ describe('RFC 5280', () => {
 				await expectRejectedErrorCode(crlNumbered(invalid), 'crl_number_invalid');
 				await expectRejectedErrorCode(crlNumbered(1, invalid), 'crl_number_invalid');
 			}
+		});
+
+		it('refuses a crlNumber that is not a number or bigint as crl_number_invalid', async () => {
+			const ca = await crlIssuer();
+			await expectRejectedErrorCode(
+				Reflect.apply(createCertificateRevocationList, undefined, [
+					{
+						issuer: { commonName: 'RFC 5280 CRL CA' },
+						signerPrivateKey: ca.keyPair.privateKey,
+						issuerPublicKey: ca.keyPair.publicKey,
+						nextUpdate: new Date('2025-01-08T00:00:00Z'),
+						thisUpdate: THIS_UPDATE,
+					},
+				]),
+				'crl_number_invalid',
+			);
 		});
 
 		it('applies a delta CRL whose numbers exceed Number.MAX_SAFE_INTEGER', async () => {
