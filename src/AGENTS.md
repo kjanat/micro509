@@ -5,27 +5,30 @@ Public domain entrypoints are one-level buckets, implementation details stay in
 
 ## OVERVIEW
 
-`src/` is the library boundary. High-level workflow ownership is in domain
-barrels under `x509`, `verify`, `revocation`, `keys`, `crypto`, `pem`, `pkcs`,
-and `result`.
+`src/` is the library boundary. High-level workflow ownership is in the domain
+barrels `x509.ts`, `verify.ts`, `revocation.ts`, `keys.ts`, `crypto.ts`,
+`der.ts`, `pem.ts`, `pkcs.ts` and `result.ts`, one per published subpath. Each
+domain's modules live in the directory of the same name.
 
 ## WHERE TO LOOK
 
-| Area               | File/dir                          | Notes                                                 |
-| ------------------ | --------------------------------- | ----------------------------------------------------- |
-| Package root       | `index.ts`                        | all stable package exports                            |
-| Domain entrypoints | `x509/`, `verify/`, `revocation/` | re-export-only in most cases                          |
-| Key APIs           | `keys/`                           | import/export, generation, encryption options         |
-| Crypto primitives  | `crypto/`                         | detached sign/verify, ECDSA signature encoding        |
-| PEM boundary       | `pem/`                            | encode/decode, block classification, RFC 1421 headers |
-| PKCS workflows     | `pkcs/`                           | PFX and PKCS#7 data lifecycles                        |
-| Result model       | `result/`                         | shared typed `Result` and error constructors          |
-| Internal spine     | `internal/`                       | ASN.1, crypto, shared helpers, verification engines   |
+| Area               | File/dir                                | Notes                                                 |
+| ------------------ | --------------------------------------- | ----------------------------------------------------- |
+| Package root       | `index.ts`                              | all stable package exports                            |
+| Domain entrypoints | `x509.ts`, `verify.ts`, `revocation.ts` | re-export-only in most cases                          |
+| Key APIs           | `keys/`                                 | import/export, generation, encryption options         |
+| Crypto primitives  | `crypto/`                               | detached sign/verify, ECDSA signature encoding        |
+| PEM boundary       | `pem/`                                  | encode/decode, block classification, RFC 1421 headers |
+| PKCS workflows     | `pkcs/`                                 | PFX and PKCS#7 data lifecycles                        |
+| Result model       | `result/`                               | shared typed `Result` and error constructors          |
+| Internal spine     | `internal/`                             | ASN.1, crypto, shared helpers, verification engines   |
 
 ## LOCAL CONVENTIONS
 
 - Keep APIs by domain barrel; add files inside existing domain unless the domain
   model clearly needs a new public ownership file.
+- A new `src/*.ts` file becomes a published subpath. Add one only for a new
+  domain, and update `test/conventions.test.ts` with it.
 - New OIDs go in `src/internal/asn1/oids.json` under their registration arc and
   are consumed as `OIDS.<name>`; never inline a dotted-decimal literal in
   source.

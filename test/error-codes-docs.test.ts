@@ -2,12 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createTscBridge } from '@kjanat/tsc-bridge';
-import pkg from '#pkg' with { type: 'json' };
+import jsr from '#jsr' with { type: 'json' };
 import { projectRoot } from '#test/helpers';
 
-const ENTRYPOINTS = Object.entries(pkg.imports)
-	.filter(([specifier]) => /^#micro509(?:\/\w+)?$/.test(specifier))
-	.map(([, target]) => path.posix.normalize(target));
+const ENTRYPOINTS = Object.values(jsr.exports).map((target) => path.posix.normalize(target));
 
 async function exportedCodeUnions(): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
 	const bridge = createTscBridge({ cwd: projectRoot });

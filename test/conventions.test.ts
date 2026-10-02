@@ -46,7 +46,7 @@ async function orThrowExportsByDomain(): Promise<ReadonlyMap<string, ReadonlySet
 	const orThrowByDomain = new Map<string, Set<string>>();
 	for (const file of sourceFiles()) {
 		const relative = file.slice(srcRoot.length + 1);
-		if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
+		if (relative.startsWith('internal/')) continue;
 		const domain = relative.split('/')[0];
 		if (domain === undefined || !relative.includes('/')) continue;
 		const names = orThrowByDomain.get(domain) ?? new Set<string>();
@@ -105,6 +105,21 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		expect([...emitted.keys()].filter((label) => forbidden.has(label))).toEqual([]);
 	});
 
+	it('src/ holds exactly the published entrypoints at its root', () => {
+		expect([...new Glob('*.ts').scanSync({ cwd: srcRoot })].sort()).toEqual([
+			'crypto.ts',
+			'der.ts',
+			'index.ts',
+			'keys.ts',
+			'pem.ts',
+			'pkcs.ts',
+			'result.ts',
+			'revocation.ts',
+			'verify.ts',
+			'x509.ts',
+		]);
+	});
+
 	it('barrels re-export the OrThrow sibling of every function they expose', async () => {
 		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
 		// must re-export `fooOrThrow` too — otherwise the throwing variant is
@@ -114,7 +129,7 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		const allOrThrow = new Set<string>();
 		for (const [domain, names] of orThrowByDomain) {
 			if (names.size === 0) continue;
-			offenders.push(...(await missingOrThrowExports(`${domain}/index.ts`, names)));
+			offenders.push(...(await missingOrThrowExports(`${domain}.ts`, names)));
 			for (const name of names) allOrThrow.add(name);
 		}
 		offenders.push(...(await missingOrThrowExports('index.ts', allOrThrow)));

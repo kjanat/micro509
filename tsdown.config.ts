@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { getBuffer as getFmtBiome } from '@dprint/biome';
 import { createContext } from '@dprint/formatter';
 import { getPath as getFmtJson } from '@dprint/json';
@@ -15,18 +15,10 @@ const fmt = createContext({ useTabs: true, indentWidth: 2, lineWidth: 100, newLi
 fmt.addPlugin(getFmtBiome(), fmtCfg.biome);
 fmt.addPlugin(readFileSync(getFmtJson()), fmtCfg.json);
 
-export const entries = {
-	index: 'src/index.ts',
-	crypto: 'src/crypto/index.ts',
-	der: 'src/der/index.ts',
-	keys: 'src/keys/index.ts',
-	pem: 'src/pem/index.ts',
-	pkcs: 'src/pkcs/index.ts',
-	result: 'src/result/index.ts',
-	revocation: 'src/revocation/index.ts',
-	verify: 'src/verify/index.ts',
-	x509: 'src/x509/index.ts',
-} satisfies UserConfig['entry'];
+const entries = readdirSync(join(import.meta.dirname, 'src'))
+	.filter((file) => file.endsWith('.ts'))
+	.sort()
+	.map((file) => `src/${file}`);
 
 const exports = {
 	enabled: true,
@@ -80,10 +72,12 @@ export default defineConfig((options) => [
 							// jsr.json
 							const jsrNext = { ...jsr, exports: {} };
 							jsrNext.exports = Object.fromEntries(
-								Object.entries(entries).map(([name, sourcePath]) => [
-									name === 'index' ? '.' : `./${name}`,
-									`./${sourcePath}`,
-								]),
+								entries
+									.map((sourcePath) => {
+										const name = basename(sourcePath, '.ts');
+										return [name === 'index' ? '.' : `./${name}`, `./${sourcePath}`] as const;
+									})
+									.sort(([left], [right]) => (left < right ? -1 : 1)),
 							);
 							jsrNext.version = pkg.version;
 							const unformattedJsr = `${JSON.stringify(jsrNext, null, '\t')}\n`;
