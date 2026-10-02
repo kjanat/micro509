@@ -2284,11 +2284,13 @@ function applyRevokedCertificateExtensionValue(
 	fields: MutableRevokedCertificateExtensionFields,
 ): void {
 	if (oid === OIDS.cRLReason) {
-		const reasonCode = revocationReasonFromCode(readElement(value).value[0]);
+		const reasonCode = revocationReasonFromCode(
+			readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }).value[0],
+		);
 		if (reasonCode !== undefined) fields.reasonCode = reasonCode;
 	}
 	if (oid === OIDS.invalidityDate) {
-		fields.invalidityDate = parseTime(readElement(value));
+		fields.invalidityDate = parseTime(readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }));
 	}
 	if (oid === OIDS.certificateIssuer) {
 		const generalNames = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
@@ -2611,7 +2613,7 @@ function encodeCrlNumber(value: number | bigint, field: 'crlNumber' | 'baseCrlNu
 
 /** RFC 5280 §5.2.3: a received CRLNumber of any length, since verifiers MUST handle up to 20 octets. */
 function decodeCrlNumber(value: Uint8Array): bigint {
-	const element = readElement(value);
+	const element = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (element.tag !== 0x02) {
 		throw new Error('CRLNumber must be an INTEGER');
 	}
