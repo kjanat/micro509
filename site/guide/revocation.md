@@ -40,7 +40,7 @@ const ca = await createSelfSignedCertificate({
 const crl = await createCertificateRevocationList({
   issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
   crlNumber: 1,
   thisUpdate: new Date(),
   nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -81,7 +81,7 @@ const ca = await createSelfSignedCertificate({
 const crl = await createCertificateRevocationList({
   issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
   crlNumber: 1,
   nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
@@ -121,7 +121,7 @@ revoked 02: ${isCertificateRevoked('02', parsed)}`);
 `next_update_not_after_this_update` unless `nextUpdate` is at least one second
 after `thisUpdate`. That ordering is a micro509 invariant, and [RFC 5280][rfc5280] and
 X.509 do not specify it. [RFC 5280 §5.2][rfc5280-section-5.2] requires the Authority Key Identifier
-and CRL Number extensions in every CRL, so `issuerPublicKey` and `crlNumber` are required too.
+and CRL Number extensions in every CRL, so `issuerCertificate` and `crlNumber` are required too.
 
 [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify how a client handles a received CRL
 without `nextUpdate`, and [§3.3][rfc5280-section-3.3] leaves the required recency of revocation data
@@ -204,7 +204,7 @@ const leaf = await createCertificate({
   subject: { commonName: 'app.example.com' },
   publicKey: leafKeys.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
 });
 
 const request = await createOcspRequest({
@@ -258,7 +258,7 @@ const leaf = await createCertificate({
   subject: { commonName: 'app.example.com' },
   publicKey: leafKeys.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
 });
 
 const nonce = crypto.getRandomValues(new Uint8Array(16));
@@ -373,7 +373,7 @@ const leaf = await createCertificate({
   subject: { commonName: 'app.example.com' },
   publicKey: leafKeys.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
 });
 
 // Leaf serial as bytes for the CRL entry
@@ -387,7 +387,7 @@ const leafSerial = Uint8Array.from(serialHex.match(/.{2}/g) ?? [], (byte) =>
 const crl = await createCertificateRevocationList({
   issuer: { commonName: 'Demo CA' },
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
   crlNumber: 1,
   nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
@@ -491,7 +491,7 @@ const leaf = await createCertificate({
   subject: { commonName: 'app.example.com' },
   publicKey: leafKeys.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
 });
 
 const ocsp = await createOcspResponse({

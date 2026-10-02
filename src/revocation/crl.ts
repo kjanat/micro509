@@ -66,7 +66,6 @@ import {
 } from '#micro509/internal/x509/extension-bits';
 import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
-import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type {
 	DecodeFailureCode,
@@ -87,10 +86,10 @@ import type {
 	IssuingDistributionPoint,
 } from '#micro509/x509/extensions';
 import {
-	buildSubjectKeyIdentifier,
 	encodeCrlDistributionPoints,
 	encodeExtension,
 	encodeSubjectAltName,
+	issuerKeyIdentifier,
 } from '#micro509/x509/extensions';
 import type { NameFieldKey, NameInput } from '#micro509/x509/name';
 import {
@@ -175,8 +174,12 @@ export interface CreateCertificateRevocationListInput {
 	readonly issuer: NameInput;
 	/** Private key used to sign the CRL. Algorithm is inferred from the key. */
 	readonly signerPrivateKey: CryptoKey;
-	/** Issuer public key. Its key identifier becomes the Authority Key Identifier extension (RFC 5280 §5.2.1). */
-	readonly issuerPublicKey: CryptoKey;
+	/**
+	 * Certificate of the CRL issuer. Its subject key identifier becomes the
+	 * Authority Key Identifier extension (RFC 5280 §5.2.1). An issuer
+	 * certificate without one yields a key identifier derived from its public key.
+	 */
+	readonly issuerCertificate: CrlCertificateSource;
 	/** Issuance timestamp. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
 	/** Date by which the next CRL will be issued. Must be at least one second later than `thisUpdate`. */
@@ -614,7 +617,7 @@ interface MutableAuthorityKeyIdentifierState {
  * const crl = await createCertificateRevocationList({
  *   issuer: { commonName: 'Example CA' },
  *   signerPrivateKey: caPrivateKey,
- *   issuerPublicKey: caPublicKey,
+ *   issuerCertificate: caCertificatePem,
  *   thisUpdate: new Date('2025-01-01'),
  *   nextUpdate: new Date('2025-02-01'),
  *   crlNumber: 42,
@@ -634,12 +637,7 @@ export async function createCertificateRevocationList(
 			'issuer must be a non-empty distinguished name',
 		);
 	}
-	if (!isExportablePublicKey(input.issuerPublicKey)) {
-		throwCrlEncoderError(
-			'issuer_public_key_invalid',
-			'issuerPublicKey must be an extractable public CryptoKey',
-		);
-	}
+	const issuerCertificate = issuerCertificateOf(input.issuerCertificate);
 	const crlNumber = encodeCrlNumber(input.crlNumber, 'crlNumber');
 	const baseCrlNumber =
 		input.baseCrlNumber === undefined
@@ -660,8 +658,8 @@ export async function createCertificateRevocationList(
 			'nextUpdate must be at least one second later than thisUpdate',
 		);
 	}
-	const extensions = await buildCrlExtensions(
-		input.issuerPublicKey,
+	const extensions = buildCrlExtensions(
+		issuerCertificate,
 		crlNumber,
 		baseCrlNumber,
 		input.issuingDistributionPoint,
@@ -2208,18 +2206,17 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 }
 
 /** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
-async function buildCrlExtensions(
-	issuerPublicKey: CryptoKey,
+function buildCrlExtensions(
+	issuerCertificate: ParsedCertificate,
 	crlNumber: Uint8Array,
 	baseCrlNumber?: Uint8Array,
 	issuingDistributionPoint?: IssuingDistributionPoint,
 	freshestCrlDistributionPoints?: readonly DistributionPoint[],
-): Promise<Uint8Array[]> {
-	const spki = await exportSpkiDer(issuerPublicKey);
+): Uint8Array[] {
 	const extensions: Uint8Array[] = [
 		encodeExtension(
 			OIDS.authorityKeyIdentifier,
-			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
+			sequence([implicitPrimitiveContext(0, issuerKeyIdentifier(issuerCertificate))]),
 		),
 		encodeExtension(OIDS.cRLNumber, crlNumber),
 	];
@@ -2637,8 +2634,8 @@ function decodeNameValue(element: DerElement): string {
 export type CrlEncoderErrorCode =
 	| 'crl_number_invalid'
 	| 'distribution_point_full_name_empty'
+	| 'issuer_certificate_invalid'
 	| 'issuer_distinguished_name_empty'
-	| 'issuer_public_key_invalid'
 	| 'invalid_date'
 	| 'next_update_not_after_this_update';
 
@@ -2647,14 +2644,17 @@ function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never
 	throwMicro509Error(code, message);
 }
 
-/** A public CryptoKey whose SPKI can be exported. */
-function isExportablePublicKey(key: unknown): boolean {
-	return (
-		typeof key === 'object' &&
-		key !== null &&
-		Reflect.get(key, 'type') === 'public' &&
-		Reflect.get(key, 'extractable') === true
-	);
+/** The parsed issuer certificate of a CRL being built. */
+function issuerCertificateOf(source: CrlCertificateSource): ParsedCertificate {
+	try {
+		return normalizeCrlCertificate(source);
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
+		return throwCrlEncoderError(
+			'issuer_certificate_invalid',
+			'issuerCertificate must be a PEM, DER or parsed certificate',
+		);
+	}
 }
 
 /** RFC 5280 §5.2.3: "Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets." */

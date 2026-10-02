@@ -27,13 +27,14 @@ async function caPem(
 	issuerCn: string,
 	subject: Party,
 	issuer: Party,
+	issuerCertificate?: string,
 ): Promise<string> {
 	const material = await createCertificate({
 		issuer: { commonName: issuerCn },
 		subject: { commonName: subjectCn },
 		publicKey: subject.publicKey,
 		signerPrivateKey: issuer.privateKey,
-		issuerPublicKey: issuer.publicKey,
+		...(issuerCertificate === undefined ? {} : { issuerCertificate }),
 		serialNumber: nextSerial(),
 		validity: VALIDITY,
 		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
@@ -46,13 +47,14 @@ async function leafPem(
 	issuerCn: string,
 	subject: Party,
 	issuer: Party,
+	issuerCertificate: string,
 ): Promise<string> {
 	const material = await createCertificate({
 		issuer: { commonName: issuerCn },
 		subject: { commonName: subjectCn },
 		publicKey: subject.publicKey,
 		signerPrivateKey: issuer.privateKey,
-		issuerPublicKey: issuer.publicKey,
+		issuerCertificate,
 		serialNumber: nextSerial(),
 		validity: VALIDITY,
 		extensions: { keyUsage: ['digitalSignature'] },
@@ -67,11 +69,11 @@ describe('path search diagnostics', () => {
 		const keyY = await party();
 		const keyL = await party();
 
-		const leaf = await leafPem('Leaf', 'M', keyL, keyM);
-		const certM1 = await caPem('M', 'Gone', keyM, keyM);
-		const certM2 = await caPem('M', 'X', keyM, keyX);
 		const certX = await caPem('X', 'Y', keyX, keyY);
-		const certY = await caPem('Y', 'X', keyY, keyX);
+		const certY = await caPem('Y', 'X', keyY, keyX, certX);
+		const certM1 = await caPem('M', 'Gone', keyM, keyM);
+		const certM2 = await caPem('M', 'X', keyM, keyX, certX);
+		const leaf = await leafPem('Leaf', 'M', keyL, keyM, certM2);
 
 		const result = await verifyCertificateChain({
 			leaf,
@@ -104,10 +106,10 @@ describe('path search diagnostics', () => {
 		const keyS = await party();
 		const keyNowhere = await party();
 
-		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ);
-		const certQ = await caPem('Q', 'S', keyQ, keyS);
 		const sCross = await caPem('S', 'Nowhere', keyS, keyNowhere);
 		const sSelf = await caPem('S', 'S', keyS, keyS);
+		const certQ = await caPem('Q', 'S', keyQ, keyS, sSelf);
+		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ, certQ);
 
 		const result = await verifyCertificateChain({
 			leaf,
@@ -141,11 +143,11 @@ describe('path search diagnostics', () => {
 		const keyT = await party();
 		const keyNowhere = await party();
 
-		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ);
-		const certQ = await caPem('Q', 'S', keyQ, keyS);
-		const sCross = await caPem('S', 'T', keyS, keyT);
-		const sSelf = await caPem('S', 'S', keyS, keyS);
 		const certT = await caPem('T', 'Nowhere', keyT, keyNowhere);
+		const sCross = await caPem('S', 'T', keyS, keyT, certT);
+		const sSelf = await caPem('S', 'S', keyS, keyS);
+		const certQ = await caPem('Q', 'S', keyQ, keyS, sSelf);
+		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ, certQ);
 
 		const result = await verifyCertificateChain({
 			leaf,
@@ -169,17 +171,11 @@ describe('path search diagnostics', () => {
 		const keyT = await party();
 		const keyU = await party();
 
-		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ);
-		const certQ = await caPem('Q', 'S', keyQ, keyS);
-		const sCross = await caPem('S', 'T', keyS, keyT);
-		const sSelf = await caPem('S', 'S', keyS, keyS);
-		const certT = await caPem('T', 'U', keyT, keyU);
 		const expiredU = await createCertificate({
 			issuer: { commonName: 'U' },
 			subject: { commonName: 'U' },
 			publicKey: keyU.publicKey,
 			signerPrivateKey: keyU.privateKey,
-			issuerPublicKey: keyU.publicKey,
 			serialNumber: nextSerial(),
 			validity: {
 				notBefore: new Date('2010-01-01T00:00:00Z'),
@@ -187,6 +183,11 @@ describe('path search diagnostics', () => {
 			},
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 		});
+		const certT = await caPem('T', 'U', keyT, keyU, expiredU.pem);
+		const sCross = await caPem('S', 'T', keyS, keyT, certT);
+		const sSelf = await caPem('S', 'S', keyS, keyS);
+		const certQ = await caPem('Q', 'S', keyQ, keyS, sSelf);
+		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ, certQ);
 
 		const result = await verifyCertificateChain({
 			leaf,

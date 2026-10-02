@@ -16,7 +16,7 @@ describe('revocation domain', () => {
 		const crl = await revocation.createCertificateRevocationList({
 			issuer: { commonName: 'Revocation Domain CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 1,
 			revokedCertificates: [],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -39,7 +39,7 @@ describe('revocation domain', () => {
 		const crl = await revocation.createCertificateRevocationList({
 			issuer: { commonName: 'Revocation Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 2,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
@@ -71,7 +71,7 @@ describe('revocation domain', () => {
 			subject: { commonName: 'ocsp-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 
 		const ocspReq = await revocation.createOcspRequest({
@@ -102,7 +102,7 @@ describe('revocation domain', () => {
 			subject: { commonName: 'no-evidence.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 
 		const result = await revocation.checkCertificateRevocation({

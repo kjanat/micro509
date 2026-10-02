@@ -114,7 +114,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'Shared Intermediate' },
 			publicKey: badIntermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
@@ -125,7 +125,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'Shared Intermediate' },
 			publicKey: goodIntermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -137,7 +137,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'multi-path.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: goodIntermediateKeys.privateKey,
-			issuerPublicKey: goodIntermediateKeys.publicKey,
+			issuerCertificate: goodIntermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -173,7 +173,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'Intermediate CA' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -185,7 +185,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'service.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -323,7 +323,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'Path Length Leaf CA' },
 			publicKey: pathLengthLeafCaKeys.publicKey,
 			signerPrivateKey: pathLengthLeafCaRoot.keyPair.privateKey,
-			issuerPublicKey: pathLengthLeafCaRoot.keyPair.publicKey,
+			issuerCertificate: pathLengthLeafCaRoot.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -336,9 +336,11 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({ ok: true });
 
-		const wrongAkiKeys = await generateKeyPair();
+		const wrongAkiIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Wrong AKI Issuer' },
+		});
 		const akiMismatchChain = await issueChain({
-			leafIssuerPublicKey: wrongAkiKeys.publicKey,
+			leafIssuerCertificate: wrongAkiIssuer.certificate.der,
 		});
 		expect(
 			await verifyCertificateChain({
@@ -423,7 +425,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'teletex-chain.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		expect(await verifyCertificateChain({ leaf: leaf.pem, roots: [caDer] })).toMatchObject({
 			ok: true,
@@ -705,7 +707,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'rsa-leaf-384' },
 			publicKey: rsaLeafKeys.publicKey,
 			signerPrivateKey: rsaCaKeys.privateKey,
-			issuerPublicKey: rsaCaKeys.publicKey,
+			issuerCertificate: rsaCa.certificate.der,
 		});
 
 		expect(
@@ -736,7 +738,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'p384-leaf' },
 			publicKey: p384LeafKeys.publicKey,
 			signerPrivateKey: p384CaKeys.privateKey,
-			issuerPublicKey: p384CaKeys.publicKey,
+			issuerCertificate: p384Ca.certificate.der,
 		});
 
 		expect(
@@ -767,7 +769,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'p521-leaf' },
 			publicKey: p521LeafKeys.publicKey,
 			signerPrivateKey: p521CaKeys.privateKey,
-			issuerPublicKey: p521CaKeys.publicKey,
+			issuerCertificate: p521Ca.certificate.der,
 		});
 
 		expect(
@@ -793,7 +795,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ed25519-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'ed25519-leaf.example' }],
@@ -830,7 +832,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'rsa-pss-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: rootKeys.privateKey,
-			issuerPublicKey: rootKeys.publicKey,
+			issuerCertificate: root.certificate.der,
 		});
 		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
 			rootKeys.privateKey,
@@ -881,7 +883,7 @@ describe('chain verification', () => {
 				subject: { commonName: `rsa-pss-${testCase.hash}-leaf` },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: rootKeys.privateKey,
-				issuerPublicKey: rootKeys.publicKey,
+				issuerCertificate: root.certificate.der,
 			});
 			const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
 				rootKeys.privateKey,
@@ -928,7 +930,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'rsa-pss-unsupported-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: rootKeys.privateKey,
-			issuerPublicKey: rootKeys.publicKey,
+			issuerCertificate: root.certificate.der,
 		});
 		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
 			rootKeys.privateKey,
@@ -982,7 +984,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'rsa-pss-malformed-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: rootKeys.privateKey,
-			issuerPublicKey: rootKeys.publicKey,
+			issuerCertificate: root.certificate.der,
 		});
 		const malformedLeafDer = replaceCertificateSignatureAlgorithm(
 			leaf.der,
@@ -1022,7 +1024,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'critical.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'critical.example' }],
@@ -1058,7 +1060,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'critical-san.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				customExtensions: [
@@ -1090,7 +1092,7 @@ describe('chain verification', () => {
 				subject: {},
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				extensions: { keyUsage: ['digitalSignature'], subjectAltNames },
 			});
 		const processed = await issueLeaf([{ type: 'registeredID', value: '1.2.3.4' }]);
@@ -1127,7 +1129,7 @@ describe('chain verification', () => {
 				subject: { commonName: 'critical-other-name.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				extensions: {
 					keyUsage: ['digitalSignature'],
 					customExtensions: [{ oid: OIDS.subjectAltName, critical: true, value: sequence([name]) }],
@@ -1175,7 +1177,7 @@ describe('chain verification', () => {
 			subject: { organization: 'Blocked Org', commonName: 'malformed-directory-name.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				customExtensions: [
@@ -1218,7 +1220,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'noncritical-san.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				customExtensions: [
@@ -1251,7 +1253,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'noncritical.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'noncritical.example' }],
@@ -1275,7 +1277,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'critical-ian.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'critical-ian.example' }],
@@ -1347,7 +1349,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'Bare Anchor Top CA' },
 			publicKey: topKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1359,7 +1361,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'bare-anchor-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: topKeys.privateKey,
-			issuerPublicKey: topKeys.publicKey,
+			issuerCertificate: topCa.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
@@ -1400,7 +1402,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'collision-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: anchor.keyPair.privateKey,
-			issuerPublicKey: anchor.keyPair.publicKey,
+			issuerCertificate: anchor.certificate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const result = await verifyCertificateChain({
@@ -1474,7 +1476,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'rsa-pss-anchor-intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: rootKeys.privateKey,
-			issuerPublicKey: rootKeys.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1490,7 +1492,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'rsa-pss-anchor-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 		});
 		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
 			rootKeys.privateKey,
@@ -1545,7 +1547,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'allowed.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'allowed.example.com' }],
@@ -1575,7 +1577,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'evil.notexample.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'evil.notexample.com' }],
@@ -1608,7 +1610,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'host.forbidden.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'host.forbidden.example.com' }],
@@ -1638,7 +1640,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'NC Intermediate CA' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1653,7 +1655,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'host.narrow.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'host.narrow.example.com' }],
@@ -1673,7 +1675,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'other.example.com' },
 			publicKey: badLeafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'other.example.com' }],
@@ -1715,7 +1717,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ip-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'ip', value: '10.1.2.3' }],
@@ -1734,7 +1736,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ip-leaf-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'ip', value: '192.168.1.1' }],
@@ -1767,7 +1769,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'user@example.com' }],
@@ -1786,7 +1788,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-leaf-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'user@otherdomain.com' }],
@@ -1859,7 +1861,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'NC Self-Issued Root' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1871,7 +1873,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ok.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'ok.example.com' }],
@@ -1899,7 +1901,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'Initial NC Self-Issued Root' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1912,7 +1914,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ok.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'ok.example.com' }],
@@ -1967,7 +1969,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'NC Self-Issued Leaf Root' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'evil.org' }],
@@ -2003,7 +2005,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-exact-ok' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://example.com/path' }],
@@ -2022,7 +2024,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-sub-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://sub.example.com/path' }],
@@ -2073,7 +2075,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'other-org.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'test.example.com' }],
@@ -2123,7 +2125,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'NC DN SAN Root' }, // subject matches
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [
@@ -2167,7 +2169,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-exact-ok' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'user@example.com' }],
@@ -2187,7 +2189,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-exact-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'other@example.com' }],
@@ -2220,7 +2222,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-sub-ok' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'user@sub.example.com' }],
@@ -2240,7 +2242,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-sub-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'user@example.com' }],
@@ -2271,7 +2273,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'anything.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'anything.example' }],
@@ -2303,7 +2305,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'sub-dot-dns' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'sub.example.com' }],
@@ -2344,7 +2346,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ipv6-ok' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'ip', value: '2001:db8::1' }],
@@ -2364,7 +2366,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'ipv6-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'ip', value: 'fe80::1' }],
@@ -2396,7 +2398,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-no-scheme' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'mailto:user@example.com' }],
@@ -2428,7 +2430,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-empty-ok' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://anything.example.com/path' }],
@@ -2460,7 +2462,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-userinfo' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://user@example.com/path' }],
@@ -2491,7 +2493,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-port' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://example.com:8443' }],
@@ -2570,7 +2572,7 @@ describe('chain verification', () => {
 				subject: { commonName: 'unsupported-nc.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: {
 					keyUsage: ['digitalSignature'],
 					...(subjectAltNames !== undefined ? { subjectAltNames } : {}),
@@ -2777,7 +2779,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-ok', emailAddress: 'user@example.com' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
@@ -2796,7 +2798,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'email-bad', emailAddress: 'user@evil.org' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
@@ -2829,7 +2831,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-ok' },
 			publicKey: okKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://app.example.com/path' }],
@@ -2847,7 +2849,7 @@ describe('chain verification', () => {
 			subject: { commonName: 'uri-bad' },
 			publicKey: badKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://evil.org/sneaky' }],
@@ -3077,7 +3079,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'tls-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -3107,7 +3109,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'tls-purpose-first' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -3141,7 +3143,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'client-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -3160,7 +3162,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'server-only' },
 			publicKey: serverLeafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -3187,7 +3189,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'Policy Mapping Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3201,7 +3203,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'policy-client-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -3247,7 +3249,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'policy-outcome-client' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -3283,7 +3285,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'initial-name-constraint-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -3312,7 +3314,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'code-sign-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['codeSigning'],
@@ -3331,7 +3333,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'server-leaf' },
 			publicKey: wrongLeafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -3358,7 +3360,7 @@ describe('validation profiles', () => {
 			subject: { commonName: 'Sub CA' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3405,7 +3407,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'mismatched-issuer-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: realCa.keyPair.privateKey,
-			issuerPublicKey: realCa.keyPair.publicKey,
+			issuerCertificate: realCa.certificate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const result = await validateCandidatePath({
@@ -3452,7 +3454,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Direct Mapping Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3466,7 +3468,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'direct-mapped-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
@@ -3515,7 +3517,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'First Mapping Intermediate' },
 			publicKey: firstIntermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 1 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3529,7 +3531,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Second Mapping Intermediate' },
 			publicKey: secondIntermediateKeys.publicKey,
 			signerPrivateKey: firstIntermediateKeys.privateKey,
-			issuerPublicKey: firstIntermediateKeys.publicKey,
+			issuerCertificate: firstIntermediate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3543,7 +3545,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'multi-hop-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: secondIntermediateKeys.privateKey,
-			issuerPublicKey: secondIntermediateKeys.publicKey,
+			issuerCertificate: secondIntermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
@@ -3575,7 +3577,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Mapping Bridge' },
 			publicKey: constrainedKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 2 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3590,7 +3592,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Mapping Bridge' },
 			publicKey: selfIssuedKeys.publicKey,
 			signerPrivateKey: constrainedKeys.privateKey,
-			issuerPublicKey: constrainedKeys.publicKey,
+			issuerCertificate: constrainedIntermediate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 1 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3603,7 +3605,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Mapped Intermediate' },
 			publicKey: mappedKeys.publicKey,
 			signerPrivateKey: selfIssuedKeys.privateKey,
-			issuerPublicKey: selfIssuedKeys.publicKey,
+			issuerCertificate: selfIssuedIntermediate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3617,7 +3619,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'mapping-counter-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: mappedKeys.privateKey,
-			issuerPublicKey: mappedKeys.publicKey,
+			issuerCertificate: mappedIntermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
@@ -3641,7 +3643,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Normal Mapping Bridge' },
 			publicKey: normalBridgeKeys.publicKey,
 			signerPrivateKey: constrainedKeys.privateKey,
-			issuerPublicKey: constrainedKeys.publicKey,
+			issuerCertificate: constrainedIntermediate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 1 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3654,7 +3656,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Normal Mapped Intermediate' },
 			publicKey: normalMappedKeys.publicKey,
 			signerPrivateKey: normalBridgeKeys.privateKey,
-			issuerPublicKey: normalBridgeKeys.publicKey,
+			issuerCertificate: normalBridge.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3668,7 +3670,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'blocked-mapping-counter-leaf' },
 			publicKey: blockedLeafKeys.publicKey,
 			signerPrivateKey: normalMappedKeys.privateKey,
-			issuerPublicKey: normalMappedKeys.publicKey,
+			issuerCertificate: normalMappedIntermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
@@ -3709,7 +3711,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
@@ -3746,7 +3748,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'wrong-policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
@@ -3783,7 +3785,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'no-policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 			},
@@ -3819,7 +3821,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Constrained Policy Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3832,7 +3834,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'constrained-policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 			},
@@ -3861,7 +3863,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'any-policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
@@ -3908,7 +3910,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'Policy Processed Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3924,7 +3926,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'processed-policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
@@ -3958,7 +3960,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'narrow.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'narrow.example.com' }],
@@ -3970,7 +3972,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'wide.example.com' },
 			publicKey: blockedLeafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'wide.example.com' }],
@@ -4025,7 +4027,7 @@ describe('validateCandidatePath direct', () => {
 			subject: { commonName: 'any-initial-policy-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
@@ -4301,9 +4303,11 @@ describe('validateCandidatePath direct', () => {
 	});
 
 	it('detects authority_key_identifier_mismatch in candidate path', async () => {
-		const wrongAkiKeys = await generateKeyPair();
+		const wrongAkiIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Wrong AKI Issuer' },
+		});
 		const chain = await issueChain({
-			leafIssuerPublicKey: wrongAkiKeys.publicKey,
+			leafIssuerCertificate: wrongAkiIssuer.certificate.der,
 		});
 		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
 		const intParsed = unwrap(parseCertificatePem(chain.intermediate.pem));
@@ -4356,7 +4360,7 @@ describe('checkExtendedKeyUsage edge cases', () => {
 			subject: { commonName: 'EKU Intermediate' },
 			publicKey: intKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -4369,7 +4373,7 @@ describe('checkExtendedKeyUsage edge cases', () => {
 			subject: { commonName: 'eku-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intKeys.privateKey,
-			issuerPublicKey: intKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -4404,7 +4408,7 @@ it('accepts purpose=ca when leaf IS a CA', async () => {
 		subject: { commonName: 'Sub CA' },
 		publicKey: subCaKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		extensions: {
 			basicConstraints: { ca: true, pathLength: 0 },
 			keyUsage: ['keyCertSign', 'cRLSign'],
@@ -4435,7 +4439,7 @@ describe('buildCandidatePath edge cases', () => {
 			subject: { commonName: 'Expired Intermediate' },
 			publicKey: intKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			validity: {
 				notBefore: new Date('2020-01-01T00:00:00Z'),
 				notAfter: new Date('2020-12-31T23:59:59Z'),
@@ -4451,7 +4455,7 @@ describe('buildCandidatePath edge cases', () => {
 			subject: { commonName: 'build-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intKeys.privateKey,
-			issuerPublicKey: intKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const result = await buildCandidatePath({
@@ -4504,7 +4508,7 @@ describe('validateForTlsServer with CN fallback', () => {
 			subject: { commonName: 'tls-cn.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -4536,7 +4540,7 @@ describe('validateForTlsServer with CN fallback', () => {
 			subject: { commonName: 'tls-cn.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -4577,7 +4581,7 @@ describe('validateForTlsServer with CN fallback', () => {
 			subject: { commonName: 'tls-ip-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -4647,7 +4651,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'ipv4-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'ip', value: '10.0.0.1' }],
@@ -4681,7 +4685,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { organization: '  ALLOWED   ORG  ', commonName: 'DN Leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'leaf.example' }],
@@ -4726,7 +4730,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'DN Leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'directoryName', derHex: sanDerHex }],
@@ -4765,7 +4769,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'DN Leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'directoryName', derHex: sanDerHex }],
@@ -4795,7 +4799,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'nc-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [
@@ -4828,7 +4832,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'email-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'malformed-no-at' }],
@@ -4859,7 +4863,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'email-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'email', value: 'user@sub.example.com' }],
@@ -4889,7 +4893,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'uri-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'uri', value: 'https://sub.example.com/path' }],
@@ -4927,7 +4931,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'ip-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'ip', value: '10.1.2.3' }],
@@ -4957,7 +4961,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'excl-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'host.blocked.com' }],
@@ -4992,7 +4996,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 			subject: { commonName: 'dual-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root1.keyPair.privateKey,
-			issuerPublicKey: root1.keyPair.publicKey,
+			issuerCertificate: root1.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'dual-leaf.example' }],
@@ -5024,7 +5028,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'tamper-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'tamper-leaf.example' }],
@@ -5249,7 +5253,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'tampered-eku.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -5279,7 +5283,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'tampered-eku-check.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
@@ -5456,7 +5460,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'Rank Intermediate' },
 			publicKey: intKeysA.publicKey,
 			signerPrivateKey: rootA.keyPair.privateKey,
-			issuerPublicKey: rootA.keyPair.publicKey,
+			issuerCertificate: rootA.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign'],
@@ -5468,7 +5472,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'Rank Intermediate' },
 			publicKey: intKeysB.publicKey,
 			signerPrivateKey: rootB.keyPair.privateKey,
-			issuerPublicKey: rootB.keyPair.publicKey,
+			issuerCertificate: rootB.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign'],
@@ -5481,7 +5485,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'rank-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intKeysA.privateKey,
-			issuerPublicKey: intKeysA.publicKey,
+			issuerCertificate: intA.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'rank-leaf.example' }],
@@ -5513,7 +5517,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'Order Intermediate' },
 			publicKey: intKeysA.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign'],
@@ -5525,7 +5529,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'Order Intermediate' },
 			publicKey: intKeysB.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign'],
@@ -5538,7 +5542,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'order-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intKeysA.privateKey,
-			issuerPublicKey: intKeysA.publicKey,
+			issuerCertificate: intA.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'order-leaf.example' }],
@@ -5600,7 +5604,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 	});
 
 	it('rankIssuerCandidates falls through AKI tie to root tie to order (lines 1078-1088)', async () => {
-		// Two intermediates with same subject DN. Leaf has NO AKI (omit issuerPublicKey)
+		// Two intermediates with same subject DN. Leaf has NO AKI (omit issuerCertificate)
 		// → AKI tie (both false). Neither intermediate is in the roots set → root tie.
 		// Order tiebreaker decides: intA listed first → tried first.
 		const root = await createSelfSignedCertificate({
@@ -5616,7 +5620,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'Order3 Int' },
 			publicKey: intKeysA.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign'],
@@ -5628,13 +5632,13 @@ describe('coverage: verify.ts internal edge cases', () => {
 			subject: { commonName: 'Order3 Int' },
 			publicKey: intKeysB.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		// Leaf WITHOUT issuerPublicKey → no AKI extension
+		// Leaf WITHOUT issuerCertificate → no AKI extension
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { commonName: 'Order3 Int' },

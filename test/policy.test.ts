@@ -45,7 +45,7 @@ async function issuePolicyFixtureChain(options: {
 
 	let issuerCommonName = rootCommonName;
 	let issuerPrivateKey = root.keyPair.privateKey;
-	let issuerPublicKey = root.keyPair.publicKey;
+	let issuerCertificate = root.certificate.der;
 	const intermediatePems: string[] = [];
 
 	for (let index = 0; index < intermediates.length; index += 1) {
@@ -59,7 +59,7 @@ async function issuePolicyFixtureChain(options: {
 			subject: { commonName: intermediateSpec.commonName },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: issuerPrivateKey,
-			issuerPublicKey: issuerPublicKey,
+			issuerCertificate,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: intermediates.length - index - 1 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -78,7 +78,7 @@ async function issuePolicyFixtureChain(options: {
 		intermediatePems.push(intermediate.pem);
 		issuerCommonName = intermediateSpec.commonName;
 		issuerPrivateKey = intermediateKeys.privateKey;
-		issuerPublicKey = intermediateKeys.publicKey;
+		issuerCertificate = intermediate.der;
 	}
 
 	const leafKeys = await generateKeyPair();
@@ -87,7 +87,7 @@ async function issuePolicyFixtureChain(options: {
 		subject: { commonName: 'policy-fixture-leaf' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: issuerPrivateKey,
-		issuerPublicKey: issuerPublicKey,
+		issuerCertificate,
 		extensions: {
 			keyUsage: ['digitalSignature'],
 			...(options.leafPolicies === undefined
@@ -575,7 +575,7 @@ describe('policy fixtures', () => {
 			subject: { commonName: 'Qualifier Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -594,7 +594,7 @@ describe('policy fixtures', () => {
 			subject: { commonName: 'qualifier-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				certificatePolicies: [
