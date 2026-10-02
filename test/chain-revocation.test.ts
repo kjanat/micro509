@@ -842,6 +842,53 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		}
 	});
 
+	it('reports a certificate hold that is fresher than the good OCSP evidence', async () => {
+		const { ca, leaf, chain, at } = await createOcspChainFixture();
+		const goodThisUpdate = new Date(at.getTime() - 2 * HOUR_MS);
+		const holdThisUpdate = new Date(at.getTime() - HOUR_MS);
+		const nextUpdate = new Date(at.getTime() + HOUR_MS);
+		const respond = (thisUpdate: Date, hold: boolean) =>
+			createOcspResponse({
+				signerPrivateKey: ca.keyPair.privateKey,
+				signerCertificate: ca.certificate.pem,
+				responses: [
+					hold
+						? {
+								certificate: leaf.pem,
+								issuerCertificate: ca.certificate.pem,
+								certStatus: 'revoked',
+								revokedAt: thisUpdate,
+								revocationReasonCode: 6,
+								thisUpdate,
+								nextUpdate,
+							}
+						: {
+								certificate: leaf.pem,
+								issuerCertificate: ca.certificate.pem,
+								certStatus: 'good',
+								thisUpdate,
+								nextUpdate,
+							},
+				],
+			});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [
+				(await respond(goodThisUpdate, false)).der,
+				(await respond(holdThisUpdate, true)).der,
+			],
+			at,
+		});
+
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]).toMatchObject({
+			status: 'revoked',
+			source: { kind: 'ocsp' },
+			revocationInfo: { reason: 'certificateHold' },
+		});
+	});
+
 	it('treats OCSP unknown status as indeterminate', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const response = await createOcspResponse({
