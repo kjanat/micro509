@@ -3980,6 +3980,69 @@ describe('crl', () => {
 		).toThrow('CRL extension value must use OCTET STRING');
 	});
 
+	it('parseCertificateRevocationListDerOrThrow rejects trailing data after CRL and entry extension values', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Trailing CRL Extension Value CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Trailing CRL Extension Value CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+			baseCrlNumber: 5,
+			revokedCertificates: [
+				{
+					serialNumber: Uint8Array.of(1),
+					reasonCode: 'keyCompromise',
+					invalidityDate: new Date('2024-01-01T00:00:00Z'),
+				},
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const generalizedTime = tlv(0x18, new TextEncoder().encode('20240101000000Z'));
+		const withTrailingByte = (der: Uint8Array) => Uint8Array.of(...der, 0x00);
+
+		for (const rewritten of [
+			rewriteCrlExtensionValuePayload(
+				crl.der,
+				OIDS.cRLNumber,
+				Uint8Array.of(0x02, 0x01, 0x07, 0x00),
+			),
+			rewriteCrlExtensionValuePayload(
+				crl.der,
+				OIDS.deltaCRLIndicator,
+				Uint8Array.of(0x02, 0x01, 0x05, 0x00),
+			),
+			rewriteFirstRevokedEntryExtensionValuePayload(
+				crl.der,
+				OIDS.cRLReason,
+				Uint8Array.of(0x0a, 0x01, 0x01, 0x00),
+			),
+			rewriteFirstRevokedEntryExtensionValuePayload(
+				crl.der,
+				OIDS.invalidityDate,
+				withTrailingByte(generalizedTime),
+			),
+		]) {
+			expect(() => parseCertificateRevocationListDerOrThrow(rewritten)).toThrow(
+				'Trailing data after DER element',
+			);
+		}
+		expect(
+			parseCertificateRevocationListDerOrThrow(
+				rewriteFirstRevokedEntryExtensionValuePayload(
+					crl.der,
+					OIDS.invalidityDate,
+					generalizedTime,
+				),
+			).revokedCertificates[0]?.invalidityDate,
+		).toEqual(new Date('2024-01-01T00:00:00Z'));
+	});
+
 	it('parseCertificateRevocationListDerOrThrow rejects malformed CRL extension middle fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Middle Field CA' },
