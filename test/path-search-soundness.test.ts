@@ -47,6 +47,7 @@ async function issueCa(
 	issuerCn: string,
 	subject: Party,
 	issuer: Party,
+	issuerCertificate: string | undefined,
 	pathLength?: number,
 ): Promise<Cert> {
 	const basicConstraints =
@@ -56,7 +57,7 @@ async function issueCa(
 		subject: { commonName: subjectCn },
 		publicKey: subject.publicKey,
 		signerPrivateKey: issuer.privateKey,
-		issuerPublicKey: issuer.publicKey,
+		...(issuerCertificate === undefined ? {} : { issuerCertificate }),
 		serialNumber: nextSerial(),
 		validity: VALIDITY,
 		extensions: { basicConstraints, keyUsage: ['keyCertSign', 'cRLSign'] },
@@ -76,13 +77,14 @@ async function issueLeaf(
 	issuerCn: string,
 	subject: Party,
 	issuer: Party,
+	issuerCertificate: string | undefined,
 ): Promise<Cert> {
 	const material = await createCertificate({
 		issuer: { commonName: issuerCn },
 		subject: { commonName: subjectCn },
 		publicKey: subject.publicKey,
 		signerPrivateKey: issuer.privateKey,
-		issuerPublicKey: issuer.publicKey,
+		...(issuerCertificate === undefined ? {} : { issuerCertificate }),
 		serialNumber: nextSerial(),
 		validity: VALIDITY,
 		extensions: { keyUsage: ['digitalSignature'] },
@@ -254,19 +256,32 @@ async function buildMeshFixture(): Promise<MeshFixture> {
 		if (found === undefined) throw new Error(`no party ${cn}`);
 		return found;
 	};
-	const ca = (subject: string, issuer: string, pathLength?: number) => {
+	const issued = new Map<string, Cert>([
+		['R', root.cert],
+		['R2', root2.cert],
+	]);
+	const certificateOf = (cn: string): string | undefined =>
+		(issued.get(cn) ?? issued.get(`${cn}/R`))?.pem;
+	const ca = async (subject: string, issuer: string, pathLength?: number) => {
 		const suffix = pathLength === undefined ? '' : `:pl${pathLength}`;
-		return issueCa(
-			`${subject}/${issuer}${suffix}`,
+		const name = `${subject}/${issuer}${suffix}`;
+		const existing = issued.get(name);
+		if (existing !== undefined) return existing;
+		const cert = await issueCa(
+			name,
 			subject,
 			issuer,
 			partyOf(subject),
 			partyOf(issuer),
+			subject === issuer ? undefined : certificateOf(issuer),
 			pathLength,
 		);
+		issued.set(name, cert);
+		return cert;
 	};
 	const subjects = ['A', 'B', 'C', 'D'] as const;
 	const issuers = ['R', 'R2', 'A', 'B', 'C', 'D'] as const;
+	for (const subject of subjects) await ca(subject, 'R');
 	const pool: Cert[] = [root2.cert];
 	for (const subject of subjects) {
 		for (const issuer of issuers) {
@@ -277,7 +292,16 @@ async function buildMeshFixture(): Promise<MeshFixture> {
 	}
 	const leaves: Cert[] = [];
 	for (const subject of subjects) {
-		leaves.push(await issueLeaf(`L/${subject}`, 'Leaf', subject, leafKeys, partyOf(subject)));
+		leaves.push(
+			await issueLeaf(
+				`L/${subject}`,
+				'Leaf',
+				subject,
+				leafKeys,
+				partyOf(subject),
+				certificateOf(subject),
+			),
+		);
 	}
 	return {
 		rootCert: root.cert,

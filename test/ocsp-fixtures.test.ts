@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParsedCertificate } from '#micro509';
 import {
 	createCertificate,
 	createCertificateRevocationList,
@@ -38,7 +39,7 @@ interface FixtureResponderInput {
 	readonly organization?: string;
 	readonly issuerCommonName?: string;
 	readonly signerPrivateKey?: CryptoKey;
-	readonly issuerPublicKey?: CryptoKey;
+	readonly issuerCertificate?: string | Uint8Array | ParsedCertificate;
 	readonly extendedKeyUsage?: readonly ('ocspSigning' | 'serverAuth')[];
 }
 
@@ -68,7 +69,7 @@ async function issueOcspFixtureAuthority(commonName: string) {
 			subject: { commonName: leafCommonName },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 	}
 
@@ -82,7 +83,7 @@ async function issueOcspFixtureAuthority(commonName: string) {
 			},
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: options.signerPrivateKey ?? issuer.keyPair.privateKey,
-			issuerPublicKey: options.issuerPublicKey ?? issuer.keyPair.publicKey,
+			issuerCertificate: options.issuerCertificate ?? issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				...(options.extendedKeyUsage === undefined
@@ -419,7 +420,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			subject: { commonName: `${commonName} leaf` },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		return { commonName, ca, leaf };
 	}
@@ -437,7 +438,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			subject: { commonName: `${authority.commonName} responder` },
 			publicKey: keys.publicKey,
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			...(options?.validity !== undefined ? { validity: options.validity } : {}),
 			extensions: {
 				extendedKeyUsage: ['ocspSigning'],
@@ -479,7 +480,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			subject: { commonName: 'Externally Trusted Responder' },
 			publicKey: rogueKeys.publicKey,
 			signerPrivateKey: unrelated.ca.keyPair.privateKey,
-			issuerPublicKey: unrelated.ca.keyPair.publicKey,
+			issuerCertificate: unrelated.ca.certificate.der,
 		});
 		const response = await goodResponse(authority, rogueKeys.privateKey, responder.pem, true);
 
@@ -532,7 +533,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
@@ -561,7 +562,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
@@ -588,7 +589,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			revokedCertificates: [
 				{ serialNumber: hexToBytes(responderSerial), reasonCode: 'superseded' },
 			],
@@ -647,7 +648,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(

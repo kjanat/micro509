@@ -976,7 +976,7 @@ export interface IssueChainOptions {
 		readonly type: 'dns' | 'ip' | 'uri' | 'srv';
 		readonly value: string;
 	}[];
-	readonly leafIssuerPublicKey?: CryptoKey;
+	readonly leafIssuerCertificate?: string | Uint8Array | ParsedCertificate;
 	readonly leafSignerPrivateKey?: CryptoKey;
 }
 
@@ -994,7 +994,7 @@ export async function issueChain(options: IssueChainOptions = {}) {
 		subject: { commonName: 'Verify Intermediate CA' },
 		publicKey: intermediateKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		extensions: options.intermediateExtensions ?? {
 			basicConstraints: { ca: true, pathLength: 0 },
 			keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1006,7 +1006,7 @@ export async function issueChain(options: IssueChainOptions = {}) {
 		subject: { commonName: 'verify.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: options.leafSignerPrivateKey ?? intermediateKeys.privateKey,
-		issuerPublicKey: options.leafIssuerPublicKey ?? intermediateKeys.publicKey,
+		issuerCertificate: options.leafIssuerCertificate ?? intermediate.der,
 		...(options.leafValidity !== undefined ? { validity: options.leafValidity } : {}),
 		extensions: {
 			keyUsage: ['digitalSignature'],

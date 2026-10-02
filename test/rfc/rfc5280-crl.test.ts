@@ -66,7 +66,7 @@ describe('RFC 5280', () => {
 				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				thisUpdate: THIS_UPDATE,
 				nextUpdate,
 			});
@@ -79,7 +79,7 @@ describe('RFC 5280', () => {
 				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				thisUpdate: THIS_UPDATE,
 				nextUpdate: new Date('2025-01-08T00:00:00Z'),
 			});
@@ -104,7 +104,7 @@ describe('RFC 5280', () => {
 						crlNumber: 1,
 						issuer: { commonName: 'RFC 5280 CRL CA' },
 						signerPrivateKey: ca.keyPair.privateKey,
-						issuerPublicKey: ca.keyPair.publicKey,
+						issuerCertificate: ca.certificate.der,
 						thisUpdate: THIS_UPDATE,
 						nextUpdate,
 					}),
@@ -120,7 +120,7 @@ describe('RFC 5280', () => {
 					crlNumber: 1,
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					nextUpdate: THIS_UPDATE,
 				}),
 				'next_update_not_after_this_update',
@@ -152,7 +152,7 @@ describe('RFC 5280', () => {
 				createCertificateRevocationList({
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					crlNumber: 1,
 					thisUpdate: THIS_UPDATE,
 					nextUpdate: new Date('2025-01-08T00:00:00Z'),
@@ -169,7 +169,7 @@ describe('RFC 5280', () => {
 				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				thisUpdate: THIS_UPDATE,
 				nextUpdate,
 			});
@@ -183,7 +183,7 @@ describe('RFC 5280', () => {
 			const crl = await createCertificateRevocationList({
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				crlNumber: 42,
 				thisUpdate: THIS_UPDATE,
 				nextUpdate: new Date('2025-01-08T00:00:00Z'),
@@ -214,21 +214,38 @@ describe('RFC 5280', () => {
 			);
 		});
 
-		it('refuses an issuerPublicKey that is missing, private or not a CryptoKey as issuer_public_key_invalid', async () => {
+		it('refuses an issuerCertificate that does not parse as issuer_certificate_invalid', async () => {
 			const ca = await crlIssuer();
-			for (const issuerPublicKey of [undefined, ca.keyPair.privateKey, {}]) {
+			for (const issuerCertificate of [
+				undefined,
+				'not a certificate',
+				Uint8Array.of(0x30, 0x00),
+				ca.certificate.der.slice(0, -1),
+			]) {
 				await expectRejectedErrorCode(
 					Reflect.apply(createCertificateRevocationList, undefined, [
 						{
 							issuer: { commonName: 'RFC 5280 CRL CA' },
 							signerPrivateKey: ca.keyPair.privateKey,
-							issuerPublicKey,
+							issuerCertificate,
 							crlNumber: 1,
 							thisUpdate: THIS_UPDATE,
 							nextUpdate: new Date('2025-01-08T00:00:00Z'),
 						},
 					]),
-					'issuer_public_key_invalid',
+					'issuer_certificate_invalid',
+				);
+				await expectRejectedErrorCode(
+					Reflect.apply(createCertificate, undefined, [
+						{
+							issuer: { commonName: 'RFC 5280 CRL CA' },
+							subject: { commonName: 'issuer-certificate-invalid.example' },
+							publicKey: ca.keyPair.publicKey,
+							signerPrivateKey: ca.keyPair.privateKey,
+							issuerCertificate: issuerCertificate ?? null,
+						},
+					]),
+					'issuer_certificate_invalid',
 				);
 			}
 		});
@@ -260,7 +277,7 @@ describe('RFC 5280', () => {
 			return createCertificateRevocationList({
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				crlNumber,
 				...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
 				thisUpdate: THIS_UPDATE,
@@ -296,7 +313,7 @@ describe('RFC 5280', () => {
 					{
 						issuer: { commonName: 'RFC 5280 CRL CA' },
 						signerPrivateKey: ca.keyPair.privateKey,
-						issuerPublicKey: ca.keyPair.publicKey,
+						issuerCertificate: ca.certificate.der,
 						nextUpdate: new Date('2025-01-08T00:00:00Z'),
 						thisUpdate: THIS_UPDATE,
 					},
@@ -313,14 +330,14 @@ describe('RFC 5280', () => {
 				subject: { commonName: 'long-crl-number.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 			});
 			const base = 1n << 64n;
 			const issue = (crlNumber: bigint, deltaFields: object) =>
 				createCertificateRevocationList({
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
-					issuerPublicKey: ca.keyPair.publicKey,
+					issuerCertificate: ca.certificate.der,
 					crlNumber,
 					nextUpdate: new Date(Date.now() + DAY_MS),
 					...deltaFields,
@@ -373,7 +390,7 @@ async function crlPki() {
 		subject: { commonName: 'rfc5280-crl-leaf.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: ca.keyPair.privateKey,
-		issuerPublicKey: ca.keyPair.publicKey,
+		issuerCertificate: ca.certificate.der,
 	});
 	const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 	const chain: readonly ParsedCertificate[] = [
@@ -384,7 +401,7 @@ async function crlPki() {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: CA_NAME },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			thisUpdate: fields.thisUpdate,
 			nextUpdate: fields.nextUpdate,
 			crlNumber: fields.crlNumber,
@@ -656,7 +673,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			subject: { commonName: 'RFC 5280 Signer Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -668,7 +685,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			subject: { commonName: 'RFC 5280 Signer Intermediate' },
 			publicKey: signerKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: { keyUsage: ['cRLSign'] },
 		});
 		const leafKeys = await generateKeyPair();
@@ -677,14 +694,14 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			subject: { commonName: 'rfc5280-signer-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const signerRevokedByOldCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			thisUpdate: shift(at, -10 * DAY_MS),
 			nextUpdate: shift(at, 10 * DAY_MS),
 			revokedCertificates: [
@@ -699,7 +716,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			crlNumber: 1,
 			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
-			issuerPublicKey: signerKeys.publicKey,
+			issuerCertificate: signer.der,
 			thisUpdate: shift(at, -HOUR_MS),
 			nextUpdate: shift(at, HOUR_MS),
 		});
@@ -730,7 +747,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 				subject: { commonName: 'RFC 5280 CRL responder' },
 				publicKey: responderKeys.publicKey,
 				signerPrivateKey: pki.ca.keyPair.privateKey,
-				issuerPublicKey: pki.ca.keyPair.publicKey,
+				issuerCertificate: pki.ca.certificate.der,
 				extensions: { extendedKeyUsage: ['ocspSigning'] },
 			});
 			const response = await createOcspResponse({

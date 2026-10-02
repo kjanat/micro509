@@ -70,7 +70,7 @@ const leaf = await createCertificate({
   validity: { days: 90 },
   publicKey: leafKeyPair.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
   extensions: {
     keyUsage: ['digitalSignature'],
     subjectAltNames: [{ type: 'dns', value: 'leaf.example.com' }],
@@ -209,7 +209,7 @@ const leaf = await createCertificate({
   subject: { commonName: 'bundle.example' },
   publicKey: leafKeys.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  issuerPublicKey: ca.keyPair.publicKey,
+  issuerCertificate: ca.certificate.pem,
 });
 
 // A typical fullchain dump: certificates in whatever

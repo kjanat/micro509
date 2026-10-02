@@ -99,7 +99,7 @@ async function verifyNameConstraintFixture(options: {
 		subject: options.leafSubject ?? { commonName: 'fixture-leaf' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		extensions: leafExtensions,
 	});
 	return await verifyCertificateChain({

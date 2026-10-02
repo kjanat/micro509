@@ -49,7 +49,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'pkcs7-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 		});
 		const bag = unwrap(createPkcs7CertBag([leaf.pem, root.certificate.pem]));
 		const parsed = parsePkcs7CertBagPem(bag.pem);
