@@ -48,6 +48,7 @@ import {
 	sliceElement,
 	withCrlIssuer,
 	withoutCrlNextUpdate,
+	withRevokedEntryReasonCode,
 } from '#test/helpers';
 
 describe('crl', () => {
@@ -4117,6 +4118,88 @@ describe('crl', () => {
 			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x01, 0x0a)))
 				.revokedCertificates[0]?.reasonCode,
 		).toBe('aACompromise');
+	});
+
+	it('keeps a CRLReason outside RFC 5280 §5.3.1 as an unrecognized reason', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unrecognized Reason CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unrecognized Reason CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const reasonOf = async (code: number, critical: boolean) =>
+			parseCertificateRevocationListDerOrThrow(
+				await withRevokedEntryReasonCode(crl.der, ca.keyPair.privateKey, code, critical),
+			).revokedCertificates[0]?.reasonCode;
+
+		expect(await reasonOf(7, false)).toEqual({ type: 'unrecognized', code: 7 });
+		expect(await reasonOf(11, false)).toEqual({ type: 'unrecognized', code: 11 });
+		expect(await reasonOf(1, true)).toBe('keyCompromise');
+		const criticalUnrecognized = await withRevokedEntryReasonCode(
+			crl.der,
+			ca.keyPair.privateKey,
+			7,
+			true,
+		);
+		expect(() => parseCertificateRevocationListDerOrThrow(criticalUnrecognized)).toThrow(
+			'Critical cRLReason holds unrecognized reason code 7',
+		);
+	});
+
+	it('checkCertificateRevocationAgainstCrl applies unrecognizedReasonCode to an unrecognized CRLReason', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unrecognized Reason Policy CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unrecognized Reason Policy CA' },
+			subject: { commonName: 'unrecognized-reason.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unrecognized Reason Policy CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex),
+					reasonCode: 'keyCompromise',
+				},
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const unrecognized = await withRevokedEntryReasonCode(crl.der, ca.keyPair.privateKey, 7);
+		const check = (unrecognizedReasonCode?: 'revoked' | 'reject') =>
+			checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: unrecognized,
+				...(unrecognizedReasonCode === undefined ? {} : { unrecognizedReasonCode }),
+			});
+
+		const revoked = {
+			ok: true,
+			value: { status: 'revoked', reasonCode: { type: 'unrecognized', code: 7 } },
+		};
+		expect(await check()).toMatchObject(revoked);
+		expect(await check('revoked')).toMatchObject(revoked);
+		expect(await check('reject')).toMatchObject({ ok: false, code: 'reason_code_unrecognized' });
 	});
 
 	it('parseCertificateRevocationListDerOrThrow rejects malformed CRL extension middle fields', async () => {

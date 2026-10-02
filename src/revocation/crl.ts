@@ -143,6 +143,31 @@ export type RevocationReason =
 	| 'aACompromise';
 
 /**
+ * A CRLReason code outside the RFC 5280 §5.3.1 enumeration, such as the unused
+ * value 7 or X.509 (10/2019) `weakAlgorithmOrKey (11)`.
+ */
+export interface UnrecognizedRevocationReason {
+	/** Discriminator for a code with no {@linkcode RevocationReason} name. */
+	readonly type: 'unrecognized';
+	/** The decoded ENUMERATED value. */
+	readonly code: number;
+}
+
+/** A decoded CRLReason: a named {@linkcode RevocationReason} or an {@linkcode UnrecognizedRevocationReason}. */
+export type ParsedRevocationReason = RevocationReason | UnrecognizedRevocationReason;
+
+/**
+ * Treatment of revocation evidence whose CRLReason is an
+ * {@linkcode UnrecognizedRevocationReason}. RFC 5280 §5.3.1 and Appendix B do
+ * not say what a relying party does with such a code.
+ *
+ * - `'revoked'`: the certificate is revoked, with the code reported (default).
+ *   A certificate that a CRL or OCSP response revokes is never reported `good`.
+ * - `'reject'`: the evidence cannot settle the certificate's status.
+ */
+export type UnrecognizedReasonCodePolicy = 'revoked' | 'reject';
+
+/**
  * Input for {@linkcode createCertificateRevocationList}.
  */
 export interface CreateCertificateRevocationListInput {
@@ -193,7 +218,7 @@ export interface ParsedRevokedCertificate {
 	/** When the CA declared this certificate revoked. */
 	readonly revocationDate: Date;
 	/** RFC 5280 CRLReason, if the entry carries one. */
-	readonly reasonCode?: RevocationReason;
+	readonly reasonCode?: ParsedRevocationReason;
 	/** When the key or certificate actually became suspect, if present. */
 	readonly invalidityDate?: Date;
 	/** Indirect-CRL certificate issuer override (RFC 5280 §5.3.3). */
@@ -377,6 +402,11 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly clockSkewMs?: number;
 	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly maxAgeMs?: number;
+	/**
+	 * Treatment of a revoked entry whose CRLReason is unrecognized. `'reject'`
+	 * fails the check with `reason_code_unrecognized`. Defaults to `'revoked'`.
+	 */
+	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocationAgainstCrl} may return. */
@@ -386,6 +416,7 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'stale_crl'
 	| 'crl_sign_not_permitted'
 	| 'non_applicable'
+	| 'reason_code_unrecognized'
 	| DecodeRefusalCode;
 
 /** Structured reason why a CRL was deemed non-applicable to a given certificate. */
@@ -451,7 +482,7 @@ export interface CheckCertificateRevocationAgainstCrlRevokedValue {
 	/** When the CA declared this certificate revoked. */
 	readonly revocationDate: Date;
 	/** CRLReason from the entry, if present. */
-	readonly reasonCode?: RevocationReason;
+	readonly reasonCode?: ParsedRevocationReason;
 }
 
 /** Discriminated union of `good` and `revoked` outcomes. */
@@ -550,7 +581,7 @@ interface MutableParsedCrlExtensionFields {
 }
 
 interface MutableRevokedCertificateExtensionFields {
-	reasonCode?: RevocationReason;
+	reasonCode?: ParsedRevocationReason;
 	invalidityDate?: Date;
 	certificateIssuer?: readonly GeneralName[];
 }
@@ -1148,6 +1179,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 					completeRevoked.entry,
 					undefined,
 					applicability.coveredReasons,
+					input.unrecognizedReasonCode ?? 'revoked',
 				),
 			};
 		}
@@ -1162,6 +1194,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 			completeRevoked.entry,
 			deltaRevoked,
 			applicability.coveredReasons,
+			input.unrecognizedReasonCode ?? 'revoked',
 		),
 	};
 }
@@ -1754,6 +1787,7 @@ function resolveCertificateRevocationStatus(
 	completeEntry: ParsedRevokedCertificate | undefined,
 	deltaEntry: ParsedRevokedCertificate | undefined,
 	coveredReasons: readonly DistributionPointReason[],
+	unrecognizedReasonCode: UnrecognizedReasonCodePolicy,
 ): CheckCertificateRevocationAgainstCrlResult {
 	if (deltaEntry !== undefined) {
 		if (deltaEntry.reasonCode === 'removeFromCRL') {
@@ -1769,12 +1803,7 @@ function resolveCertificateRevocationStatus(
 				});
 			}
 		} else {
-			return checkCertificateRevocationAgainstCrlSuccess({
-				status: 'revoked',
-				crl: completeCrl,
-				revocationDate: deltaEntry.revocationDate,
-				...(deltaEntry.reasonCode === undefined ? {} : { reasonCode: deltaEntry.reasonCode }),
-			});
+			return revokedEntryResult(completeCrl, deltaEntry, unrecognizedReasonCode);
 		}
 	}
 	if (completeEntry === undefined) {
@@ -1784,11 +1813,25 @@ function resolveCertificateRevocationStatus(
 			coveredReasons,
 		});
 	}
+	return revokedEntryResult(completeCrl, completeEntry, unrecognizedReasonCode);
+}
+
+function revokedEntryResult(
+	completeCrl: ParsedCertificateRevocationList,
+	entry: ParsedRevokedCertificate,
+	unrecognizedReasonCode: UnrecognizedReasonCodePolicy,
+): CheckCertificateRevocationAgainstCrlResult {
+	if (unrecognizedReasonCode === 'reject' && typeof entry.reasonCode === 'object') {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			'reason_code_unrecognized',
+			`CRL entry carries unrecognized reason code ${String(entry.reasonCode.code)}`,
+		);
+	}
 	return checkCertificateRevocationAgainstCrlSuccess({
 		status: 'revoked',
 		crl: completeCrl,
-		revocationDate: completeEntry.revocationDate,
-		...(completeEntry.reasonCode === undefined ? {} : { reasonCode: completeEntry.reasonCode }),
+		revocationDate: entry.revocationDate,
+		...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
 	});
 }
 
@@ -2228,7 +2271,7 @@ function parseRevokedCertificateExtensions(
 	entryDer: Uint8Array | undefined,
 	element: DerElement | undefined,
 ): {
-	readonly reasonCode?: RevocationReason;
+	readonly reasonCode?: ParsedRevocationReason;
 	readonly invalidityDate?: Date;
 	readonly certificateIssuer?: readonly GeneralName[];
 } {
@@ -2283,7 +2326,7 @@ function parseRevokedCertificateExtension(
 	if (critical && !isSupportedRevokedCertificateExtensionOid(oid)) {
 		throw new Error(`Unsupported critical revoked certificate extension OID: ${oid}`);
 	}
-	applyRevokedCertificateExtensionValue(oid, valueElement.value, fields);
+	applyRevokedCertificateExtensionValue(oid, valueElement.value, critical, fields);
 }
 
 function isSupportedRevokedCertificateExtensionOid(oid: string): boolean {
@@ -2293,6 +2336,7 @@ function isSupportedRevokedCertificateExtensionOid(oid: string): boolean {
 function applyRevokedCertificateExtensionValue(
 	oid: string,
 	value: Uint8Array,
+	critical: boolean,
 	fields: MutableRevokedCertificateExtensionFields,
 ): void {
 	if (oid === OIDS.cRLReason) {
@@ -2300,10 +2344,15 @@ function applyRevokedCertificateExtensionValue(
 		if (enumerated.tag !== 0x0a) {
 			throw new Error('cRLReason must use ENUMERATED');
 		}
-		const reasonCode = revocationReasonFromCode(
+		const reasonCode = parsedRevocationReason(
 			decodeNonNegativeIntegerNumber(enumerated.value, 'cRLReason'),
 		);
-		if (reasonCode !== undefined) fields.reasonCode = reasonCode;
+		if (critical && typeof reasonCode !== 'string') {
+			throw new Error(
+				`Critical cRLReason holds unrecognized reason code ${String(reasonCode.code)}`,
+			);
+		}
+		fields.reasonCode = reasonCode;
 	}
 	if (oid === OIDS.invalidityDate) {
 		fields.invalidityDate = parseTime(readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }));
@@ -2945,8 +2994,18 @@ function normalizeHex(value: string): string {
 	return value.toLowerCase();
 }
 
-/** Maps an integer CRLReason code back to its {@linkcode RevocationReason} string, or `undefined` for unknown codes. */
-export function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
+/**
+ * Maps an integer CRLReason code to its {@linkcode RevocationReason} name, or to
+ * an {@linkcode UnrecognizedRevocationReason} carrying a code outside RFC 5280
+ * §5.3.1. Returns `undefined` only when `code` is `undefined`.
+ */
+export function revocationReasonFromCode(
+	code: number | undefined,
+): ParsedRevocationReason | undefined {
+	return code === undefined ? undefined : parsedRevocationReason(code);
+}
+
+function parsedRevocationReason(code: number): ParsedRevocationReason {
 	switch (code) {
 		case 0:
 			return 'unspecified';
@@ -2968,8 +3027,9 @@ export function revocationReasonFromCode(code: number | undefined): RevocationRe
 			return 'privilegeWithdrawn';
 		case 10:
 			return 'aACompromise';
+		default:
+			return { type: 'unrecognized', code };
 	}
-	return undefined;
 }
 
 /** Thin wrapper — parses a DER-encoded certificate for use as a CRL issuer. */

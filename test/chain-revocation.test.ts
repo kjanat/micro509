@@ -15,7 +15,7 @@ import {
 	verifyCertificateChain,
 } from '#micro509';
 import { explicitContext, octetString, sequence, tlv, utcTime } from '#micro509/internal/asn1/der';
-import { FAR_FUTURE_NEXT_UPDATE, hexToBytes } from '#test/helpers';
+import { FAR_FUTURE_NEXT_UPDATE, hexToBytes, withRevokedEntryReasonCode } from '#test/helpers';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));
@@ -943,6 +943,92 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		const leafStatus = result.value.certificates[0];
 		expect(leafStatus?.status).toBe('revoked');
 		expect(leafStatus?.source?.kind).toBe('crl');
+	});
+
+	it('reports an unrecognized CRLReason as revoked, or under reject as indeterminate over good evidence', async () => {
+		const { caName, ca, leaf, chain, parsedLeaf, at, fresh } = await createOcspChainFixture();
+		const ocsp = (certStatus: 'good' | 'revoked') =>
+			createOcspResponse({
+				signerPrivateKey: ca.keyPair.privateKey,
+				signerCertificate: ca.certificate.pem,
+				responses: [
+					certStatus === 'good'
+						? { certificate: leaf.pem, issuerCertificate: ca.certificate.pem, certStatus, ...fresh }
+						: {
+								certificate: leaf.pem,
+								issuerCertificate: ca.certificate.pem,
+								certStatus,
+								revokedAt: fresh.thisUpdate,
+								revocationReasonCode: 11,
+								...fresh,
+							},
+				],
+			});
+		const crl = (revoked: boolean) =>
+			createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: caName },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				...fresh,
+				revokedCertificates: [
+					{
+						serialNumber: revoked ? hexToBytes(parsedLeaf.serialNumberHex) : Uint8Array.of(0x7f),
+						revocationDate: fresh.thisUpdate,
+						reasonCode: 'keyCompromise',
+					},
+				],
+			});
+		const unrecognizedCrl = await withRevokedEntryReasonCode(
+			(await crl(true)).der,
+			ca.keyPair.privateKey,
+			7,
+		);
+		const goodCrl = (await crl(false)).der;
+		const unrecognizedOcsp = (await ocsp('revoked')).der;
+		const goodOcsp = (await ocsp('good')).der;
+		const cases = [
+			{
+				crls: [unrecognizedCrl],
+				ocspResponses: [goodOcsp],
+				source: 'crl',
+				code: 7,
+				reason: 'crl_reason_code_unrecognized',
+			},
+			{
+				crls: [goodCrl],
+				ocspResponses: [unrecognizedOcsp],
+				source: 'ocsp',
+				code: 11,
+				reason: 'ocsp_reason_code_unrecognized',
+			},
+		] as const;
+
+		for (const { crls, ocspResponses, source, code, reason } of cases) {
+			const byDefault = await checkChainRevocation({
+				chain: [...chain],
+				crls: [...crls],
+				ocspResponses: [...ocspResponses],
+				at,
+			});
+			expect(byDefault.value.decision).toBe('deny');
+			expect(byDefault.value.certificates[0]).toMatchObject({
+				status: 'revoked',
+				source: { kind: source },
+				revocationInfo: { reason: { type: 'unrecognized', code } },
+			});
+
+			const rejected = await checkChainRevocation({
+				chain: [...chain],
+				crls: [...crls],
+				ocspResponses: [...ocspResponses],
+				at,
+				policy: { unrecognizedReasonCode: 'reject' },
+			});
+			expect(rejected.value.decision).toBe('deny');
+			expect(rejected.value.certificates[0]?.status).toBe('indeterminate');
+			expect(rejected.value.certificates[0]?.indeterminateReasons).toContain(reason);
+		}
 	});
 
 	it('honors prefer when both sources report good', async () => {

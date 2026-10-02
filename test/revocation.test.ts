@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { RevocationEvidenceInput } from '#micro509';
 import {
 	checkCertificateRevocation,
 	createCertificate,
@@ -17,6 +18,7 @@ import {
 	FAR_FUTURE_NEXT_UPDATE,
 	hexToBytes,
 	issueChain,
+	withRevokedEntryReasonCode,
 } from '#test/helpers';
 
 describe('revocation boundary', () => {
@@ -567,6 +569,90 @@ describe('revocation boundary', () => {
 				revokedAt,
 			},
 		});
+	});
+
+	it('applies unrecognizedReasonCode to CRL and OCSP evidence with an unrecognized CRLReason', async () => {
+		const { leaf, intermediate, intermediateKeys } = await issueChain();
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
+		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Verify Intermediate CA' },
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			revokedCertificates: [
+				{ serialNumber: hexToBytes(certificate.serialNumberHex), reasonCode: 'keyCompromise' },
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const unrecognizedCrl = await withRevokedEntryReasonCode(
+			crl.der,
+			intermediateKeys.privateKey,
+			7,
+		);
+		const ocsp = (certStatus: 'good' | 'revoked') =>
+			createOcspResponse({
+				signerPrivateKey: intermediateKeys.privateKey,
+				signerCertificate: intermediate.pem,
+				responses: [
+					certStatus === 'good'
+						? { certificate: leaf.pem, issuerCertificate: intermediate.pem, certStatus }
+						: {
+								certificate: leaf.pem,
+								issuerCertificate: intermediate.pem,
+								certStatus,
+								revokedAt: new Date('2024-02-01T00:00:00Z'),
+								revocationReasonCode: 11,
+							},
+				],
+			});
+		const unrecognizedOcsp = (await ocsp('revoked')).der;
+		const goodOcsp = (await ocsp('good')).der;
+		const check = (
+			evidence: readonly RevocationEvidenceInput[],
+			unrecognizedReasonCode?: 'revoked' | 'reject',
+		) =>
+			checkCertificateRevocation({
+				certificate,
+				issuerCertificate,
+				evidence,
+				...(unrecognizedReasonCode === undefined ? {} : { unrecognizedReasonCode }),
+			});
+
+		expect(await check([{ kind: 'crl', crl: unrecognizedCrl }])).toMatchObject({
+			ok: true,
+			value: {
+				status: 'revoked',
+				kind: 'crl',
+				revocationReason: { type: 'unrecognized', code: 7 },
+			},
+		});
+		expect(await check([{ kind: 'ocsp', response: unrecognizedOcsp }])).toMatchObject({
+			ok: true,
+			value: { status: 'revoked', kind: 'ocsp', revocationReasonCode: 11 },
+		});
+		const rejectedSets: readonly (readonly RevocationEvidenceInput[])[] = [
+			[
+				{ kind: 'crl', crl: unrecognizedCrl },
+				{ kind: 'ocsp', response: goodOcsp },
+			],
+			[
+				{ kind: 'ocsp', response: unrecognizedOcsp },
+				{ kind: 'ocsp', response: goodOcsp },
+			],
+		];
+		for (const evidence of rejectedSets) {
+			expect(await check(evidence, 'reject')).toMatchObject({
+				ok: true,
+				value: {
+					status: 'indeterminate',
+					code: 'revocation_status_indeterminate',
+					details: {
+						indeterminateEvidence: [expect.objectContaining({ code: 'reason_code_unrecognized' })],
+					},
+				},
+			});
+		}
 	});
 
 	it('returns unknown when OCSP validation itself fails', async () => {

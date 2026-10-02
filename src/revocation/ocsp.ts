@@ -72,7 +72,11 @@ import {
 	successResult,
 	throwMicro509Error,
 } from '#micro509/result/result';
-import type { CrlSource, ParsedCertificateRevocationList } from '#micro509/revocation/crl';
+import type {
+	CrlSource,
+	ParsedCertificateRevocationList,
+	UnrecognizedReasonCodePolicy,
+} from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
@@ -435,6 +439,12 @@ export interface ValidateOcspResponseInput {
 	 * default. Throws `RangeError` when negative or not finite.
 	 */
 	readonly responderRevocationCrlMaxAgeMs?: number;
+	/**
+	 * Treatment of a `responderRevocationCrls` entry that revokes the responder
+	 * with an unrecognized CRLReason. See {@linkcode UnrecognizedReasonCodePolicy}.
+	 * `'reject'` leaves that CRL out of the evidence. Defaults to `'revoked'`.
+	 */
+	readonly responderRevocationUnrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/**
@@ -1465,6 +1475,9 @@ async function checkDelegatedResponderRevocation(
 			? {}
 			: { maxAgeMs: input.responderRevocationCrlMaxAgeMs }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.responderRevocationUnrecognizedReasonCode === undefined
+			? {}
+			: { unrecognizedReasonCode: input.responderRevocationUnrecognizedReasonCode }),
 	};
 	const coveredReasons = new Set<string>();
 	for (const source of input.responderRevocationCrls ?? []) {
