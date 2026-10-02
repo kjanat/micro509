@@ -194,32 +194,27 @@ function decodeKrb5PrincipalName(
 	source: Uint8Array,
 	value: DerElement,
 ): SubjectAltName | undefined {
-	try {
-		const fields = value.tag === 0x30 ? childrenOf(source, value) : [];
-		const realm = decodeKerberosString(explicitChild(source, fields[0], 0xa0));
-		const principal = explicitChild(source, fields[1], 0xa1);
-		const principalFields = principal?.tag === 0x30 ? childrenOf(source, principal) : [];
-		const nameType = decodeInt32(explicitChild(source, principalFields[0], 0xa0));
-		const names = explicitChild(source, principalFields[1], 0xa1);
-		const nameString =
-			names?.tag === 0x30 ? childrenOf(source, names).map(decodeKerberosString) : [undefined];
-		if (
-			fields.length !== 2 ||
-			principalFields.length !== 2 ||
-			realm === undefined ||
-			realm.includes('\0') ||
-			nameType === undefined
-		) {
-			return undefined;
-		}
-		const components = nameString.filter((component) => component !== undefined);
-		return components.length === nameString.length
-			? { type: 'krb5PrincipalName', realm, nameType, nameString: components }
-			: undefined;
-	} catch (error) {
-		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
+	const fields = value.tag === 0x30 ? childrenOf(source, value) : [];
+	const realm = decodeKerberosString(explicitChild(source, fields[0], 0xa0));
+	const principal = explicitChild(source, fields[1], 0xa1);
+	const principalFields = principal?.tag === 0x30 ? childrenOf(source, principal) : [];
+	const nameType = decodeInt32(explicitChild(source, principalFields[0], 0xa0));
+	const names = explicitChild(source, principalFields[1], 0xa1);
+	const nameString =
+		names?.tag === 0x30 ? childrenOf(source, names).map(decodeKerberosString) : [undefined];
+	if (
+		fields.length !== 2 ||
+		principalFields.length !== 2 ||
+		realm === undefined ||
+		realm.includes('\0') ||
+		nameType === undefined
+	) {
 		return undefined;
 	}
+	const components = nameString.filter((component) => component !== undefined);
+	return components.length === nameString.length
+		? { type: 'krb5PrincipalName', realm, nameType, nameString: components }
+		: undefined;
 }
 
 /**
