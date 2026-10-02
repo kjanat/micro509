@@ -10,7 +10,9 @@
 import {
 	childrenOf,
 	decodeBoolean,
+	decodeIntegerMagnitude,
 	decodeIntegerNumber,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
@@ -141,6 +143,31 @@ export type RevocationReason =
 	| 'aACompromise';
 
 /**
+ * A CRLReason code outside the RFC 5280 §5.3.1 enumeration, such as the unused
+ * value 7 or X.509 (10/2019) `weakAlgorithmOrKey (11)`.
+ */
+export interface UnrecognizedRevocationReason {
+	/** Discriminator for a code with no {@linkcode RevocationReason} name. */
+	readonly type: 'unrecognized';
+	/** The decoded ENUMERATED value. */
+	readonly code: number;
+}
+
+/** A decoded CRLReason: a named {@linkcode RevocationReason} or an {@linkcode UnrecognizedRevocationReason}. */
+export type ParsedRevocationReason = RevocationReason | UnrecognizedRevocationReason;
+
+/**
+ * Treatment of revocation evidence whose CRLReason is an
+ * {@linkcode UnrecognizedRevocationReason}. RFC 5280 §5.3.1 and Appendix B do
+ * not say what a relying party does with such a code.
+ *
+ * - `'revoked'`: the certificate is revoked, with the code reported (default).
+ *   A certificate that a CRL or OCSP response revokes is never reported `good`.
+ * - `'reject'`: the evidence cannot settle the certificate's status.
+ */
+export type UnrecognizedReasonCodePolicy = 'revoked' | 'reject';
+
+/**
  * Input for {@linkcode createCertificateRevocationList}.
  */
 export interface CreateCertificateRevocationListInput {
@@ -148,18 +175,22 @@ export interface CreateCertificateRevocationListInput {
 	readonly issuer: NameInput;
 	/** Private key used to sign the CRL. Algorithm is inferred from the key. */
 	readonly signerPrivateKey: CryptoKey;
-	/** Issuer public key — used to embed an Authority Key Identifier extension. */
-	readonly issuerPublicKey?: CryptoKey;
+	/** Issuer public key. Its key identifier becomes the Authority Key Identifier extension (RFC 5280 §5.2.1). */
+	readonly issuerPublicKey: CryptoKey;
 	/** Issuance timestamp. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
 	/** Date by which the next CRL will be issued. Must be at least one second later than `thisUpdate`. */
 	readonly nextUpdate: Date;
 	/** Certificates to list as revoked in this CRL. */
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
-	/** Monotonically-increasing CRL sequence number (CRLNumber extension). */
-	readonly crlNumber?: number;
-	/** If set, marks this CRL as a delta CRL referencing the given base CRL number. */
-	readonly baseCrlNumber?: number;
+	/**
+	 * Monotonically-increasing CRL sequence number (CRLNumber extension, RFC 5280
+	 * §5.2.3): non-negative and at most 20 octets encoded. Pass a `bigint` above
+	 * `Number.MAX_SAFE_INTEGER`.
+	 */
+	readonly crlNumber: number | bigint;
+	/** If set, marks this CRL as a delta CRL referencing the given base CRL number, bounded like {@linkcode crlNumber}. */
+	readonly baseCrlNumber?: number | bigint;
 	/** Issuing distribution point extension — scopes this CRL to a subset of certificates. */
 	readonly issuingDistributionPoint?: IssuingDistributionPoint;
 	/** Freshest CRL distribution points — tells relying parties where to find delta CRLs. */
@@ -187,7 +218,7 @@ export interface ParsedRevokedCertificate {
 	/** When the CA declared this certificate revoked. */
 	readonly revocationDate: Date;
 	/** RFC 5280 CRLReason, if the entry carries one. */
-	readonly reasonCode?: RevocationReason;
+	readonly reasonCode?: ParsedRevocationReason;
 	/** When the key or certificate actually became suspect, if present. */
 	readonly invalidityDate?: Date;
 	/** Indirect-CRL certificate issuer override (RFC 5280 §5.3.3). */
@@ -226,9 +257,9 @@ export interface ParsedCertificateRevocationList {
 	/** Hex-encoded Authority Key Identifier, if the extension is present. */
 	readonly authorityKeyIdentifier?: string;
 	/** CRLNumber extension value — monotonically increasing sequence number. */
-	readonly crlNumber?: number;
+	readonly crlNumber?: bigint;
 	/** Delta CRL indicator — present only on delta CRLs, referencing the base CRL number. */
-	readonly baseCrlNumber?: number;
+	readonly baseCrlNumber?: bigint;
 	/** Issuing distribution point extension — scopes this CRL to a certificate subset. */
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	/** Freshest CRL extension — points to delta CRL locations. */
@@ -371,6 +402,11 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly clockSkewMs?: number;
 	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly maxAgeMs?: number;
+	/**
+	 * Treatment of a revoked entry whose CRLReason is unrecognized. `'reject'`
+	 * fails the check with `reason_code_unrecognized`. Defaults to `'revoked'`.
+	 */
+	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocationAgainstCrl} may return. */
@@ -380,6 +416,7 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'stale_crl'
 	| 'crl_sign_not_permitted'
 	| 'non_applicable'
+	| 'reason_code_unrecognized'
 	| DecodeRefusalCode;
 
 /** Structured reason why a CRL was deemed non-applicable to a given certificate. */
@@ -445,7 +482,7 @@ export interface CheckCertificateRevocationAgainstCrlRevokedValue {
 	/** When the CA declared this certificate revoked. */
 	readonly revocationDate: Date;
 	/** CRLReason from the entry, if present. */
-	readonly reasonCode?: RevocationReason;
+	readonly reasonCode?: ParsedRevocationReason;
 }
 
 /** Discriminated union of `good` and `revoked` outcomes. */
@@ -529,22 +566,22 @@ interface ParsedCrlVersionField {
 
 interface ParsedCrlExtensionFields {
 	readonly authorityKeyIdentifier?: string;
-	readonly crlNumber?: number;
-	readonly baseCrlNumber?: number;
+	readonly crlNumber?: bigint;
+	readonly baseCrlNumber?: bigint;
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 }
 
 interface MutableParsedCrlExtensionFields {
 	authorityKeyIdentifier?: string;
-	crlNumber?: number;
-	baseCrlNumber?: number;
+	crlNumber?: bigint;
+	baseCrlNumber?: bigint;
 	issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 }
 
 interface MutableRevokedCertificateExtensionFields {
-	reasonCode?: RevocationReason;
+	reasonCode?: ParsedRevocationReason;
 	invalidityDate?: Date;
 	certificateIssuer?: readonly GeneralName[];
 }
@@ -565,8 +602,9 @@ interface MutableAuthorityKeyIdentifierState {
 /**
  * Signs and encodes an X.509 v2 CRL.
  *
- * Embeds Authority Key Identifier, CRLNumber, delta CRL indicator,
- * issuing distribution point, and freshest-CRL extensions as configured.
+ * Always embeds the Authority Key Identifier and CRLNumber extensions
+ * (RFC 5280 §5.2), plus delta CRL indicator, issuing distribution point and
+ * freshest-CRL extensions as configured.
  *
  * @example
  * ```ts
@@ -595,6 +633,17 @@ export async function createCertificateRevocationList(
 			'issuer must be a non-empty distinguished name',
 		);
 	}
+	if (!isExportablePublicKey(input.issuerPublicKey)) {
+		throwCrlEncoderError(
+			'issuer_public_key_invalid',
+			'issuerPublicKey must be an extractable public CryptoKey',
+		);
+	}
+	const crlNumber = encodeCrlNumber(input.crlNumber, 'crlNumber');
+	const baseCrlNumber =
+		input.baseCrlNumber === undefined
+			? undefined
+			: encodeCrlNumber(input.baseCrlNumber, 'baseCrlNumber');
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const thisUpdate = input.thisUpdate ?? new Date();
 	const nextUpdate = input.nextUpdate;
@@ -612,8 +661,8 @@ export async function createCertificateRevocationList(
 	}
 	const extensions = await buildCrlExtensions(
 		input.issuerPublicKey,
-		input.crlNumber,
-		input.baseCrlNumber,
+		crlNumber,
+		baseCrlNumber,
 		input.issuingDistributionPoint,
 		input.freshestCrlDistributionPoints,
 	);
@@ -629,7 +678,7 @@ export async function createCertificateRevocationList(
 		time(thisUpdate),
 		time(nextUpdate),
 		...revokedSequence,
-		...(extensions.length === 0 ? [] : [explicitContext(0, sequence(extensions))]),
+		explicitContext(0, sequence(extensions)),
 	]);
 	const signatureValue = await signBytes(input.signerPrivateKey, signatureAlgorithm, tbsCertList);
 	const der = sequence([
@@ -1130,6 +1179,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 					completeRevoked.entry,
 					undefined,
 					applicability.coveredReasons,
+					input.unrecognizedReasonCode ?? 'revoked',
 				),
 			};
 		}
@@ -1144,6 +1194,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 			completeRevoked.entry,
 			deltaRevoked,
 			applicability.coveredReasons,
+			input.unrecognizedReasonCode ?? 'revoked',
 		),
 	};
 }
@@ -1736,6 +1787,7 @@ function resolveCertificateRevocationStatus(
 	completeEntry: ParsedRevokedCertificate | undefined,
 	deltaEntry: ParsedRevokedCertificate | undefined,
 	coveredReasons: readonly DistributionPointReason[],
+	unrecognizedReasonCode: UnrecognizedReasonCodePolicy,
 ): CheckCertificateRevocationAgainstCrlResult {
 	if (deltaEntry !== undefined) {
 		if (deltaEntry.reasonCode === 'removeFromCRL') {
@@ -1751,12 +1803,7 @@ function resolveCertificateRevocationStatus(
 				});
 			}
 		} else {
-			return checkCertificateRevocationAgainstCrlSuccess({
-				status: 'revoked',
-				crl: completeCrl,
-				revocationDate: deltaEntry.revocationDate,
-				...(deltaEntry.reasonCode === undefined ? {} : { reasonCode: deltaEntry.reasonCode }),
-			});
+			return revokedEntryResult(completeCrl, deltaEntry, unrecognizedReasonCode);
 		}
 	}
 	if (completeEntry === undefined) {
@@ -1766,11 +1813,25 @@ function resolveCertificateRevocationStatus(
 			coveredReasons,
 		});
 	}
+	return revokedEntryResult(completeCrl, completeEntry, unrecognizedReasonCode);
+}
+
+function revokedEntryResult(
+	completeCrl: ParsedCertificateRevocationList,
+	entry: ParsedRevokedCertificate,
+	unrecognizedReasonCode: UnrecognizedReasonCodePolicy,
+): CheckCertificateRevocationAgainstCrlResult {
+	if (unrecognizedReasonCode === 'reject' && typeof entry.reasonCode === 'object') {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			'reason_code_unrecognized',
+			`CRL entry carries unrecognized reason code ${String(entry.reasonCode.code)}`,
+		);
+	}
 	return checkCertificateRevocationAgainstCrlSuccess({
 		status: 'revoked',
 		crl: completeCrl,
-		revocationDate: completeEntry.revocationDate,
-		...(completeEntry.reasonCode === undefined ? {} : { reasonCode: completeEntry.reasonCode }),
+		revocationDate: entry.revocationDate,
+		...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
 	});
 }
 
@@ -2144,29 +2205,22 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 
 /** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
 async function buildCrlExtensions(
-	issuerPublicKey: CryptoKey | undefined,
-	crlNumber: number | undefined,
-	baseCrlNumber?: number,
+	issuerPublicKey: CryptoKey,
+	crlNumber: Uint8Array,
+	baseCrlNumber?: Uint8Array,
 	issuingDistributionPoint?: IssuingDistributionPoint,
 	freshestCrlDistributionPoints?: readonly DistributionPoint[],
 ): Promise<Uint8Array[]> {
-	const extensions: Uint8Array[] = [];
-	if (issuerPublicKey !== undefined) {
-		const spki = await exportSpkiDer(issuerPublicKey);
-		extensions.push(
-			encodeExtension(
-				OIDS.authorityKeyIdentifier,
-				sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
-			),
-		);
-	}
-	if (crlNumber !== undefined) {
-		extensions.push(encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)));
-	}
+	const spki = await exportSpkiDer(issuerPublicKey);
+	const extensions: Uint8Array[] = [
+		encodeExtension(
+			OIDS.authorityKeyIdentifier,
+			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
+		),
+		encodeExtension(OIDS.cRLNumber, crlNumber),
+	];
 	if (baseCrlNumber !== undefined) {
-		extensions.push(
-			encodeExtension(OIDS.deltaCRLIndicator, integerFromNumber(baseCrlNumber), true),
-		);
+		extensions.push(encodeExtension(OIDS.deltaCRLIndicator, baseCrlNumber, true));
 	}
 	if (issuingDistributionPoint !== undefined) {
 		extensions.push(
@@ -2217,7 +2271,7 @@ function parseRevokedCertificateExtensions(
 	entryDer: Uint8Array | undefined,
 	element: DerElement | undefined,
 ): {
-	readonly reasonCode?: RevocationReason;
+	readonly reasonCode?: ParsedRevocationReason;
 	readonly invalidityDate?: Date;
 	readonly certificateIssuer?: readonly GeneralName[];
 } {
@@ -2258,6 +2312,10 @@ function parseRevokedCertificateExtension(
 		throw new Error(`Duplicate revoked certificate extension OID: ${oid}`);
 	}
 	seenOids.add(oid);
+	const critical =
+		parts.length === 3
+			? decodeBoolean(requireElement(parts[1], 'revoked certificate extension critical').value)
+			: false;
 	const valueElement = requireElement(
 		parts[parts.length - 1],
 		'revoked certificate extension value',
@@ -2265,20 +2323,39 @@ function parseRevokedCertificateExtension(
 	if (valueElement.tag !== 0x04) {
 		throw new Error('Revoked certificate extension value must use OCTET STRING');
 	}
-	applyRevokedCertificateExtensionValue(oid, valueElement.value, fields);
+	if (critical && !isSupportedRevokedCertificateExtensionOid(oid)) {
+		throw new Error(`Unsupported critical revoked certificate extension OID: ${oid}`);
+	}
+	applyRevokedCertificateExtensionValue(oid, valueElement.value, critical, fields);
+}
+
+function isSupportedRevokedCertificateExtensionOid(oid: string): boolean {
+	return oid === OIDS.cRLReason || oid === OIDS.invalidityDate || oid === OIDS.certificateIssuer;
 }
 
 function applyRevokedCertificateExtensionValue(
 	oid: string,
 	value: Uint8Array,
+	critical: boolean,
 	fields: MutableRevokedCertificateExtensionFields,
 ): void {
 	if (oid === OIDS.cRLReason) {
-		const reasonCode = revocationReasonFromCode(readElement(value).value[0]);
-		if (reasonCode !== undefined) fields.reasonCode = reasonCode;
+		const enumerated = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		if (enumerated.tag !== 0x0a) {
+			throw new Error('cRLReason must use ENUMERATED');
+		}
+		const reasonCode = parsedRevocationReason(
+			decodeNonNegativeIntegerNumber(enumerated.value, 'cRLReason'),
+		);
+		if (critical && typeof reasonCode !== 'string') {
+			throw new Error(
+				`Critical cRLReason holds unrecognized reason code ${String(reasonCode.code)}`,
+			);
+		}
+		fields.reasonCode = reasonCode;
 	}
 	if (oid === OIDS.invalidityDate) {
-		fields.invalidityDate = parseTime(readElement(value));
+		fields.invalidityDate = parseTime(readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }));
 	}
 	if (oid === OIDS.certificateIssuer) {
 		const generalNames = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
@@ -2554,14 +2631,59 @@ function decodeNameValue(element: DerElement): string {
 
 /** Machine-readable reason a CRL encoder rejected its construction input. */
 export type CrlEncoderErrorCode =
+	| 'crl_number_invalid'
 	| 'distribution_point_full_name_empty'
 	| 'issuer_distinguished_name_empty'
+	| 'issuer_public_key_invalid'
 	| 'invalid_date'
 	| 'next_update_not_after_this_update';
 
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
 	throwMicro509Error(code, message);
+}
+
+/** A public CryptoKey whose SPKI can be exported. */
+function isExportablePublicKey(key: unknown): boolean {
+	return (
+		typeof key === 'object' &&
+		key !== null &&
+		Reflect.get(key, 'type') === 'public' &&
+		Reflect.get(key, 'extractable') === true
+	);
+}
+
+/** RFC 5280 §5.2.3: "Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets." */
+const CRL_NUMBER_MAX_OCTETS = 20;
+
+/** RFC 5280 §5.2.3 `CRLNumber ::= INTEGER (0..MAX)` as a DER INTEGER of at most 20 content octets. */
+function encodeCrlNumber(value: number | bigint, field: 'crlNumber' | 'baseCrlNumber'): Uint8Array {
+	const crlNumber =
+		typeof value === 'bigint' ? value : Number.isSafeInteger(value) ? BigInt(value) : -1n;
+	const hex = crlNumber.toString(16);
+	const magnitude = crlNumber < 0n ? undefined : hexToBytes(hex.length % 2 === 0 ? hex : `0${hex}`);
+	const first = magnitude?.[0];
+	if (
+		magnitude === undefined ||
+		first === undefined ||
+		magnitude.length + (first >= 0x80 ? 1 : 0) > CRL_NUMBER_MAX_OCTETS
+	) {
+		throwCrlEncoderError(
+			'crl_number_invalid',
+			`${field} must be a non-negative integer of at most ${String(CRL_NUMBER_MAX_OCTETS)} octets (RFC 5280 §5.2.3)`,
+		);
+	}
+	return integer(magnitude);
+}
+
+/** RFC 5280 §5.2.3: a received CRLNumber of any length, since verifiers MUST handle up to 20 octets. */
+function decodeCrlNumber(value: Uint8Array): bigint {
+	const element = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (element.tag !== 0x02) {
+		throw new Error('CRLNumber must be an INTEGER');
+	}
+	decodeIntegerMagnitude(element.value, 'CRLNumber');
+	return BigInt(`0x${toHex(element.value)}`);
 }
 
 function assertCrlDate(date: Date | undefined, field: string): void {
@@ -2872,8 +2994,18 @@ function normalizeHex(value: string): string {
 	return value.toLowerCase();
 }
 
-/** Maps an integer CRLReason code back to its {@linkcode RevocationReason} string, or `undefined` for unknown codes. */
-export function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
+/**
+ * Maps an integer CRLReason code to its {@linkcode RevocationReason} name, or to
+ * an {@linkcode UnrecognizedRevocationReason} carrying a code outside RFC 5280
+ * §5.3.1. Returns `undefined` only when `code` is `undefined`.
+ */
+export function revocationReasonFromCode(
+	code: number | undefined,
+): ParsedRevocationReason | undefined {
+	return code === undefined ? undefined : parsedRevocationReason(code);
+}
+
+function parsedRevocationReason(code: number): ParsedRevocationReason {
 	switch (code) {
 		case 0:
 			return 'unspecified';
@@ -2895,8 +3027,9 @@ export function revocationReasonFromCode(code: number | undefined): RevocationRe
 			return 'privilegeWithdrawn';
 		case 10:
 			return 'aACompromise';
+		default:
+			return { type: 'unrecognized', code };
 	}
-	return undefined;
 }
 
 /** Thin wrapper — parses a DER-encoded certificate for use as a CRL issuer. */
@@ -2935,8 +3068,8 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	readonly thisUpdate: Date;
 	readonly nextUpdate?: Date;
 	readonly authorityKeyIdentifier?: string;
-	readonly crlNumber?: number;
-	readonly baseCrlNumber?: number;
+	readonly crlNumber?: bigint;
+	readonly baseCrlNumber?: bigint;
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
@@ -3124,10 +3257,10 @@ function applyParsedCrlExtensionField(
 		}
 	}
 	if (oid === OIDS.cRLNumber) {
-		fields.crlNumber = decodeIntegerNumber(readElement(value).value);
+		fields.crlNumber = decodeCrlNumber(value);
 	}
 	if (oid === OIDS.deltaCRLIndicator) {
-		fields.baseCrlNumber = decodeIntegerNumber(readElement(value).value);
+		fields.baseCrlNumber = decodeCrlNumber(value);
 	}
 	if (oid === OIDS.issuingDistributionPoint) {
 		fields.issuingDistributionPoint = parseIssuingDistributionPoint(value);

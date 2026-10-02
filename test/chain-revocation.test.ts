@@ -15,7 +15,7 @@ import {
 	verifyCertificateChain,
 } from '#micro509';
 import { explicitContext, octetString, sequence, tlv, utcTime } from '#micro509/internal/asn1/der';
-import { FAR_FUTURE_NEXT_UPDATE, hexToBytes } from '#test/helpers';
+import { FAR_FUTURE_NEXT_UPDATE, hexToBytes, withRevokedEntryReasonCode } from '#test/helpers';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));
@@ -116,6 +116,7 @@ describe('checkChainRevocation', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Partial Reason CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -326,6 +327,7 @@ describe('checkChainRevocation', () => {
 		});
 		const at = new Date(Date.now() + 5_000);
 		const forgedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: anchorName },
 			signerPrivateKey: forgedSigner.keyPair.privateKey,
 			issuerPublicKey: forgedSigner.keyPair.publicKey,
@@ -396,6 +398,7 @@ describe('checkChainRevocation', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Delegated Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
 			issuerPublicKey: signerKeys.publicKey,
@@ -481,6 +484,7 @@ describe('checkChainRevocation', () => {
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const leafCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Signer Scope Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
 			issuerPublicKey: signerKeys.publicKey,
@@ -495,6 +499,7 @@ describe('checkChainRevocation', () => {
 		const extraCertificates = [signer.pem, signerCa.pem];
 
 		const scopedSignerCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Signer Scope CRL CA' },
 			signerPrivateKey: signerCaKeys.privateKey,
 			issuerPublicKey: signerCaKeys.publicKey,
@@ -518,6 +523,7 @@ describe('checkChainRevocation', () => {
 		expect(scoped.value.executionErrors).toBeUndefined();
 
 		const fullSignerCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Signer Scope CRL CA' },
 			signerPrivateKey: signerCaKeys.privateKey,
 			issuerPublicKey: signerCaKeys.publicKey,
@@ -595,6 +601,7 @@ describe('checkChainRevocation', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Shadow CA' },
 			signerPrivateKey: signerKeys.privateKey,
 			issuerPublicKey: signerKeys.publicKey,
@@ -835,6 +842,53 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		}
 	});
 
+	it('reports a certificate hold that is fresher than the good OCSP evidence', async () => {
+		const { ca, leaf, chain, at } = await createOcspChainFixture();
+		const goodThisUpdate = new Date(at.getTime() - 2 * HOUR_MS);
+		const holdThisUpdate = new Date(at.getTime() - HOUR_MS);
+		const nextUpdate = new Date(at.getTime() + HOUR_MS);
+		const respond = (thisUpdate: Date, hold: boolean) =>
+			createOcspResponse({
+				signerPrivateKey: ca.keyPair.privateKey,
+				signerCertificate: ca.certificate.pem,
+				responses: [
+					hold
+						? {
+								certificate: leaf.pem,
+								issuerCertificate: ca.certificate.pem,
+								certStatus: 'revoked',
+								revokedAt: thisUpdate,
+								revocationReasonCode: 6,
+								thisUpdate,
+								nextUpdate,
+							}
+						: {
+								certificate: leaf.pem,
+								issuerCertificate: ca.certificate.pem,
+								certStatus: 'good',
+								thisUpdate,
+								nextUpdate,
+							},
+				],
+			});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [
+				(await respond(goodThisUpdate, false)).der,
+				(await respond(holdThisUpdate, true)).der,
+			],
+			at,
+		});
+
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]).toMatchObject({
+			status: 'revoked',
+			source: { kind: 'ocsp' },
+			revocationInfo: { reason: 'certificateHold' },
+		});
+	});
+
 	it('treats OCSP unknown status as indeterminate', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const response = await createOcspResponse({
@@ -910,6 +964,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			],
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -937,6 +992,92 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(leafStatus?.source?.kind).toBe('crl');
 	});
 
+	it('reports an unrecognized CRLReason as revoked, or under reject as indeterminate over good evidence', async () => {
+		const { caName, ca, leaf, chain, parsedLeaf, at, fresh } = await createOcspChainFixture();
+		const ocsp = (certStatus: 'good' | 'revoked') =>
+			createOcspResponse({
+				signerPrivateKey: ca.keyPair.privateKey,
+				signerCertificate: ca.certificate.pem,
+				responses: [
+					certStatus === 'good'
+						? { certificate: leaf.pem, issuerCertificate: ca.certificate.pem, certStatus, ...fresh }
+						: {
+								certificate: leaf.pem,
+								issuerCertificate: ca.certificate.pem,
+								certStatus,
+								revokedAt: fresh.thisUpdate,
+								revocationReasonCode: 11,
+								...fresh,
+							},
+				],
+			});
+		const crl = (revoked: boolean) =>
+			createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: caName },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				...fresh,
+				revokedCertificates: [
+					{
+						serialNumber: revoked ? hexToBytes(parsedLeaf.serialNumberHex) : Uint8Array.of(0x7f),
+						revocationDate: fresh.thisUpdate,
+						reasonCode: 'keyCompromise',
+					},
+				],
+			});
+		const unrecognizedCrl = await withRevokedEntryReasonCode(
+			(await crl(true)).der,
+			ca.keyPair.privateKey,
+			7,
+		);
+		const goodCrl = (await crl(false)).der;
+		const unrecognizedOcsp = (await ocsp('revoked')).der;
+		const goodOcsp = (await ocsp('good')).der;
+		const cases = [
+			{
+				crls: [unrecognizedCrl],
+				ocspResponses: [goodOcsp],
+				source: 'crl',
+				code: 7,
+				reason: 'crl_reason_code_unrecognized',
+			},
+			{
+				crls: [goodCrl],
+				ocspResponses: [unrecognizedOcsp],
+				source: 'ocsp',
+				code: 11,
+				reason: 'ocsp_reason_code_unrecognized',
+			},
+		] as const;
+
+		for (const { crls, ocspResponses, source, code, reason } of cases) {
+			const byDefault = await checkChainRevocation({
+				chain: [...chain],
+				crls: [...crls],
+				ocspResponses: [...ocspResponses],
+				at,
+			});
+			expect(byDefault.value.decision).toBe('deny');
+			expect(byDefault.value.certificates[0]).toMatchObject({
+				status: 'revoked',
+				source: { kind: source },
+				revocationInfo: { reason: { type: 'unrecognized', code } },
+			});
+
+			const rejected = await checkChainRevocation({
+				chain: [...chain],
+				crls: [...crls],
+				ocspResponses: [...ocspResponses],
+				at,
+				policy: { unrecognizedReasonCode: 'reject' },
+			});
+			expect(rejected.value.decision).toBe('deny');
+			expect(rejected.value.certificates[0]?.status).toBe('indeterminate');
+			expect(rejected.value.certificates[0]?.indeterminateReasons).toContain(reason);
+		}
+	});
+
 	it('honors prefer when both sources report good', async () => {
 		const { caName, ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const response = await createOcspResponse({
@@ -952,6 +1093,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			],
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -996,6 +1138,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			],
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1040,6 +1183,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			],
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1076,6 +1220,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 		const staleThisUpdate = new Date(at.getTime() - 12 * HOUR_MS);
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1120,12 +1265,14 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		// reported signer must belong to the CRL whose freshness won, no
 		// matter the processing order.
 		const freshDelegateCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: delegateKeys.privateKey,
 			issuerPublicKey: delegateKeys.publicKey,
 			...fresh,
 		});
 		const staleCaCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1543,6 +1690,7 @@ describe('checkChainRevocation CRL maximum age policy', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,

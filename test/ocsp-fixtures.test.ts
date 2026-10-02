@@ -31,7 +31,7 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { FAR_FUTURE_NEXT_UPDATE, hexToBytes } from '#test/helpers';
+import { FAR_FUTURE_NEXT_UPDATE, hexToBytes, withRevokedEntryReasonCode } from '#test/helpers';
 
 interface FixtureResponderInput {
 	readonly commonName: string;
@@ -529,6 +529,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 
 		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
@@ -557,6 +558,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 
 		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
@@ -576,6 +578,49 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			responderRevocationCrls: [crl.pem],
 		});
 		expect(result).toMatchObject({ ok: false, code: 'responder_revoked' });
+	});
+
+	it('applies responderRevocationUnrecognizedReasonCode to a responder CRL with an unrecognized CRLReason', async () => {
+		const authority = await issueAuthority('Unrecognized Reason Responder CA');
+		const responder = await issueDelegatedResponder(authority);
+		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
+		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: authority.commonName },
+			signerPrivateKey: authority.ca.keyPair.privateKey,
+			issuerPublicKey: authority.ca.keyPair.publicKey,
+			revokedCertificates: [
+				{ serialNumber: hexToBytes(responderSerial), reasonCode: 'superseded' },
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const unrecognizedCrl = await withRevokedEntryReasonCode(
+			crl.der,
+			authority.ca.keyPair.privateKey,
+			7,
+		);
+		const response = await goodResponse(
+			authority,
+			responder.keys.privateKey,
+			responder.certificate.pem,
+			true,
+		);
+		const validate = (responderRevocationUnrecognizedReasonCode?: 'revoked' | 'reject') =>
+			validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				responderRevocationPolicy: 'require-evidence',
+				responderRevocationCrls: [unrecognizedCrl],
+				...(responderRevocationUnrecognizedReasonCode === undefined
+					? {}
+					: { responderRevocationUnrecognizedReasonCode }),
+			});
+
+		expect(await validate()).toMatchObject({ ok: false, code: 'responder_revoked' });
+		expect(await validate('reject')).toMatchObject({
+			ok: false,
+			code: 'responder_revocation_unknown',
+		});
 	});
 
 	it('require-evidence: rejects without evidence, ignores nocheck, accepts with good CRL', async () => {
@@ -599,6 +644,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 
 		// Empty CRL proves 'good' — accepted
 		const emptyCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,

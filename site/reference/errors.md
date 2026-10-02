@@ -191,15 +191,16 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### CheckCertificateRevocationAgainstCrlErrorCode
 
-| Code                     | Meaning                                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                                      |
-| `issuer_mismatch`        | CRL issuer does not match the certificate's issuer                                                         |
-| `limit_exceeded`         | A CRL or certificate exceeds a micro509 decoding limit, see `ParseCertificateRevocationListErrorCode`      |
-| `non_applicable`         | No supplied CRL applies to the certificate ([RFC 5280 §6.3.3][rfc5280-section-6.3.3])                      |
-| `signature_invalid`      | CRL signature fails against the issuer key                                                                 |
-| `stale_crl`              | CRL outside its `thisUpdate`/`nextUpdate` window or older than `maxAgeMs`                                  |
-| `unsupported`            | A CRL or certificate holds a value micro509 does not decode, see `ParseCertificateRevocationListErrorCode` |
+| Code                       | Meaning                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `crl_sign_not_permitted`   | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                                        |
+| `issuer_mismatch`          | CRL issuer does not match the certificate's issuer                                                           |
+| `limit_exceeded`           | A CRL or certificate exceeds a micro509 decoding limit, see `ParseCertificateRevocationListErrorCode`        |
+| `non_applicable`           | No supplied CRL applies to the certificate ([RFC 5280 §6.3.3][rfc5280-section-6.3.3])                        |
+| `reason_code_unrecognized` | The certificate's entry carries a CRLReason outside RFC 5280 §5.3.1 under `unrecognizedReasonCode: 'reject'` |
+| `signature_invalid`        | CRL signature fails against the issuer key                                                                   |
+| `stale_crl`                | CRL outside its `thisUpdate`/`nextUpdate` window or older than `maxAgeMs`                                    |
+| `unsupported`              | A CRL or certificate holds a value micro509 does not decode, see `ParseCertificateRevocationListErrorCode`   |
 
 A `non_applicable` failure carries a `reason`. `delta_crl_incompatible` covers a
 delta CRL that does not pair with the complete CRL, including one whose
@@ -235,49 +236,57 @@ delta CRL that does not pair with the complete CRL, including one whose
 
 ### RevocationIndeterminateReasonCode
 
-| Code                           | Meaning                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------- |
-| `certificate_status_missing`   | Response carries no entry for the certificate                                |
-| `certificate_status_unknown`   | Responder answered `unknown`                                                 |
-| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage        |
-| `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                      |
-| `limit_exceeded`               | Evidence or a certificate it names exceeds a micro509 decoding limit         |
-| `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`              |
-| `non_applicable`               | No supplied CRL applies to the certificate                                   |
-| `nonce_mismatch`               | Response nonce differs from the request's                                    |
-| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                              |
-| `reason_coverage_incomplete`   | Applicable CRLs cover only some CRLReasons                                   |
-| `request_mismatch`             | Response does not answer the supplied request                                |
-| `responder_chain_invalid`      | Responder certificate path fails validation                                  |
-| `responder_id_mismatch`        | ResponderID matches no candidate signer                                      |
-| `responder_revocation_unknown` | Delegated responder revocation status undetermined                           |
-| `responder_revoked`            | Delegated responder certificate is revoked                                   |
-| `response_status_invalid`      | OCSPResponse status is not `successful`                                      |
-| `signature_invalid`            | Evidence signature fails                                                     |
-| `stale_crl`                    | CRL outside its `thisUpdate`/`nextUpdate` window or older than `crlMaxAgeMs` |
-| `stale_response`               | Response outside its freshness window                                        |
-| `unsupported`                  | Evidence or a certificate it names holds a value micro509 does not decode    |
+| Code                           | Meaning                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| `certificate_status_missing`   | Response carries no entry for the certificate                                                |
+| `certificate_status_unknown`   | Responder answered `unknown`                                                                 |
+| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                        |
+| `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                                      |
+| `limit_exceeded`               | Evidence or a certificate it names exceeds a micro509 decoding limit                         |
+| `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`                              |
+| `non_applicable`               | No supplied CRL applies to the certificate                                                   |
+| `nonce_mismatch`               | Response nonce differs from the request's                                                    |
+| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                                              |
+| `reason_code_unrecognized`     | Revoking evidence carries an unrecognized CRLReason under `unrecognizedReasonCode: 'reject'` |
+| `reason_coverage_incomplete`   | Applicable CRLs cover only some CRLReasons                                                   |
+| `request_mismatch`             | Response does not answer the supplied request                                                |
+| `responder_chain_invalid`      | Responder certificate path fails validation                                                  |
+| `responder_id_mismatch`        | ResponderID matches no candidate signer                                                      |
+| `responder_revocation_unknown` | Delegated responder revocation status undetermined                                           |
+| `responder_revoked`            | Delegated responder certificate is revoked                                                   |
+| `response_status_invalid`      | OCSPResponse status is not `successful`                                                      |
+| `signature_invalid`            | Evidence signature fails                                                                     |
+| `stale_crl`                    | CRL outside its `thisUpdate`/`nextUpdate` window or older than `crlMaxAgeMs`                 |
+| `stale_response`               | Response outside its freshness window                                                        |
+| `unsupported`                  | Evidence or a certificate it names holds a value micro509 does not decode                    |
 
 The chain-level `RevocationIndeterminateReason` from `checkChainRevocation` and
 `verifyCertificateChain({ revocation })` uses its own names. A CRL that is
 outside its window or older than `crlMaxAgeMs` is reported as `crl_expired`,
 and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
-`ocsp_next_update_missing`.
+`ocsp_next_update_missing`. Evidence that revokes the certificate with an
+unrecognized CRLReason under `unrecognizedReasonCode: 'reject'` is reported as
+`reason_code_unrecognized`, and as `crl_reason_code_unrecognized` or
+`ocsp_reason_code_unrecognized` at chain level. Either way, other evidence
+cannot settle the status as `good`.
 
 ### CrlEncoderErrorCode
 
-| Code                                 | Meaning                                                                     |
-| ------------------------------------ | --------------------------------------------------------------------------- |
-| `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName                             |
-| `issuer_distinguished_name_empty`    | [RFC 5280 §5.1.2.3][rfc5280-section-5.1.2.3] requires a non-empty issuer DN |
-| `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`                            |
-| `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate`               |
+| Code                                 | Meaning                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `crl_number_invalid`                 | `crlNumber` or `baseCrlNumber` is negative, not an integer, or over 20 octets ([RFC 5280 §5.2.3][rfc5280-section-5.2.3]) |
+| `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName                                                                          |
+| `issuer_distinguished_name_empty`    | [RFC 5280 §5.1.2.3][rfc5280-section-5.1.2.3] requires a non-empty issuer DN                                              |
+| `issuer_public_key_invalid`          | `issuerPublicKey` is not an extractable public `CryptoKey`                                                               |
+| `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`                                                                         |
+| `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate`                                                            |
 
 ### OcspEncoderErrorCode
 
 | Code                              | Meaning                                                  |
 | --------------------------------- | -------------------------------------------------------- |
 | `invalid_date`                    | A response date is an invalid `Date`                     |
+| `invalid_revocation_reason_code`  | `revocationReasonCode` is negative or not an integer     |
 | `signer_certificate_key_mismatch` | Signer certificate's SPKI does not match the signing key |
 
 ## micro509/keys
@@ -442,6 +451,7 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
 [rfc5280-section-4.2.1.13]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.13
 [rfc5280-section-5.1.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.3
+[rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-6.3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.3.3
 [rfc5891-section-4]: https://www.rfc-editor.org/rfc/rfc5891.html#section-4
 [rfc6335]: https://www.rfc-editor.org/rfc/rfc6335.html

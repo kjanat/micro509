@@ -166,6 +166,11 @@ export function integerFromNumber(value: number): Uint8Array {
 	return integer(Uint8Array.from(encodeBase256(value)));
 }
 
+/** Encodes a DER ENUMERATED (tag `0x0a`) from a non-negative safe integer. */
+export function enumeratedFromNumber(value: number): Uint8Array {
+	return concatBytes([Uint8Array.of(0x0a), integerFromNumber(value).subarray(1)]);
+}
+
 /** Encodes a DER BOOLEAN (tag `0x01`): `true` → `0xff`, `false` → `0x00`. */
 export function bool(value: boolean): Uint8Array {
 	return tlv(0x01, Uint8Array.of(value ? 0xff : 0x00));

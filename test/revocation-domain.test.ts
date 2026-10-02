@@ -47,7 +47,7 @@ describe('revocation domain', () => {
 		const parsed = revocation.parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.issuer.values.commonName).toBe('Revocation Validate CA');
 		expect(parsed.revokedCertificates).toHaveLength(0);
-		expect(parsed.crlNumber).toBe(2);
+		expect(parsed.crlNumber).toBe(2n);
 
 		const result = await revocation.validateCertificateRevocationList({
 			crl: crl.pem,
@@ -118,14 +118,14 @@ describe('revocation domain', () => {
 		expect(result.value.details.indeterminateEvidence).toHaveLength(0);
 	});
 
-	it('maps CRLReason codes to RevocationReason names, skipping unused 7', () => {
+	it('maps CRLReason codes to RevocationReason names and keeps unrecognized codes', () => {
 		expect(revocation.revocationReasonFromCode(0)).toBe('unspecified');
 		expect(revocation.revocationReasonFromCode(1)).toBe('keyCompromise');
 		expect(revocation.revocationReasonFromCode(6)).toBe('certificateHold');
-		expect(revocation.revocationReasonFromCode(7)).toBeUndefined();
+		expect(revocation.revocationReasonFromCode(7)).toEqual({ type: 'unrecognized', code: 7 });
 		expect(revocation.revocationReasonFromCode(8)).toBe('removeFromCRL');
 		expect(revocation.revocationReasonFromCode(10)).toBe('aACompromise');
-		expect(revocation.revocationReasonFromCode(11)).toBeUndefined();
+		expect(revocation.revocationReasonFromCode(11)).toEqual({ type: 'unrecognized', code: 11 });
 		expect(revocation.revocationReasonFromCode(undefined)).toBeUndefined();
 	});
 });

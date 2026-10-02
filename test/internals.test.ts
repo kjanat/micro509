@@ -3492,6 +3492,7 @@ describe('ecdsaSignatureToDer', () => {
 				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 			});
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: `DER Sig CA ${i}` },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,

@@ -30,6 +30,7 @@ import {
 	bitString,
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
+	enumeratedFromNumber,
 	explicitContext,
 	generalizedTime,
 	integer,
@@ -72,7 +73,11 @@ import {
 	successResult,
 	throwMicro509Error,
 } from '#micro509/result/result';
-import type { CrlSource, ParsedCertificateRevocationList } from '#micro509/revocation/crl';
+import type {
+	CrlSource,
+	ParsedCertificateRevocationList,
+	UnrecognizedReasonCodePolicy,
+} from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
@@ -313,7 +318,10 @@ export type CreateOcspCertStatusInput =
 	  };
 
 /** Machine-readable reason an OCSP encoder rejected its construction input. */
-export type OcspEncoderErrorCode = 'invalid_date' | 'signer_certificate_key_mismatch';
+export type OcspEncoderErrorCode =
+	| 'invalid_date'
+	| 'invalid_revocation_reason_code'
+	| 'signer_certificate_key_mismatch';
 
 /** Throws a {@link ResultError} for an OCSP encoder input-validation failure. */
 function throwOcspEncoderError(code: OcspEncoderErrorCode, message: string): never {
@@ -323,6 +331,15 @@ function throwOcspEncoderError(code: OcspEncoderErrorCode, message: string): nev
 function assertOcspDate(date: Date | undefined, field: string): void {
 	if (date !== undefined && Number.isNaN(date.getTime())) {
 		throwOcspEncoderError('invalid_date', `${field} must be a valid date`);
+	}
+}
+
+function assertOcspRevocationReasonCode(code: number | undefined): void {
+	if (code !== undefined && !(Number.isSafeInteger(code) && code >= 0)) {
+		throwOcspEncoderError(
+			'invalid_revocation_reason_code',
+			'revocationReasonCode must be a non-negative integer',
+		);
 	}
 }
 
@@ -435,6 +452,12 @@ export interface ValidateOcspResponseInput {
 	 * default. Throws `RangeError` when negative or not finite.
 	 */
 	readonly responderRevocationCrlMaxAgeMs?: number;
+	/**
+	 * Treatment of a `responderRevocationCrls` entry that revokes the responder
+	 * with an unrecognized CRLReason. See {@linkcode UnrecognizedReasonCodePolicy}.
+	 * `'reject'` leaves that CRL out of the evidence. Defaults to `'revoked'`.
+	 */
+	readonly responderRevocationUnrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/**
@@ -895,6 +918,7 @@ export async function createOcspResponse(
 		assertOcspDate(response.thisUpdate, 'thisUpdate');
 		assertOcspDate(response.nextUpdate, 'nextUpdate');
 		assertOcspDate(response.revokedAt, 'revokedAt');
+		assertOcspRevocationReasonCode(response.revocationReasonCode);
 		const certificate = normalizeCertificate(response.certificate);
 		const issuer = normalizeCertificate(response.issuerCertificate);
 		responses.push(await encodeSingleResponse(certificate, issuer, response, hashAlgorithm));
@@ -1465,6 +1489,9 @@ async function checkDelegatedResponderRevocation(
 			? {}
 			: { maxAgeMs: input.responderRevocationCrlMaxAgeMs }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.responderRevocationUnrecognizedReasonCode === undefined
+			? {}
+			: { unrecognizedReasonCode: input.responderRevocationUnrecognizedReasonCode }),
 	};
 	const coveredReasons = new Set<string>();
 	for (const source of input.responderRevocationCrls ?? []) {
@@ -1763,9 +1790,7 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 				generalizedTime(input.revokedAt ?? input.thisUpdate ?? new Date()),
 			];
 			if (input.revocationReasonCode !== undefined) {
-				revokedFields.push(
-					explicitContext(0, tlv(0x0a, Uint8Array.of(input.revocationReasonCode))),
-				);
+				revokedFields.push(explicitContext(0, enumeratedFromNumber(input.revocationReasonCode)));
 			}
 			return tlv(0xa1, concatBytes(revokedFields));
 		}

@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `unrecognizedReasonCode` (`'revoked'` by default, or `'reject'`) on
+  `checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation` and the
+  chain `RevocationPolicy`, and `responderRevocationUnrecognizedReasonCode` on
+  `validateOcspResponse`, choose the treatment of evidence that revokes a
+  certificate with a CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1]. `'reject'` reports
+  `reason_code_unrecognized`, at chain level `crl_reason_code_unrecognized` or
+  `ocsp_reason_code_unrecognized`, and keeps other evidence from settling the
+  status as `good`.
 - The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
   for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
   within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
@@ -226,6 +234,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING** A CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1] parses as
+  `{ type: 'unrecognized', code }` (`UnrecognizedRevocationReason`) instead of
+  being dropped. `ParsedRevokedCertificate.reasonCode`, the revoked value of
+  `checkCertificateRevocationAgainstCrl`, `revocationReason` of
+  `checkCertificateRevocation`, the chain `revocationInfo.reason` and
+  `revocationReasonFromCode` use `ParsedRevocationReason`. A critical cRLReason
+  holding an unrecognized code makes the CRL `malformed`.
 - A typed SRVName SAN outside the [RFC 6335][rfc6335] service grammar or STD3 LDH Name
   syntax is refused with the new `invalid_srv_name`.
 - A critical subjectAltName holding a SRVName that is not `_Service.Name`
@@ -284,6 +299,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second than `thisUpdate`, which defaults to now. This ordering is a micro509
   builder invariant. `CrlEncoderErrorCode` gains
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
+- **BREAKING** `createCertificateRevocationList` requires `issuerPublicKey` and
+  `crlNumber` and always encodes the Authority Key Identifier and CRL Number
+  extensions ([RFC 5280 §5.2.1][rfc5280-section-5.2.1], [§5.2.3][rfc5280-section-5.2.3]). An `issuerPublicKey` that is not an
+  extractable public `CryptoKey` throws `ResultError` code
+  `issuer_public_key_invalid`.
+- **BREAKING** CRL numbers are `bigint`. `crlNumber` and `baseCrlNumber` on
+  `createCertificateRevocationList` take a `number` or `bigint` up to 20
+  octets and throw `ResultError` code `crl_number_invalid` past that, when
+  negative, or when not an integer. `ParsedCertificateRevocationList.crlNumber`
+  and `baseCrlNumber` are `bigint`. Parsing failed on any CRL number above
+  2^53 − 1, though [RFC 5280 §5.2.3][rfc5280-section-5.2.3] requires verifiers to handle 20 octets, and
+  read a CRLNumber of another ASN.1 type as an INTEGER. It now refuses the
+  latter as malformed.
+- CRL parsing refuses trailing data after a CRLNumber, deltaCRLIndicator,
+  cRLReason or invalidityDate value, and requires cRLReason to be a minimal,
+  non-negative ENUMERATED ([RFC 5280 §5.3.1][rfc5280-section-5.3.1]). It read
+  the first content octet of any element as the reason code.
 - An [RFC 7292][rfc7292] MAC password containing a UTF-16 surrogate (a non-BMP character
   or a lone surrogate), U+FFFE or U+FFFF is not a BMPString ([RFC 7292 Appendix
   B.1][rfc7292-appendix-B.1], X.680 §41.15).
@@ -310,6 +342,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `createOcspResponse` wrote `revocationReasonCode` as a single octet, so a code
+  of 128 or more became a negative or truncated ENUMERATED. It now encodes the
+  minimal DER ENUMERATED and throws `ResultError` code
+  `invalid_revocation_reason_code` for a negative or non-integer code.
+- CRL parsing accepted a revoked entry carrying a critical extension other
+  than reasonCode, invalidityDate or certificateIssuer. [RFC 5280 §5.3][rfc5280-section-5.3]
+  forbids using such a CRL for any certificate, and parsing now refuses it as
+  `malformed`.
 - Key import returned `malformed` for a decode limit inside a
   SubjectPublicKeyInfo, PKCS#8, SEC 1 or EncryptedPrivateKeyInfo, and
   `invalid_password` for one inside decrypted PKCS#8, PKCS#1 or SEC 1 content.
@@ -1890,8 +1930,10 @@ Initial prerelease. API may change before 1.0.
 [rfc5280-section-5.1.1.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.1.2
 [rfc5280-section-5.1.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.3
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
+[rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
 [rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
+[rfc5280-section-5.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3
 [rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
 [rfc5280-section-6.1.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.1.3
 [rfc5280-section-6.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.1.4

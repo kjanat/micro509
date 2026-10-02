@@ -451,6 +451,25 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `createCertificateRevocationList` also requires it at least one second
       after `thisUpdate`. This is a micro509 builder invariant. [RFC 5280][rfc5280] and
       X.509 do not specify an order between the two fields.
+- [x] Always encode the Authority Key Identifier, by the key identifier method,
+      and a non-critical CRL Number in generated CRLs ([RFC 5280 §5.2.1][rfc5280-section-5.2.1],
+      [§5.2.3][rfc5280-section-5.2.3]). `createCertificateRevocationList` requires `issuerPublicKey`
+      and `crlNumber`, and refuses a CRL number or base CRL number longer than 20
+      octets. Parsing reads CRL numbers of any length as `bigint`, since verifiers
+      must handle values up to 20 octets.
+- [x] Refuse a CRL whose revoked entry carries a critical extension other
+      than reasonCode, invalidityDate or certificateIssuer
+      ([RFC 5280 §5.3][rfc5280-section-5.3]).
+- [x] Keep a CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1] as
+      `{ type: 'unrecognized', code }`, including X.509's
+      `weakAlgorithmOrKey (11)`. Neither [RFC 5280][rfc5280] nor X.509 says what a
+      relying party does with such a code, so `unrecognizedReasonCode` on
+      `checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation` and
+      the chain `RevocationPolicy` (`responderRevocationUnrecognizedReasonCode`
+      on `validateOcspResponse`) chooses: `'revoked'` (default) or `'reject'`,
+      under which the evidence settles nothing and other evidence cannot
+      settle the status as `good`. A critical cRLReason holding an
+      unrecognized code makes the CRL malformed ([RFC 5280 Appendix B][rfc5280-appendix-B]).
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
@@ -597,7 +616,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
+[rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
+[rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
+[rfc5280-section-5.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3
 [rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
 [rfc5280-section-6.3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.3.3
 [rfc5280-section-7.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-7.1

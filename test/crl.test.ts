@@ -48,6 +48,7 @@ import {
 	sliceElement,
 	withCrlIssuer,
 	withoutCrlNextUpdate,
+	withRevokedEntryReasonCode,
 } from '#test/helpers';
 
 describe('crl', () => {
@@ -78,7 +79,7 @@ describe('crl', () => {
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsedCrl.issuer.values.commonName).toBe('CRL Issuer');
-		expect(parsedCrl.crlNumber).toBe(7);
+		expect(parsedCrl.crlNumber).toBe(7n);
 		expect(parsedCrl.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
 		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
@@ -92,6 +93,8 @@ describe('crl', () => {
 		const badCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: wrongSigner.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			crlNumber: 1,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
@@ -108,6 +111,8 @@ describe('crl', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: keys.privateKey,
+			issuerPublicKey: keys.publicKey,
+			crlNumber: 1,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const rewritten = rewriteCrlIssuerCommonName(
@@ -124,6 +129,8 @@ describe('crl', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: keys.privateKey,
+			issuerPublicKey: keys.publicKey,
+			crlNumber: 1,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const rewritten = rewriteCrlIssuerCommonName(
@@ -164,6 +171,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Teletex CA' },
 			issuerPublicKey: ca.keyPair.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -195,6 +203,8 @@ describe('crl', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: keys.privateKey,
+			issuerPublicKey: keys.publicKey,
+			crlNumber: 1,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
@@ -243,7 +253,7 @@ describe('crl', () => {
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
-		expect(parsed.baseCrlNumber).toBe(8);
+		expect(parsed.baseCrlNumber).toBe(8n);
 		expect(parsed.issuingDistributionPoint).toEqual({
 			distributionPoint: {
 				type: 'fullName',
@@ -280,6 +290,7 @@ describe('crl', () => {
 		});
 		const deltaIssuerDnHex = unwrap(parseCertificatePem(issuer.certificate.pem)).subject.derHex;
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Structured CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
@@ -361,6 +372,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scope Only CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
@@ -387,6 +399,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'General Name CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
@@ -438,6 +451,7 @@ describe('crl', () => {
 		});
 		const now = new Date();
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -498,6 +512,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'AKI CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -538,6 +553,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const matchingCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scoped CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -558,6 +574,7 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		const mismatchedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scoped CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -613,6 +630,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const reasonMismatchCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Reason Scope CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -660,6 +678,7 @@ describe('crl', () => {
 			},
 		});
 		const caOnlyCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Reason Scope CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -727,6 +746,7 @@ describe('crl', () => {
 			},
 		});
 		const mismatchedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Different CRL Issuer CA' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -768,6 +788,7 @@ describe('crl', () => {
 			},
 		});
 		const directCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Certificate Issuer CA' },
 			signerPrivateKey: certIssuer.keyPair.privateKey,
 			issuerPublicKey: certIssuer.keyPair.publicKey,
@@ -876,6 +897,7 @@ describe('crl', () => {
 			},
 		});
 		const attributeOnlyCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scope Mismatch CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -885,6 +907,7 @@ describe('crl', () => {
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const userOnlyCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Scope Mismatch CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -935,6 +958,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		const issuerScopedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Issuer Fallback CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -980,6 +1004,7 @@ describe('crl', () => {
 			},
 		});
 		const indirectCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Indirect CRL Issuer' },
 			signerPrivateKey: crlCa.keyPair.privateKey,
 			issuerPublicKey: crlCa.keyPair.publicKey,
@@ -1001,6 +1026,7 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		const mismatchedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Indirect CRL Issuer' },
 			signerPrivateKey: crlCa.keyPair.privateKey,
 			issuerPublicKey: crlCa.keyPair.publicKey,
@@ -1051,6 +1077,7 @@ describe('crl', () => {
 			},
 		});
 		const fullScopeCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Reason Mask CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1068,6 +1095,7 @@ describe('crl', () => {
 		});
 
 		const scopedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Reason Mask CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1124,6 +1152,7 @@ describe('crl', () => {
 			},
 		});
 		const fullScopeCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Multi DP CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1161,6 +1190,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'IAN Case CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1203,6 +1233,7 @@ describe('crl', () => {
 		});
 		for (const idpName of ['_ldap.crl.example', '_LDAP.CRL.EXAMPLE']) {
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'SRV DP CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -1221,6 +1252,7 @@ describe('crl', () => {
 		}
 
 		const otherCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'SRV DP CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1272,6 +1304,7 @@ describe('crl', () => {
 				},
 			});
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'SRV Root DP CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -1331,6 +1364,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'URI Norm CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1384,6 +1418,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'URI Distinct CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1426,6 +1461,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		const fullScopeCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Full Scope CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1443,6 +1479,7 @@ describe('crl', () => {
 		});
 
 		const reasonScopedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Full Scope CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1463,6 +1500,7 @@ describe('crl', () => {
 		});
 
 		const scopedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Full Scope CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1494,6 +1532,7 @@ describe('crl', () => {
 			},
 		});
 		const noCrlSign = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'No CRL Sign CA' },
 			signerPrivateKey: signerWithoutCrlSign.keyPair.privateKey,
 			issuerPublicKey: signerWithoutCrlSign.keyPair.publicKey,
@@ -1550,6 +1589,7 @@ describe('crl', () => {
 			},
 		});
 		const indirectCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Unsupported CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1600,6 +1640,7 @@ describe('crl', () => {
 		});
 
 		const deltaCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Unsupported CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -1668,7 +1709,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			value: { status: 'revoked', reasonCode: 'keyCompromise', crl: { crlNumber: 5 } },
+			value: { status: 'revoked', reasonCode: 'keyCompromise', crl: { crlNumber: 5n } },
 		});
 	});
 
@@ -1767,7 +1808,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			value: { status: 'good', crl: { crlNumber: 10 } },
+			value: { status: 'good', crl: { crlNumber: 10n } },
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1782,7 +1823,7 @@ describe('crl', () => {
 			value: {
 				status: 'revoked',
 				reasonCode: 'keyCompromise',
-				crl: { crlNumber: 10 },
+				crl: { crlNumber: 10n },
 			},
 		});
 		expect(
@@ -1795,7 +1836,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			value: { status: 'good', crl: { crlNumber: 10 } },
+			value: { status: 'good', crl: { crlNumber: 10n } },
 		});
 	});
 
@@ -2055,6 +2096,7 @@ describe('crl', () => {
 		});
 		const parsedCertificateIssuer = unwrap(parseCertificatePem(certificateIssuer.certificate.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Revoked Entry Parser CA' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -2132,6 +2174,7 @@ describe('crl', () => {
 			extensions: { crlDistributionPoints: distributionPoints },
 		});
 		const baseCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Indirect CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -2208,6 +2251,7 @@ describe('crl', () => {
 			},
 		});
 		const indirectCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Indirect Applicability CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -2258,6 +2302,7 @@ describe('crl', () => {
 			issuerPublicKey: certificateIssuer.keyPair.publicKey,
 		});
 		const indirectCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Indirect No-DP CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -2317,6 +2362,7 @@ describe('crl', () => {
 			},
 		});
 		const indirectCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Unsupported cRLIssuer CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -2839,6 +2885,7 @@ describe('crl', () => {
 			},
 		});
 		const indirectCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Entry Mismatch CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
@@ -2887,6 +2934,7 @@ describe('crl', () => {
 			reasonCode: reason,
 		}));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Reason CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -2910,6 +2958,7 @@ describe('crl', () => {
 		});
 		const now = new Date();
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'DER CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -2936,6 +2985,7 @@ describe('crl', () => {
 		});
 		const now = new Date();
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Parsed CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -2961,6 +3011,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed Parsed CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -2986,6 +3037,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'DER-less Parsed CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3010,6 +3062,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed Validate Issuer CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3031,6 +3084,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Tampered Parsed Validate Issuer CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3068,6 +3122,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Tampered Parsed CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3112,6 +3167,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed Parsed CRL Check CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3137,6 +3193,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed Target Cert CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3168,6 +3225,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Duplicate Revoked Entry CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3202,6 +3260,7 @@ describe('crl', () => {
 		});
 		// Sign CRL with ca but verify with otherCa (same subject, different key)
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3221,6 +3280,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed Verify Issuer CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3248,11 +3308,11 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		// Create CRL without AKI to bypass AKI check, signed by ca
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			// omit issuerPublicKey → no AKI extension
+			issuerPublicKey: otherCa.keyPair.publicKey,
+			crlNumber: 1,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await validateCertificateRevocationList({
@@ -3274,6 +3334,7 @@ describe('crl', () => {
 
 		await expectRejectedErrorCode(
 			createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'Bad Scope CRL Issuer' },
 				signerPrivateKey: issuer.keyPair.privateKey,
 				issuerPublicKey: issuer.keyPair.publicKey,
@@ -3300,6 +3361,7 @@ describe('crl', () => {
 
 		await expectRejectedErrorCode(
 			createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'Bad Freshest CRL Issuer' },
 				signerPrivateKey: issuer.keyPair.privateKey,
 				issuerPublicKey: issuer.keyPair.publicKey,
@@ -3319,6 +3381,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'PEM CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3338,6 +3401,7 @@ describe('crl', () => {
 		});
 		// Create CRL with IDP extension
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'IDP CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3399,6 +3463,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'AKI CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3442,6 +3507,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad CRL AKI CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3467,6 +3533,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad CRL AKI Wrapper CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3592,6 +3659,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Trailing CRL Field CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3638,6 +3706,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'V1 CRL With Entry Extensions CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3665,6 +3734,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Repeated IDP Field CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3691,6 +3761,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Malformed DirectoryName IDP CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3720,6 +3791,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Conflicting IDP Scope CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3746,6 +3818,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Explicit False IDP Scope CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3795,6 +3868,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad IDP Name Tag CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3821,6 +3895,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad Freshest CRL DP CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3854,6 +3929,7 @@ describe('crl', () => {
 			},
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad Empty Freshest CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3905,6 +3981,253 @@ describe('crl', () => {
 		).toThrow('CRL extension value must use OCTET STRING');
 	});
 
+	it('parseCertificateRevocationListDerOrThrow rejects trailing data after CRL and entry extension values', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Trailing CRL Extension Value CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Trailing CRL Extension Value CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+			baseCrlNumber: 5,
+			revokedCertificates: [
+				{
+					serialNumber: Uint8Array.of(1),
+					reasonCode: 'keyCompromise',
+					invalidityDate: new Date('2024-01-01T00:00:00Z'),
+				},
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const generalizedTime = tlv(0x18, new TextEncoder().encode('20240101000000Z'));
+		const withTrailingByte = (der: Uint8Array) => Uint8Array.of(...der, 0x00);
+
+		for (const rewritten of [
+			rewriteCrlExtensionValuePayload(
+				crl.der,
+				OIDS.cRLNumber,
+				Uint8Array.of(0x02, 0x01, 0x07, 0x00),
+			),
+			rewriteCrlExtensionValuePayload(
+				crl.der,
+				OIDS.deltaCRLIndicator,
+				Uint8Array.of(0x02, 0x01, 0x05, 0x00),
+			),
+			rewriteFirstRevokedEntryExtensionValuePayload(
+				crl.der,
+				OIDS.cRLReason,
+				Uint8Array.of(0x0a, 0x01, 0x01, 0x00),
+			),
+			rewriteFirstRevokedEntryExtensionValuePayload(
+				crl.der,
+				OIDS.invalidityDate,
+				withTrailingByte(generalizedTime),
+			),
+		]) {
+			expect(() => parseCertificateRevocationListDerOrThrow(rewritten)).toThrow(
+				'Trailing data after DER element',
+			);
+		}
+		expect(
+			parseCertificateRevocationListDerOrThrow(
+				rewriteFirstRevokedEntryExtensionValuePayload(
+					crl.der,
+					OIDS.invalidityDate,
+					generalizedTime,
+				),
+			).revokedCertificates[0]?.invalidityDate,
+		).toEqual(new Date('2024-01-01T00:00:00Z'));
+	});
+
+	it('parseCertificateRevocationListDerOrThrow rejects a CRLNumber or deltaCRLIndicator that is not an INTEGER', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'CRL Number Type CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Number Type CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+			baseCrlNumber: 5,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+
+		for (const oid of [OIDS.cRLNumber, OIDS.deltaCRLIndicator]) {
+			expect(() =>
+				parseCertificateRevocationListDerOrThrow(
+					rewriteCrlExtensionValuePayload(crl.der, oid, octetString(Uint8Array.of(7))),
+				),
+			).toThrow('CRLNumber must be an INTEGER');
+		}
+	});
+
+	it('parseCertificateRevocationListDerOrThrow refuses an unrecognized critical entry extension (RFC 5280 §5.3)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical Entry Extension CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Critical Entry Extension CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const withEntryExtension = (critical: boolean) =>
+			rewriteFirstRevokedEntryExtension(crl.der, (entryDer, entryExtensions) =>
+				sequence([
+					...childrenOf(entryDer, entryExtensions).map((extension) =>
+						sliceElement(entryDer, extension),
+					),
+					sequence([
+						objectIdentifier('1.3.6.1.4.1.55555.1'),
+						...(critical ? [bool(true)] : []),
+						octetString(nullValue()),
+					]),
+				]),
+			);
+
+		expect(() => parseCertificateRevocationListDerOrThrow(withEntryExtension(true))).toThrow(
+			'Unsupported critical revoked certificate extension OID: 1.3.6.1.4.1.55555.1',
+		);
+		expect(
+			parseCertificateRevocationListDerOrThrow(withEntryExtension(false)).revokedCertificates[0]
+				?.reasonCode,
+		).toBe('keyCompromise');
+	});
+
+	it('parseCertificateRevocationListDerOrThrow decodes cRLReason as a DER ENUMERATED', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'CRL Reason Encoding CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Reason Encoding CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const withReason = (payload: Uint8Array) =>
+			rewriteFirstRevokedEntryExtensionValuePayload(crl.der, OIDS.cRLReason, payload);
+
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x02, 0x01, 0x01))),
+		).toThrow('cRLReason must use ENUMERATED');
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x00))),
+		).toThrow('cRLReason is empty');
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x02, 0x00, 0x01))),
+		).toThrow('cRLReason must use minimal encoding');
+		expect(() =>
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x01, 0xff))),
+		).toThrow('cRLReason must be non-negative');
+		expect(
+			parseCertificateRevocationListDerOrThrow(withReason(Uint8Array.of(0x0a, 0x01, 0x0a)))
+				.revokedCertificates[0]?.reasonCode,
+		).toBe('aACompromise');
+	});
+
+	it('keeps a CRLReason outside RFC 5280 §5.3.1 as an unrecognized reason', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unrecognized Reason CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unrecognized Reason CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const reasonOf = async (code: number, critical: boolean) =>
+			parseCertificateRevocationListDerOrThrow(
+				await withRevokedEntryReasonCode(crl.der, ca.keyPair.privateKey, code, critical),
+			).revokedCertificates[0]?.reasonCode;
+
+		expect(await reasonOf(7, false)).toEqual({ type: 'unrecognized', code: 7 });
+		expect(await reasonOf(11, false)).toEqual({ type: 'unrecognized', code: 11 });
+		expect(await reasonOf(1, true)).toBe('keyCompromise');
+		const criticalUnrecognized = await withRevokedEntryReasonCode(
+			crl.der,
+			ca.keyPair.privateKey,
+			7,
+			true,
+		);
+		expect(() => parseCertificateRevocationListDerOrThrow(criticalUnrecognized)).toThrow(
+			'Critical cRLReason holds unrecognized reason code 7',
+		);
+	});
+
+	it('checkCertificateRevocationAgainstCrl applies unrecognizedReasonCode to an unrecognized CRLReason', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unrecognized Reason Policy CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unrecognized Reason Policy CA' },
+			subject: { commonName: 'unrecognized-reason.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unrecognized Reason Policy CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex),
+					reasonCode: 'keyCompromise',
+				},
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const unrecognized = await withRevokedEntryReasonCode(crl.der, ca.keyPair.privateKey, 7);
+		const check = (unrecognizedReasonCode?: 'revoked' | 'reject') =>
+			checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: unrecognized,
+				...(unrecognizedReasonCode === undefined ? {} : { unrecognizedReasonCode }),
+			});
+
+		const revoked = {
+			ok: true,
+			value: { status: 'revoked', reasonCode: { type: 'unrecognized', code: 7 } },
+		};
+		expect(await check()).toMatchObject(revoked);
+		expect(await check('revoked')).toMatchObject(revoked);
+		expect(await check('reject')).toMatchObject({ ok: false, code: 'reason_code_unrecognized' });
+	});
+
 	it('parseCertificateRevocationListDerOrThrow rejects malformed CRL extension middle fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Middle Field CA' },
@@ -3950,6 +4273,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Duplicate Revoked Entry Extension CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -3991,6 +4315,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad Revoked Entry Extension Value CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -4033,6 +4358,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad CertIssuer Names CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -4073,6 +4399,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad CertIssuer Wrapper CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -4113,6 +4440,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad Revoked Serial Tag CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -4154,6 +4482,7 @@ describe('crl', () => {
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Bad Revoked Entry Extension Middle Field CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -4895,6 +5224,7 @@ describe('crl Result forms', () => {
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Result Form CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
@@ -4929,6 +5259,7 @@ describe('CRL maximum age', () => {
 			},
 		});
 		const issued = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Max Age CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,

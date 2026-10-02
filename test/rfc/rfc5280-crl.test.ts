@@ -16,8 +16,11 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
-import { integer, sequence, tlv } from '#micro509/internal/asn1/der';
+import { integer, objectIdentifier, sequence, tlv } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
+	childAt,
+	constructedChildren,
 	expectRejectedErrorCode,
 	expectRejectedWith,
 	hexToBytes,
@@ -60,6 +63,7 @@ describe('RFC 5280', () => {
 			const ca = await crlIssuer();
 			const nextUpdate = new Date('2025-01-08T00:00:00Z');
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -72,6 +76,7 @@ describe('RFC 5280', () => {
 		it('still parses a received CRL that omits nextUpdate ("not specified by this profile", L3275)', async () => {
 			const ca = await crlIssuer();
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -96,6 +101,7 @@ describe('RFC 5280', () => {
 			]) {
 				await expectRejectedErrorCode(
 					createCertificateRevocationList({
+						crlNumber: 1,
 						issuer: { commonName: 'RFC 5280 CRL CA' },
 						signerPrivateKey: ca.keyPair.privateKey,
 						issuerPublicKey: ca.keyPair.publicKey,
@@ -111,6 +117,7 @@ describe('RFC 5280', () => {
 			const ca = await crlIssuer();
 			await expectRejectedErrorCode(
 				createCertificateRevocationList({
+					crlNumber: 1,
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
 					issuerPublicKey: ca.keyPair.publicKey,
@@ -146,6 +153,7 @@ describe('RFC 5280', () => {
 					issuer: { commonName: 'RFC 5280 CRL CA' },
 					signerPrivateKey: ca.keyPair.privateKey,
 					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 1,
 					thisUpdate: THIS_UPDATE,
 					nextUpdate: new Date('2025-01-08T00:00:00Z'),
 					...fields,
@@ -158,6 +166,7 @@ describe('RFC 5280', () => {
 			const ca = await crlIssuer();
 			const nextUpdate = new Date(THIS_UPDATE.getTime() + 1_000);
 			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
 				issuer: { commonName: 'RFC 5280 CRL CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
@@ -165,6 +174,172 @@ describe('RFC 5280', () => {
 				nextUpdate,
 			});
 			expect(parseCertificateRevocationListDerOrThrow(crl.der).nextUpdate).toEqual(nextUpdate);
+		});
+	});
+
+	describe('§5.2 "Conforming CRL issuers are REQUIRED to include the authority key identifier (Section 5.2.1) and the CRL number (Section 5.2.3) extensions in all CRLs issued." (L3334-3336)', () => {
+		async function issuedCrl() {
+			const ca = await crlIssuer();
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: 'RFC 5280 CRL CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				crlNumber: 42,
+				thisUpdate: THIS_UPDATE,
+				nextUpdate: new Date('2025-01-08T00:00:00Z'),
+			});
+			return { ca, crl };
+		}
+
+		function crlExtension(crlDer: Uint8Array, oid: string): readonly Uint8Array[] {
+			const wrapper = constructedChildren(childAt(crlDer, 0)).find((child) => child[0] === 0xa0);
+			const list = wrapper === undefined ? undefined : constructedChildren(wrapper)[0];
+			const encodedOid = objectIdentifier(oid);
+			const extension = (list === undefined ? [] : constructedChildren(list))
+				.map(constructedChildren)
+				.find(([extnId]) => extnId !== undefined && Bun.deepEquals(extnId, encodedOid));
+			if (extension === undefined) throw new Error(`CRL has no extension ${oid}`);
+			return extension;
+		}
+
+		it('prints the sentences this suite enforces', () => {
+			expect(printed(3334, 3336)).toContain(
+				'Conforming CRL issuers are REQUIRED to include the authority key identifier (Section 5.2.1) and the CRL number (Section 5.2.3) extensions in all CRLs issued.',
+			);
+			expect(printed(3348, 3349)).toContain(
+				'Conforming CRL issuers MUST use the key identifier method, and MUST include this extension in all CRLs issued.',
+			);
+			expect(printed(3384, 3386)).toContain(
+				'CRL issuers conforming to this profile MUST include this extension in all CRLs and MUST mark this extension as non-critical.',
+			);
+		});
+
+		it('refuses an issuerPublicKey that is missing, private or not a CryptoKey as issuer_public_key_invalid', async () => {
+			const ca = await crlIssuer();
+			for (const issuerPublicKey of [undefined, ca.keyPair.privateKey, {}]) {
+				await expectRejectedErrorCode(
+					Reflect.apply(createCertificateRevocationList, undefined, [
+						{
+							issuer: { commonName: 'RFC 5280 CRL CA' },
+							signerPrivateKey: ca.keyPair.privateKey,
+							issuerPublicKey,
+							crlNumber: 1,
+							thisUpdate: THIS_UPDATE,
+							nextUpdate: new Date('2025-01-08T00:00:00Z'),
+						},
+					]),
+					'issuer_public_key_invalid',
+				);
+			}
+		});
+
+		it('§5.2.1 L3348-3349: encodes the issuer key identifier as the Authority Key Identifier', async () => {
+			const { ca, crl } = await issuedCrl();
+			const issuerKeyIdentifier = unwrap(
+				parseCertificatePem(ca.certificate.pem),
+			).subjectKeyIdentifier;
+			expect(issuerKeyIdentifier).toBeDefined();
+			expect(parseCertificateRevocationListDerOrThrow(crl.der).authorityKeyIdentifier).toBe(
+				issuerKeyIdentifier,
+			);
+			expect(crlExtension(crl.der, OIDS.authorityKeyIdentifier)).toHaveLength(2);
+		});
+
+		it('§5.2.3 L3384-3386: encodes the CRL number as a non-critical extension', async () => {
+			const { crl } = await issuedCrl();
+			expect(parseCertificateRevocationListDerOrThrow(crl.der).crlNumber).toBe(42n);
+			expect(crlExtension(crl.der, OIDS.cRLNumber)).toHaveLength(2);
+		});
+	});
+
+	describe('§5.2.3 "CRL verifiers MUST be able to handle CRLNumber values up to 20 octets. Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets." (L3403-3406)', () => {
+		const LARGEST_20_OCTET = (1n << 159n) - 1n;
+
+		async function crlNumbered(crlNumber: number | bigint, baseCrlNumber?: number | bigint) {
+			const ca = await crlIssuer();
+			return createCertificateRevocationList({
+				issuer: { commonName: 'RFC 5280 CRL CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				crlNumber,
+				...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+				thisUpdate: THIS_UPDATE,
+				nextUpdate: new Date('2025-01-08T00:00:00Z'),
+			});
+		}
+
+		it('prints the sentences this suite enforces', () => {
+			expect(printed(3403, 3406)).toContain(
+				'CRL verifiers MUST be able to handle CRLNumber values up to 20 octets. Conforming CRL issuers MUST NOT use CRLNumber values longer than 20 octets.',
+			);
+			expect(printed(3410, 3410)).toContain('CRLNumber ::= INTEGER (0..MAX)');
+		});
+
+		it('issues and parses a CRL number and base CRL number of exactly 20 octets', async () => {
+			const crl = await crlNumbered(LARGEST_20_OCTET, LARGEST_20_OCTET - 1n);
+			const parsed = parseCertificateRevocationListDerOrThrow(crl.der);
+			expect(parsed.crlNumber).toBe(LARGEST_20_OCTET);
+			expect(parsed.baseCrlNumber).toBe(LARGEST_20_OCTET - 1n);
+		});
+
+		it('refuses a CRL number or base CRL number longer than 20 octets, negative, or not an integer', async () => {
+			for (const invalid of [LARGEST_20_OCTET + 1n, -1n, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+				await expectRejectedErrorCode(crlNumbered(invalid), 'crl_number_invalid');
+				await expectRejectedErrorCode(crlNumbered(1, invalid), 'crl_number_invalid');
+			}
+		});
+
+		it('refuses a crlNumber that is not a number or bigint as crl_number_invalid', async () => {
+			const ca = await crlIssuer();
+			await expectRejectedErrorCode(
+				Reflect.apply(createCertificateRevocationList, undefined, [
+					{
+						issuer: { commonName: 'RFC 5280 CRL CA' },
+						signerPrivateKey: ca.keyPair.privateKey,
+						issuerPublicKey: ca.keyPair.publicKey,
+						nextUpdate: new Date('2025-01-08T00:00:00Z'),
+						thisUpdate: THIS_UPDATE,
+					},
+				]),
+				'crl_number_invalid',
+			);
+		});
+
+		it('applies a delta CRL whose numbers exceed Number.MAX_SAFE_INTEGER', async () => {
+			const ca = await crlIssuer();
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'RFC 5280 CRL CA' },
+				subject: { commonName: 'long-crl-number.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+			});
+			const base = 1n << 64n;
+			const issue = (crlNumber: bigint, deltaFields: object) =>
+				createCertificateRevocationList({
+					issuer: { commonName: 'RFC 5280 CRL CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber,
+					nextUpdate: new Date(Date.now() + DAY_MS),
+					...deltaFields,
+				});
+			const completeCrl = await issue(base, {});
+			const deltaCrl = await issue(base + 1n, {
+				baseCrlNumber: base,
+				revokedCertificates: [
+					{ serialNumber: hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex) },
+				],
+			});
+			expect(
+				await checkCertificateRevocationAgainstCrl({
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					crl: completeCrl.der,
+					deltaCrl: deltaCrl.der,
+				}),
+			).toMatchObject({ ok: true, value: { status: 'revoked' } });
 		});
 	});
 });
@@ -488,6 +663,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const signerRevokedByOldCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
@@ -502,6 +678,7 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			],
 		});
 		const leafCrl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
 			issuerPublicKey: signerKeys.publicKey,

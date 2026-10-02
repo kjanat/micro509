@@ -41,6 +41,7 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
+  crlNumber: 1,
   thisUpdate: new Date(),
   nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
@@ -81,6 +82,7 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
+  crlNumber: 1,
   nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
     {
@@ -118,10 +120,13 @@ revoked 02: ${isCertificateRevoked('02', parsed)}`);
 `createCertificateRevocationList` requires it. The builder also throws
 `next_update_not_after_this_update` unless `nextUpdate` is at least one second
 after `thisUpdate`. That ordering is a micro509 invariant, and [RFC 5280][rfc5280] and
-X.509 do not specify it. [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify how a client
-handles a received CRL without `nextUpdate`, and [§3.3][rfc5280-section-3.3] leaves the required
-recency of revocation data to local policy. By default micro509 applies no age limit, so a replayed
-pre-revocation CRL without `nextUpdate` still validates.
+X.509 do not specify it. [RFC 5280 §5.2][rfc5280-section-5.2] requires the Authority Key Identifier
+and CRL Number extensions in every CRL, so `issuerPublicKey` and `crlNumber` are required too.
+
+[RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify how a client handles a received CRL
+without `nextUpdate`, and [§3.3][rfc5280-section-3.3] leaves the required recency of revocation data
+to local policy. By default micro509 applies no age limit, so a replayed pre-revocation CRL without
+`nextUpdate` still validates.
 
 Bound the age of `thisUpdate` with these options. A CRL older than the bound
 fails with `stale_crl`, and the chain reports it as `crl_expired`.
@@ -137,6 +142,31 @@ The chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
 delegated OCSP responders. `clockSkewMs`, on the same input or on the chain
 `policy`, widens the bound by the same amount and also applies to the
 `thisUpdate` and `nextUpdate` checks.
+
+### Unrecognized reason codes
+
+[RFC 5280 §5.3.1][rfc5280-section-5.3.1] lists CRLReason values 0 to 10, with 7 unused, and X.509
+adds `weakAlgorithmOrKey (11)`. Neither says what a relying party does with a
+code outside its list. Parsing keeps such a code as
+`{ type: 'unrecognized', code }`, and the `unrecognizedReasonCode` option picks
+the treatment of evidence that revokes a certificate with it.
+
+| Value                 | Effect                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `'revoked'` (default) | The certificate is revoked, and the code is reported                                                                                   |
+| `'reject'`            | The evidence cannot settle the status and fails with `reason_code_unrecognized`. Other evidence then cannot settle it as `good` either |
+
+| Option                                      | Where                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------- |
+| `unrecognizedReasonCode`                    | `checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation`              |
+| `unrecognizedReasonCode`                    | `policy` of `checkChainRevocation` and `verifyCertificateChain({ revocation })`   |
+| `responderRevocationUnrecognizedReasonCode` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
+
+The chain reports a rejected code as `crl_reason_code_unrecognized` or
+`ocsp_reason_code_unrecognized`. A CRL whose entry marks its cRLReason critical
+and holds an unrecognized code is malformed, since [RFC 5280 Appendix B][rfc5280-appendix-B]
+requires rejecting a critical extension with values the implementation does not
+recognize.
 
 ## OCSP
 
@@ -353,6 +383,7 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'Demo CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
+  crlNumber: 1,
   nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   revokedCertificates: [
     {
@@ -498,6 +529,9 @@ chain:    ${result.value.chain.length} certificates`);
 [rfc5280]: https://www.rfc-editor.org/rfc/rfc5280.html
 [rfc5280-section-3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-3.3
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
+[rfc5280-section-5.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2
+[rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
+[rfc5280-appendix-B]: https://www.rfc-editor.org/rfc/rfc5280.html#appendix-B
 [rfc6960-section-4.2.2.1]: https://www.rfc-editor.org/rfc/rfc6960.html#section-4.2.2.1
 [rfc9919]: https://www.rfc-editor.org/rfc/rfc9919.html
 [rfc9919-section-5]: https://www.rfc-editor.org/rfc/rfc9919.html#section-5
