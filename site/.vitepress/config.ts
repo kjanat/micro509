@@ -252,9 +252,10 @@ const docs = await versionedDocs({
 			if (version.tag !== devLabel) {
 				return `https://cdn.jsdelivr.net/npm/${repo.name}@${version.tag.replace(/^v/, '')}${tail}/+esm`;
 			}
+			const source = repo.registry.exports[subpath]?.replace(/^\.\//, '/');
 			return isDev
 				? `/@fs${repoRoot}/dist${subpath === '.' ? '/index' : tail}.js`
-				: `https://esm.sh/gh${repoUrl.pathname}@${nextRef}${tail}?standalone`;
+				: `https://esm.sh/gh${repoUrl.pathname}@${nextRef}${source ?? tail}?standalone`;
 		},
 	},
 	generateApi,
