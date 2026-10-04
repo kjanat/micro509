@@ -75,6 +75,7 @@ import {
 	throwMicro509Error,
 } from '#micro509/result/result';
 import type {
+	CheckCertificateRevocationAgainstCrlInput,
 	CrlSource,
 	ParsedCertificateRevocationList,
 	UnrecognizedReasonCodePolicy,
@@ -1466,6 +1467,25 @@ function parseResponderCrlFromSource(source: CrlSource): ParsedCertificateRevoca
 	return parseCertificateRevocationListDerOrThrow(source);
 }
 
+function responderCrlCheck(
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+	input: ValidateOcspResponseInput,
+): Omit<CheckCertificateRevocationAgainstCrlInput, 'crl'> {
+	return {
+		certificate: signer,
+		issuerCertificate: issuer,
+		at: input.at ?? new Date(),
+		...(input.responderRevocationCrlMaxAgeMs === undefined
+			? {}
+			: { maxAgeMs: input.responderRevocationCrlMaxAgeMs }),
+		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.responderRevocationUnrecognizedReasonCode === undefined
+			? {}
+			: { unrecognizedReasonCode: input.responderRevocationUnrecognizedReasonCode }),
+	};
+}
+
 /**
  * Applies the delegated-responder revocation policy (RFC 6960 §4.2.2.2.1).
  * See {@linkcode OcspResponderRevocationPolicy} for the policy semantics.
@@ -1482,19 +1502,9 @@ async function checkDelegatedResponderRevocation(
 	if (policy === 'honor-nocheck' && hasOcspNoCheckExtension(signer)) {
 		return { ok: true };
 	}
-	const crlCheck = {
-		certificate: signer,
-		issuerCertificate: issuer,
-		at: input.at ?? new Date(),
-		...(input.responderRevocationCrlMaxAgeMs === undefined
-			? {}
-			: { maxAgeMs: input.responderRevocationCrlMaxAgeMs }),
-		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-		...(input.responderRevocationUnrecognizedReasonCode === undefined
-			? {}
-			: { unrecognizedReasonCode: input.responderRevocationUnrecognizedReasonCode }),
-	};
+	const crlCheck = responderCrlCheck(signer, issuer, input);
 	const coveredReasons = new Set<string>();
+	let sawUnrecognizedReason = false;
 	for (const source of input.responderRevocationCrls ?? []) {
 		let crl: ParsedCertificateRevocationList;
 		try {
@@ -1504,6 +1514,7 @@ async function checkDelegatedResponderRevocation(
 		}
 		const result = await checkCertificateRevocationAgainstCrl({ ...crlCheck, crl });
 		if (!result.ok) {
+			sawUnrecognizedReason ||= result.code === 'reason_code_unrecognized';
 			continue; // CRL does not apply to the responder certificate
 		}
 		if (result.value.status === 'revoked') {
@@ -1515,6 +1526,12 @@ async function checkDelegatedResponderRevocation(
 		for (const reason of result.value.coveredReasons) {
 			coveredReasons.add(reason);
 		}
+	}
+	if (sawUnrecognizedReason) {
+		return validateOcspResponseFailureResult(
+			'responder_revocation_unknown',
+			'Delegated OCSP responder carries an unrecognized CRL reason code',
+		);
 	}
 	// A definitive good requires every revocation reason to be covered; a single
 	// reason-scoped CRL does not prove the responder unrevoked.
