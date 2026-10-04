@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Glob } from 'bun';
+import jsr from '#jsr' with { type: 'json' };
 import { VERIFY_ERROR_CODES } from '#micro509/verify';
 import { projectRoot, srcRoot } from '#test/helpers';
 
@@ -46,7 +47,7 @@ async function orThrowExportsByDomain(): Promise<ReadonlyMap<string, ReadonlySet
 	const orThrowByDomain = new Map<string, Set<string>>();
 	for (const file of sourceFiles()) {
 		const relative = file.slice(srcRoot.length + 1);
-		if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
+		if (relative.startsWith('internal/')) continue;
 		const domain = relative.split('/')[0];
 		if (domain === undefined || !relative.includes('/')) continue;
 		const names = orThrowByDomain.get(domain) ?? new Set<string>();
@@ -105,6 +106,18 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		expect([...emitted.keys()].filter((label) => forbidden.has(label))).toEqual([]);
 	});
 
+	it('jsr.json publishes every src/*.ts, and each one only re-exports', async () => {
+		const roots = [...new Glob('*.ts').scanSync({ cwd: srcRoot })].map((file) => `./src/${file}`);
+		expect(Object.values(jsr.exports).sort()).toEqual(roots.sort());
+		for (const root of roots) {
+			const leftover = (await Bun.file(`${projectRoot}/${root}`).text())
+				.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
+				.replace(/export\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s+from\s+'[^']+';/g, '')
+				.trim();
+			expect({ root, leftover }).toEqual({ root, leftover: '' });
+		}
+	});
+
 	it('barrels re-export the OrThrow sibling of every function they expose', async () => {
 		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
 		// must re-export `fooOrThrow` too — otherwise the throwing variant is
@@ -114,7 +127,7 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		const allOrThrow = new Set<string>();
 		for (const [domain, names] of orThrowByDomain) {
 			if (names.size === 0) continue;
-			offenders.push(...(await missingOrThrowExports(`${domain}/index.ts`, names)));
+			offenders.push(...(await missingOrThrowExports(`${domain}.ts`, names)));
 			for (const name of names) allOrThrow.add(name);
 		}
 		offenders.push(...(await missingOrThrowExports('index.ts', allOrThrow)));
