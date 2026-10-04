@@ -633,7 +633,7 @@ export async function addRevokedEntryCertificateIssuers(
 export async function withRevokedEntryReasonCode(
 	crlDer: Uint8Array,
 	signerPrivateKey: CryptoKey,
-	code: number,
+	code: number | bigint,
 	critical = false,
 ): Promise<Uint8Array> {
 	const tbsDer = childAt(crlDer, 0);
@@ -646,7 +646,12 @@ export async function withRevokedEntryReasonCode(
 	if (revokedCertificates === undefined) {
 		throw new Error('CRL missing revokedCertificates sequence');
 	}
-	const reason = encodeExtension(OIDS.cRLReason, tlv(0x0a, Uint8Array.of(code)), critical);
+	const hex = BigInt(code).toString(16);
+	const enumerated = concatBytes([
+		Uint8Array.of(0x0a),
+		integer(hexToBytes(hex.length % 2 === 0 ? hex : `0${hex}`)).subarray(1),
+	]);
+	const reason = encodeExtension(OIDS.cRLReason, enumerated, critical);
 	const rebuiltEntries = childrenOf(tbsDer, revokedCertificates).map((entry) => {
 		const entryDer = sliceElement(tbsDer, entry);
 		const [serialNumber, revocationDate, extensions] = readSequenceChildren(entryDer);

@@ -214,8 +214,8 @@ export interface RevocationCheckRevokedValue {
 	readonly revokedAt?: Date;
 	/** CRL reason (from CRL evidence). */
 	readonly revocationReason?: ParsedRevocationReason;
-	/** CRL reason integer code (from OCSP evidence). */
-	readonly revocationReasonCode?: number;
+	/** CRL reason code (from OCSP evidence). */
+	readonly revocationReasonCode?: bigint;
 }
 
 /** Discriminated union of `good`, `revoked`, and `indeterminate` revocation outcomes. */

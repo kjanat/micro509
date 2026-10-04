@@ -12,7 +12,7 @@ import {
 	decodeBoolean,
 	decodeIntegerMagnitude,
 	decodeIntegerNumber,
-	decodeNonNegativeIntegerNumber,
+	decodeNonNegativeIntegerBigInt,
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
@@ -150,7 +150,7 @@ export interface UnrecognizedRevocationReason {
 	/** Discriminator for a code with no {@linkcode RevocationReason} name. */
 	readonly type: 'unrecognized';
 	/** The decoded ENUMERATED value. */
-	readonly code: number;
+	readonly code: bigint;
 }
 
 /** A decoded CRLReason: a named {@linkcode RevocationReason} or an {@linkcode UnrecognizedRevocationReason}. */
@@ -2345,7 +2345,7 @@ function applyRevokedCertificateExtensionValue(
 			throw new Error('cRLReason must use ENUMERATED');
 		}
 		const reasonCode = parsedRevocationReason(
-			decodeNonNegativeIntegerNumber(enumerated.value, 'cRLReason'),
+			decodeNonNegativeIntegerBigInt(enumerated.value, 'cRLReason'),
 		);
 		if (critical && typeof reasonCode !== 'string') {
 			throw new Error(
@@ -3000,32 +3000,32 @@ function normalizeHex(value: string): string {
  * §5.3.1. Returns `undefined` only when `code` is `undefined`.
  */
 export function revocationReasonFromCode(
-	code: number | undefined,
+	code: bigint | undefined,
 ): ParsedRevocationReason | undefined {
 	return code === undefined ? undefined : parsedRevocationReason(code);
 }
 
-function parsedRevocationReason(code: number): ParsedRevocationReason {
+function parsedRevocationReason(code: bigint): ParsedRevocationReason {
 	switch (code) {
-		case 0:
+		case 0n:
 			return 'unspecified';
-		case 1:
+		case 1n:
 			return 'keyCompromise';
-		case 2:
+		case 2n:
 			return 'cACompromise';
-		case 3:
+		case 3n:
 			return 'affiliationChanged';
-		case 4:
+		case 4n:
 			return 'superseded';
-		case 5:
+		case 5n:
 			return 'cessationOfOperation';
-		case 6:
+		case 6n:
 			return 'certificateHold';
-		case 8:
+		case 8n:
 			return 'removeFromCRL';
-		case 9:
+		case 9n:
 			return 'privilegeWithdrawn';
-		case 10:
+		case 10n:
 			return 'aACompromise';
 		default:
 			return { type: 'unrecognized', code };

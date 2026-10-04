@@ -1039,14 +1039,14 @@ describe('checkChainRevocation with OCSP evidence', () => {
 				crls: [unrecognizedCrl],
 				ocspResponses: [goodOcsp],
 				source: 'crl',
-				code: 7,
+				code: 7n,
 				reason: 'crl_reason_code_unrecognized',
 			},
 			{
 				crls: [goodCrl],
 				ocspResponses: [unrecognizedOcsp],
 				source: 'ocsp',
-				code: 11,
+				code: 11n,
 				reason: 'ocsp_reason_code_unrecognized',
 			},
 		] as const;

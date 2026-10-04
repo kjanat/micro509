@@ -163,10 +163,12 @@ the treatment of evidence that revokes a certificate with it.
 | `responderRevocationUnrecognizedReasonCode` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
 
 The chain reports a rejected code as `crl_reason_code_unrecognized` or
-`ocsp_reason_code_unrecognized`. A CRL whose entry marks its cRLReason critical
-and holds an unrecognized code is malformed, since [RFC 5280 Appendix B][rfc5280-appendix-B]
-requires rejecting a critical extension with values the implementation does not
-recognize.
+`ocsp_reason_code_unrecognized`. Codes are `bigint`, so a code of any length is
+kept exactly.
+
+A CRL whose entry marks its cRLReason critical and holds an unrecognized code
+is malformed, since [RFC 5280 Appendix B][rfc5280-appendix-B] requires rejecting a critical
+extension with values the implementation does not recognize.
 
 ## OCSP
 

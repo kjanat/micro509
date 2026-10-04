@@ -119,13 +119,13 @@ describe('revocation domain', () => {
 	});
 
 	it('maps CRLReason codes to RevocationReason names and keeps unrecognized codes', () => {
-		expect(revocation.revocationReasonFromCode(0)).toBe('unspecified');
-		expect(revocation.revocationReasonFromCode(1)).toBe('keyCompromise');
-		expect(revocation.revocationReasonFromCode(6)).toBe('certificateHold');
-		expect(revocation.revocationReasonFromCode(7)).toEqual({ type: 'unrecognized', code: 7 });
-		expect(revocation.revocationReasonFromCode(8)).toBe('removeFromCRL');
-		expect(revocation.revocationReasonFromCode(10)).toBe('aACompromise');
-		expect(revocation.revocationReasonFromCode(11)).toEqual({ type: 'unrecognized', code: 11 });
+		expect(revocation.revocationReasonFromCode(0n)).toBe('unspecified');
+		expect(revocation.revocationReasonFromCode(1n)).toBe('keyCompromise');
+		expect(revocation.revocationReasonFromCode(6n)).toBe('certificateHold');
+		expect(revocation.revocationReasonFromCode(7n)).toEqual({ type: 'unrecognized', code: 7n });
+		expect(revocation.revocationReasonFromCode(8n)).toBe('removeFromCRL');
+		expect(revocation.revocationReasonFromCode(10n)).toBe('aACompromise');
+		expect(revocation.revocationReasonFromCode(11n)).toEqual({ type: 'unrecognized', code: 11n });
 		expect(revocation.revocationReasonFromCode(undefined)).toBeUndefined();
 	});
 });

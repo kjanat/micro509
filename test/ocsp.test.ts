@@ -144,7 +144,7 @@ describe('ocsp', () => {
 			const parsed = parseOcspResponseDerOrThrow((await respond(code)).der);
 			expect(parsed.responses?.[0]).toMatchObject({
 				certStatus: 'revoked',
-				revocationReasonCode: code,
+				revocationReasonCode: BigInt(code),
 			});
 		}
 		for (const code of [-1, 1.5, Number.NaN]) {
@@ -431,7 +431,7 @@ describe('ocsp', () => {
 		if (entry?.certStatus !== 'revoked') {
 			throw new Error('expected revoked certStatus');
 		}
-		expect(entry.revocationReasonCode).toBe(1);
+		expect(entry.revocationReasonCode).toBe(1n);
 	});
 
 	it('verifyOcspResponseSignature with DER input', async () => {
@@ -2519,7 +2519,7 @@ describe('ocsp', () => {
 			throw new Error('expected revoked certStatus');
 		}
 		expect(certResponse.revokedAt.getTime()).toBe(revokedAt.getTime());
-		expect(certResponse.revocationReasonCode).toBe(1);
+		expect(certResponse.revocationReasonCode).toBe(1n);
 	});
 
 	it('parseOcspResponseDerOrThrow skips version tag [0] if present (line 254)', async () => {
