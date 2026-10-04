@@ -649,14 +649,22 @@ async function checkSignerRevocation(
 	// A `good` from one CRL does not end the search: a later CRL may report the
 	// signer revoked, and a revoked verdict from any CRL wins.
 	const coveredReasons = new Set<string>();
+	let sawUnrecognizedReason = false;
 	for (const crlSource of ctx.crls) {
 		const outcome = await checkSignerAgainstCrl(signer, issuer, crlSource, ctx);
 		if (outcome.kind === 'revoked') {
 			return 'resolved-revoked';
 		}
+		if (outcome.kind === 'unrecognized_reason') {
+			sawUnrecognizedReason = true;
+			continue;
+		}
 		for (const reason of outcome.reasons) {
 			coveredReasons.add(reason);
 		}
+	}
+	if (sawUnrecognizedReason) {
+		return 'resolved-indeterminate';
 	}
 	if (coversAllDistributionPointReasons(coveredReasons)) {
 		return 'resolved-valid';
@@ -671,9 +679,10 @@ async function checkSignerRevocation(
 	return 'resolved-indeterminate';
 }
 
-/** What one CRL settles about a signer: a revoked verdict, or the reasons it covers. */
+/** What one CRL settles about a signer: a revoked verdict, an entry `unrecognizedReasonCode: 'reject'` refuses, or the reasons it covers. */
 type SignerCrlOutcome =
 	| { readonly kind: 'revoked' }
+	| { readonly kind: 'unrecognized_reason' }
 	| { readonly kind: 'reasons'; readonly reasons: readonly DistributionPointReason[] };
 
 const SIGNER_CRL_NO_EVIDENCE = {
@@ -708,7 +717,9 @@ async function checkSignerAgainstCrl(
 		unrecognizedReasonCode: ctx.unrecognizedReasonCode,
 	});
 	if (!result.ok) {
-		return SIGNER_CRL_NO_EVIDENCE;
+		return result.code === 'reason_code_unrecognized'
+			? { kind: 'unrecognized_reason' }
+			: SIGNER_CRL_NO_EVIDENCE;
 	}
 	if (result.value.status === 'revoked') {
 		return { kind: 'revoked' };

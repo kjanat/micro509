@@ -299,6 +299,84 @@ describe('checkChainRevocation', () => {
 		expect(hardFailResult.value.decision).toBe('deny');
 	});
 
+	it('refuses a CRL signer that a CRL lists with an unrecognized reason under reject', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Split Keys Root' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const issueUnderRoot = async (keyUsage: readonly ('keyCertSign' | 'cRLSign')[]) => {
+			const keyPair = await generateKeyPair();
+			const certificate = await createCertificate({
+				issuer: { commonName: 'Split Keys Root' },
+				subject: { commonName: 'Split Keys CA' },
+				publicKey: keyPair.publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerPublicKey: root.keyPair.publicKey,
+				extensions: { basicConstraints: { ca: true }, keyUsage: [...keyUsage] },
+			});
+			return { keyPair, certificate: unwrap(parseCertificatePem(certificate.pem)) };
+		};
+		const ca = await issueUnderRoot(['keyCertSign']);
+		const crlSigner = await issueUnderRoot(['cRLSign']);
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Split Keys CA' },
+			subject: { commonName: 'split-keys.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const leafCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Split Keys CA' },
+			signerPrivateKey: crlSigner.keyPair.privateKey,
+			issuerPublicKey: crlSigner.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const rootCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Split Keys Root' },
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(crlSigner.certificate.serialNumberHex),
+					reasonCode: 'keyCompromise',
+				},
+			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const unrecognizedRootCrl = await withRevokedEntryReasonCode(
+			rootCrl.der,
+			root.keyPair.privateKey,
+			7,
+		);
+		const check = (unrecognizedReasonCode: 'revoked' | 'reject') =>
+			checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					ca.certificate,
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls: [unrecognizedRootCrl, leafCrl.der],
+				extraCertificates: [crlSigner.certificate],
+				policy: { unrecognizedReasonCode },
+			});
+
+		const byDefault = await check('revoked');
+		expect(byDefault.value.decision).toBe('deny');
+		expect(byDefault.value.certificates[0]?.indeterminateReasons).toContain('crl_signer_revoked');
+		expect(byDefault.value.certificates[1]?.status).toBe('good');
+
+		const rejected = await check('reject');
+		expect(rejected.value.decision).toBe('deny');
+		expect(rejected.value.certificates[0]?.status).toBe('indeterminate');
+		expect(rejected.value.certificates[0]?.indeterminateReasons).toContain(
+			'crl_signer_indeterminate',
+		);
+		expect(rejected.value.certificates[1]?.status).toBe('good');
+	});
+
 	it('rejects a forged CRL whose signer does not chain to the trust anchor', async () => {
 		const anchorName = 'Revocation Anchor CA';
 		const realCa = await createSelfSignedCertificate({

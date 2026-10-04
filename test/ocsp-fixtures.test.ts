@@ -621,6 +621,25 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			ok: false,
 			code: 'responder_revocation_unknown',
 		});
+
+		const goodCrl = await createCertificateRevocationList({
+			crlNumber: 2,
+			issuer: { commonName: authority.commonName },
+			signerPrivateKey: authority.ca.keyPair.privateKey,
+			issuerPublicKey: authority.ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		for (const responderRevocationPolicy of ['require-evidence', 'honor-nocheck'] as const) {
+			expect(
+				await validateOcspResponse({
+					response: response.der,
+					issuerCertificate: authority.ca.certificate.pem,
+					responderRevocationPolicy,
+					responderRevocationCrls: [unrecognizedCrl, goodCrl.der],
+					responderRevocationUnrecognizedReasonCode: 'reject',
+				}),
+			).toMatchObject({ ok: false, code: 'responder_revocation_unknown' });
+		}
 	});
 
 	it('require-evidence: rejects without evidence, ignores nocheck, accepts with good CRL', async () => {

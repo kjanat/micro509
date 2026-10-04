@@ -28,7 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   certificate with a CRLReason outside [RFC 5280 §5.3.1][rfc5280-section-5.3.1]. `'reject'` reports
   `reason_code_unrecognized`, at chain level `crl_reason_code_unrecognized` or
   `ocsp_reason_code_unrecognized`, and keeps other evidence from settling the
-  status as `good`.
+  status as `good`. A CRL signer that a CRL lists with a rejected code is
+  `crl_signer_indeterminate`, and a delegated OCSP responder listed with one
+  fails with `responder_revocation_unknown` under every
+  `responderRevocationPolicy` that checks CRLs.
 - The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
   for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
   within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
