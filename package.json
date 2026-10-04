@@ -19,7 +19,6 @@
 	"imports": {
 		"#micro509": "./src/index.ts",
 		"#micro509/*": "./src/*.ts",
-		"#micro509/internal/*": "./src/internal/*.ts",
 		"#pkg": "./package.json",
 		"#jsr": "./jsr.json",
 		"#smoke": "./scripts/smoke-core.mjs",
