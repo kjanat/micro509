@@ -627,7 +627,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			crlNumber: 2,
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
-			issuerPublicKey: authority.ca.keyPair.publicKey,
+			issuerCertificate: authority.ca.certificate.der,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		for (const responderRevocationPolicy of ['require-evidence', 'honor-nocheck'] as const) {

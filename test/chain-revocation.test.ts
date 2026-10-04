@@ -311,7 +311,7 @@ describe('checkChainRevocation', () => {
 				subject: { commonName: 'Split Keys CA' },
 				publicKey: keyPair.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: { basicConstraints: { ca: true }, keyUsage: [...keyUsage] },
 			});
 			return { keyPair, certificate: unwrap(parseCertificatePem(certificate.pem)) };
@@ -324,20 +324,20 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'split-keys.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate,
 		});
 		const leafCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'Split Keys CA' },
 			signerPrivateKey: crlSigner.keyPair.privateKey,
-			issuerPublicKey: crlSigner.keyPair.publicKey,
+			issuerCertificate: crlSigner.certificate,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const rootCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'Split Keys Root' },
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			revokedCertificates: [
 				{
 					serialNumber: hexToBytes(crlSigner.certificate.serialNumberHex),
