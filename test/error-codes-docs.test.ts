@@ -2,10 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createTscBridge } from '@kjanat/tsc-bridge';
-import jsr from '#jsr' with { type: 'json' };
+import { Glob } from 'bun';
 import { projectRoot } from '#test/helpers';
 
-const ENTRYPOINTS = Object.values(jsr.exports).map((target) => path.posix.normalize(target));
+const ENTRYPOINTS = [...new Glob('src/*.ts').scanSync({ cwd: projectRoot })];
 
 async function exportedCodeUnions(): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
 	const bridge = createTscBridge({ cwd: projectRoot });
