@@ -4162,13 +4162,17 @@ describe('crl', () => {
 			revokedCertificates: [{ serialNumber: Uint8Array.of(1), reasonCode: 'keyCompromise' }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
-		const reasonOf = async (code: number, critical: boolean) =>
+		const reasonOf = async (code: number | bigint, critical: boolean) =>
 			parseCertificateRevocationListDerOrThrow(
 				await withRevokedEntryReasonCode(crl.der, ca.keyPair.privateKey, code, critical),
 			).revokedCertificates[0]?.reasonCode;
 
-		expect(await reasonOf(7, false)).toEqual({ type: 'unrecognized', code: 7 });
-		expect(await reasonOf(11, false)).toEqual({ type: 'unrecognized', code: 11 });
+		expect(await reasonOf(7, false)).toEqual({ type: 'unrecognized', code: 7n });
+		expect(await reasonOf(11, false)).toEqual({ type: 'unrecognized', code: 11n });
+		expect(await reasonOf(2n ** 64n + 1n, false)).toEqual({
+			type: 'unrecognized',
+			code: 2n ** 64n + 1n,
+		});
 		expect(await reasonOf(1, true)).toBe('keyCompromise');
 		const criticalUnrecognized = await withRevokedEntryReasonCode(
 			crl.der,
@@ -4221,7 +4225,7 @@ describe('crl', () => {
 
 		const revoked = {
 			ok: true,
-			value: { status: 'revoked', reasonCode: { type: 'unrecognized', code: 7 } },
+			value: { status: 'revoked', reasonCode: { type: 'unrecognized', code: 7n } },
 		};
 		expect(await check()).toMatchObject(revoked);
 		expect(await check('revoked')).toMatchObject(revoked);

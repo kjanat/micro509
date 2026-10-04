@@ -565,7 +565,7 @@ describe('revocation boundary', () => {
 			value: {
 				status: 'revoked',
 				kind: 'ocsp',
-				revocationReasonCode: 1,
+				revocationReasonCode: 1n,
 				revokedAt,
 			},
 		});
@@ -624,12 +624,12 @@ describe('revocation boundary', () => {
 			value: {
 				status: 'revoked',
 				kind: 'crl',
-				revocationReason: { type: 'unrecognized', code: 7 },
+				revocationReason: { type: 'unrecognized', code: 7n },
 			},
 		});
 		expect(await check([{ kind: 'ocsp', response: unrecognizedOcsp }])).toMatchObject({
 			ok: true,
-			value: { status: 'revoked', kind: 'ocsp', revocationReasonCode: 11 },
+			value: { status: 'revoked', kind: 'ocsp', revocationReasonCode: 11n },
 		});
 		const rejectedSets: readonly (readonly RevocationEvidenceInput[])[] = [
 			[

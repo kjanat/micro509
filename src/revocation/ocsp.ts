@@ -10,6 +10,7 @@
 
 import {
 	childrenOf,
+	decodeNonNegativeIntegerBigInt,
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
@@ -211,8 +212,8 @@ export type ParsedOcspCertStatus =
 			readonly certStatus: 'revoked';
 			/** `RevokedInfo.revocationTime`. */
 			readonly revokedAt: Date;
-			/** `RevokedInfo.revocationReason` CRLReason integer, when present. */
-			readonly revocationReasonCode?: number;
+			/** `RevokedInfo.revocationReason` CRLReason value, when present. */
+			readonly revocationReasonCode?: bigint;
 	  }
 	| {
 			/** Responder has no record of the certificate. */
@@ -1931,7 +1932,7 @@ function parseOcspCertStatusFields(
 function parseOcspRevocationReason(
 	source: Uint8Array,
 	reason: DerElement | undefined,
-): { readonly revocationReasonCode?: number } {
+): { readonly revocationReasonCode?: bigint } {
 	if (reason === undefined) {
 		return {};
 	}
@@ -1944,7 +1945,7 @@ function parseOcspRevocationReason(
 		throw new Error('revocationReason must use ENUMERATED');
 	}
 	return {
-		revocationReasonCode: decodeNonNegativeIntegerNumber(enumerated.value, 'OCSP revocationReason'),
+		revocationReasonCode: decodeNonNegativeIntegerBigInt(enumerated.value, 'OCSP revocationReason'),
 	};
 }
 

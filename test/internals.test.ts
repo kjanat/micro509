@@ -13,6 +13,7 @@ import {
 	decodeBoolean,
 	decodeIntegerMagnitude,
 	decodeIntegerNumber,
+	decodeNonNegativeIntegerBigInt,
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
@@ -549,6 +550,23 @@ describe('asn1 decoding', () => {
 		);
 		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0x00, 0x01), 'test integer')).toThrow(
 			'test integer must use minimal encoding',
+		);
+	});
+
+	it('decodeNonNegativeIntegerBigInt keeps values past MAX_SAFE_INTEGER exactly', () => {
+		expect(decodeNonNegativeIntegerBigInt(Uint8Array.of(0))).toBe(0n);
+		expect(decodeNonNegativeIntegerBigInt(Uint8Array.of(0x00, 0x80))).toBe(128n);
+		expect(
+			decodeNonNegativeIntegerBigInt(Uint8Array.of(0x01, 0, 0, 0, 0, 0, 0, 0, 0x01), 'field'),
+		).toBe(2n ** 64n + 1n);
+		expect(() => decodeNonNegativeIntegerBigInt(new Uint8Array(), 'field')).toThrow(
+			'field is empty',
+		);
+		expect(() => decodeNonNegativeIntegerBigInt(Uint8Array.of(0xff), 'field')).toThrow(
+			'field must be non-negative',
+		);
+		expect(() => decodeNonNegativeIntegerBigInt(Uint8Array.of(0x00, 0x01), 'field')).toThrow(
+			'field must use minimal encoding',
 		);
 	});
 

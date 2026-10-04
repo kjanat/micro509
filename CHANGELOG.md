@@ -241,6 +241,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `checkCertificateRevocation`, the chain `revocationInfo.reason` and
   `revocationReasonFromCode` use `ParsedRevocationReason`. A critical cRLReason
   holding an unrecognized code makes the CRL `malformed`.
+- **BREAKING** CRLReason codes decode as `bigint`, so a code of any length
+  parses. `UnrecognizedRevocationReason.code`, the OCSP
+  `revocationReasonCode` of `ParsedOcspCertStatus` and of the revoked value of
+  `checkCertificateRevocation`, and the argument of `revocationReasonFromCode`
+  are `bigint`. `createOcspResponse` still takes a `number`.
 - A typed SRVName SAN outside the [RFC 6335][rfc6335] service grammar or STD3 LDH Name
   syntax is refused with the new `invalid_srv_name`.
 - A critical subjectAltName holding a SRVName that is not `_Service.Name`
