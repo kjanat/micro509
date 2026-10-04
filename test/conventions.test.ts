@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Glob } from 'bun';
+import jsr from '#jsr' with { type: 'json' };
 import { VERIFY_ERROR_CODES } from '#micro509/verify';
 import { projectRoot, srcRoot } from '#test/helpers';
 
@@ -105,19 +106,16 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		expect([...emitted.keys()].filter((label) => forbidden.has(label))).toEqual([]);
 	});
 
-	it('src/ holds exactly the published entrypoints at its root', () => {
-		expect([...new Glob('*.ts').scanSync({ cwd: srcRoot })].sort()).toEqual([
-			'crypto.ts',
-			'der.ts',
-			'index.ts',
-			'keys.ts',
-			'pem.ts',
-			'pkcs.ts',
-			'result.ts',
-			'revocation.ts',
-			'verify.ts',
-			'x509.ts',
-		]);
+	it('jsr.json publishes every src/*.ts, and each one only re-exports', async () => {
+		const roots = [...new Glob('*.ts').scanSync({ cwd: srcRoot })].map((file) => `./src/${file}`);
+		expect(Object.values(jsr.exports).sort()).toEqual(roots.sort());
+		for (const root of roots) {
+			const leftover = (await Bun.file(`${projectRoot}/${root}`).text())
+				.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
+				.replace(/export\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s+from\s+'[^']+';/g, '')
+				.trim();
+			expect({ root, leftover }).toEqual({ root, leftover: '' });
+		}
 	});
 
 	it('barrels re-export the OrThrow sibling of every function they expose', async () => {

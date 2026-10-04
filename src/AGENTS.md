@@ -28,7 +28,7 @@ domain's modules live in the directory of the same name.
 - Keep APIs by domain barrel; add files inside existing domain unless the domain
   model clearly needs a new public ownership file.
 - A new `src/*.ts` file becomes a published subpath. Add one only for a new
-  domain, and update `test/conventions.test.ts` with it.
+  domain, and rebuild so `jsr.json` and `package.json` publish it.
 - New OIDs go in `src/internal/asn1/oids.json` under their registration arc and
   are consumed as `OIDS.<name>`; never inline a dotted-decimal literal in
   source.

@@ -96,7 +96,8 @@ micro509/
 - `src/*.ts` barrels are re-export-only unless local file owners expand naturally.
 - Every `src/*.ts` file is a published entrypoint. tsdown builds each one, and the
   build writes the `package.json` and `jsr.json` exports from them. Put
-  implementation in a domain directory. `test/conventions.test.ts` pins the set.
+  implementation in a domain directory. `test/conventions.test.ts` checks that
+  `jsr.json` publishes every one and that each one only re-exports.
 - Relative imports use `.ts` extensions; `#micro509/*` subpath imports are extensionless (the `imports` map supplies `.ts`).
 - Import boundaries: public leaf modules may use `#micro509/internal/*`, not sibling barrels.
 - Return typed result unions for expected failures; throw only for invariants.
