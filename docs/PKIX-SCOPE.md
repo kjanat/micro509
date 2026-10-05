@@ -222,22 +222,28 @@ Current conformance evidence:
 
 Current GeneralName matrix for `nameConstraints`:
 
-| Form                        | Parser role                      | Validator role                                        | Status     |
-| --------------------------- | -------------------------------- | ----------------------------------------------------- | ---------- |
-| `rfc822Name` / `dNSName`    | decode to typed email/DNS values | enforce                                               | `complete` |
-| `uniformResourceIdentifier` | decode to typed URI values       | enforce host-based matching                           | `complete` |
-| `iPAddress`                 | decode to address+mask bytes     | enforce                                               | `complete` |
-| `directoryName`             | preserve structured DN payload   | enforce with [RFC 5280][rfc5280] semantic compare     | `complete` |
-| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain              | `complete` |
-| SRVName `otherName`         | decode to typed SRVName values   | enforce [RFC 4985 §4][rfc4985-section-4] restrictions | `complete` |
-| other `otherName`           | decode type-id and value DER     | fail closed per type-id when critical                 | `complete` |
-| `x400Address`               | preserved as raw payload         | fail closed when critical and form appears            | `complete` |
-| `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears            | `complete` |
-| `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears            | `complete` |
+| Form                          | Parser role                                     | Validator role                                        | Status     |
+| ----------------------------- | ----------------------------------------------- | ----------------------------------------------------- | ---------- |
+| `rfc822Name` / `dNSName`      | decode to typed email/DNS values                | enforce                                               | `complete` |
+| `uniformResourceIdentifier`   | decode to typed URI values                      | enforce host-based matching                           | `complete` |
+| `iPAddress`                   | decode to address+mask bytes                    | enforce                                               | `complete` |
+| `directoryName`               | preserve structured DN payload                  | enforce with [RFC 5280][rfc5280] semantic compare     | `complete` |
+| SmtpUTF8Mailbox `otherName`   | decode to typed mailbox values                  | enforce rfc822Name constraints by domain              | `complete` |
+| SRVName `otherName`           | decode to typed SRVName values                  | enforce [RFC 4985 §4][rfc4985-section-4] restrictions | `complete` |
+| UPN `otherName`               | decode a UTF8String to `upn`                    | fail closed per type-id when critical                 | `complete` |
+| KRB5PrincipalName `otherName` | decode to typed realm, name type and components | fail closed per type-id when critical                 | `complete` |
+| other `otherName`             | decode type-id and value DER                    | fail closed per type-id when critical                 | `complete` |
+| `x400Address`                 | preserved as raw payload                        | fail closed when critical and form appears            | `complete` |
+| `ediPartyName`                | preserved as raw payload                        | fail closed when critical and form appears            | `complete` |
+| `registeredID`                | decoded OID, preserved                          | fail closed when critical and form appears            | `complete` |
 
 - Typing a GeneralName alternative is separate from supporting it. A critical
-  subjectAltName carrying an `otherName` of an unrecognised type-id, an
-  `x400Address` or an `ediPartyName` is an unprocessed critical extension. A
+  subjectAltName carrying an `otherName` of an unrecognised type-id, a `upn`, a
+  `krb5PrincipalName`, an `x400Address` or an `ediPartyName` is an unprocessed
+  critical extension. A UPN that is not a non-empty UTF8String ([MS-WCCE]
+  §2.2.2.7.5), such as the KerberosString of [RFC 6806][rfc6806] Appendix A, and a
+  KRB5PrincipalName outside the [RFC 4556][rfc4556] §3.2.2 and [RFC 4120][rfc4120]
+  §5.2 types stay generic `otherName` values. A
   `registeredID` is processed, since its whole value is an OID; its name
   constraints still fail closed, and it satisfies no DNS, URI or SRV identity.
 - The builder validates the representation it emits. An `otherName` value is
@@ -253,7 +259,11 @@ Current GeneralName matrix for `nameConstraints`:
   (X.690 §10.3) or the DER SET OF order (§11.6). micro509 does not know the
   schema behind an arbitrary type-id, so contents under context-specific,
   application and private tags stay unchecked, as do DEFAULT omission and
-  NamedBitList trailing bits. An `ediPartyName` holds an
+  NamedBitList trailing bits. An `otherName` value is checked as DER only and
+  never against the type its type-id names: ENUMERATED membership, INTEGER
+  ranges, SIZE constraints, CHOICE alternatives and SEQUENCE or SET components
+  stay unchecked (X.680 §20, X.690 §8.4). The `srv`, `smtpUtf8Mailbox`, `upn`
+  and `krb5PrincipalName` variants are checked against their own types. An `ediPartyName` holds an
   optional `[0]` and a
   required `[1]` DirectoryString, and an `x400Address` follows the [RFC 5280
   Appendix A.1][rfc5280-appendix-A.1] ORAddress schema: fields, tags, order, multiplicity, string
@@ -585,6 +595,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc4518-section-2]: https://www.rfc-editor.org/rfc/rfc4518.html#section-2
 [rfc4518-section-2.1]: https://www.rfc-editor.org/rfc/rfc4518.html#section-2.1
 [rfc4648-section-3.5]: https://www.rfc-editor.org/rfc/rfc4648.html#section-3.5
+[rfc4120]: https://www.rfc-editor.org/rfc/rfc4120.html
+[rfc4556]: https://www.rfc-editor.org/rfc/rfc4556.html
 [rfc4985]: https://www.rfc-editor.org/rfc/rfc4985.html
 [rfc4985-section-2]: https://www.rfc-editor.org/rfc/rfc4985.html#section-2
 [rfc4985-section-3]: https://www.rfc-editor.org/rfc/rfc4985.html#section-3
@@ -614,6 +626,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc6125]: https://www.rfc-editor.org/rfc/rfc6125.html
 [rfc6335-section-5.1]: https://www.rfc-editor.org/rfc/rfc6335.html#section-5.1
 [rfc6335-section-5.2]: https://www.rfc-editor.org/rfc/rfc6335.html#section-5.2
+[rfc6806]: https://www.rfc-editor.org/rfc/rfc6806.html
 [rfc6818-section-3]: https://www.rfc-editor.org/rfc/rfc6818.html#section-3
 [rfc6960]: https://www.rfc-editor.org/rfc/rfc6960.html
 [rfc6960-section-4.2.2.1]: https://www.rfc-editor.org/rfc/rfc6960.html#section-4.2.2.1

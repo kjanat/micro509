@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `SubjectAltName` variants `upn` (szOID_NT_PRINCIPAL_NAME, a UTF8String per
+  [MS-WCCE] §2.2.2.7.5) and `krb5PrincipalName` (`realm`, `nameType`,
+  `nameString`, id-pkinit-san per [RFC 4556][rfc4556] §3.2.2). Parsing types an otherName
+  that fits one of them and keeps any other value, such as an [RFC 6806][rfc6806]
+  KerberosString UPN, as a generic `otherName`. The builder refuses a generic
+  `otherName` that fits a variant with `other_name_type_id_has_variant`, and a
+  KRB5PrincipalName whose realm holds NUL, whose components are not
+  KerberosString text or whose name type is not an Int32 with the new
+  `invalid_krb5_principal_name`. Both forms remain unprocessed in a critical
+  subjectAltName and fail closed under name constraints.
+
 - The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
   for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
   within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
@@ -1863,6 +1874,7 @@ Initial prerelease. API may change before 1.0.
 [rfc4518-section-2.1]: https://www.rfc-editor.org/rfc/rfc4518.html#section-2.1
 [rfc4518-section-2.6.1]: https://www.rfc-editor.org/rfc/rfc4518.html#section-2.6.1
 [rfc4519]: https://www.rfc-editor.org/rfc/rfc4519.html
+[rfc4556]: https://www.rfc-editor.org/rfc/rfc4556.html
 [rfc4648-section-4]: https://www.rfc-editor.org/rfc/rfc4648.html#section-4
 [rfc4985-section-2]: https://www.rfc-editor.org/rfc/rfc4985.html#section-2
 [rfc4985-section-3]: https://www.rfc-editor.org/rfc/rfc4985.html#section-3
@@ -1921,6 +1933,7 @@ Initial prerelease. API may change before 1.0.
 [rfc6335]: https://www.rfc-editor.org/rfc/rfc6335.html
 [rfc6335-section-5.1]: https://www.rfc-editor.org/rfc/rfc6335.html#section-5.1
 [rfc6531]: https://www.rfc-editor.org/rfc/rfc6531.html
+[rfc6806]: https://www.rfc-editor.org/rfc/rfc6806.html
 [rfc6818-section-3]: https://www.rfc-editor.org/rfc/rfc6818.html#section-3
 [rfc6960]: https://www.rfc-editor.org/rfc/rfc6960.html
 [rfc6960-appendix-B.1]: https://www.rfc-editor.org/rfc/rfc6960.html#appendix-B.1

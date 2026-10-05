@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { ParsedCertificateRevocationList } from '#micro509';
+import type { GeneralName, ParsedCertificateRevocationList } from '#micro509';
 import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
@@ -2538,13 +2538,20 @@ describe('crl', () => {
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
 			{ type: 'registeredID', value: '1.2.3.4' },
-			{ type: 'otherName', typeId: '1.3.6.1.4.1.311.20.2.3', value: utf8String('u@example.test') },
+			{ type: 'upn', value: 'u@example.test' },
 			{ type: 'x400Address', value: sequence([]) },
 			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
+			{
+				type: 'krb5PrincipalName',
+				realm: 'EXAMPLE.TEST',
+				nameType: 2,
+				nameString: ['crl', 'example.test'],
+			},
 		] as const;
 		const shuffledNames = [
 			complexNames[3],
 			complexNames[7],
+			complexNames[9],
 			complexNames[1],
 			complexNames[0],
 			complexNames[8],
@@ -2695,6 +2702,65 @@ describe('crl', () => {
 			message: 'complete and delta CRLs must share the same issuing distribution point scope',
 			details: { reason: 'delta_crl_incompatible' },
 		});
+	});
+
+	it('compares KRB5PrincipalName fullNames by realm, name type and every component', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'KRB5 IDP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const principal = {
+			type: 'krb5PrincipalName',
+			realm: 'EXAMPLE.TEST',
+			nameType: 2,
+			nameString: ['crl', 'example.test'],
+		} as const;
+		const uri = { type: 'uri', value: 'http://example.test/krb5-idp.crl' } as const;
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'KRB5 IDP CA' },
+			subject: { commonName: 'krb5-idp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [{ distributionPoint: { type: 'fullName', fullName: [uri] } }],
+			},
+		});
+		const issue = (crlNumber: number, deltaPrincipal?: GeneralName) =>
+			createCertificateRevocationList({
+				issuer: { commonName: 'KRB5 IDP CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				crlNumber,
+				...(deltaPrincipal === undefined ? {} : { baseCrlNumber: 30 }),
+				issuingDistributionPoint: {
+					distributionPoint: { type: 'fullName', fullName: [uri, deltaPrincipal ?? principal] },
+				},
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+			});
+		const complete = await issue(30);
+		const check = async (deltaPrincipal: GeneralName) =>
+			checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete.pem,
+				deltaCrl: (await issue(31, deltaPrincipal)).pem,
+			});
+
+		expect(await check(principal)).toMatchObject({ ok: true, value: { status: 'good' } });
+		for (const changed of [
+			{ ...principal, realm: 'example.test' },
+			{ ...principal, nameType: 3 },
+			{ ...principal, nameString: ['crl'] },
+			{ ...principal, nameString: ['crl', 'example.org'] },
+		]) {
+			expect(await check(changed)).toMatchObject({
+				ok: false,
+				code: 'non_applicable',
+				details: { reason: 'delta_crl_incompatible' },
+			});
+		}
 	});
 
 	it('matches relativeName issuing distribution points with normalized DirectoryString values', async () => {

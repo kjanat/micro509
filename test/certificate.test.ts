@@ -555,6 +555,31 @@ describe('certificate', () => {
 		expect(sanExtension?.critical).toBe(true);
 	});
 
+	it('allows an empty subject DN whose only SAN is a KRB5PrincipalName', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Empty Subject KRB5 CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const principal = {
+			type: 'krb5PrincipalName',
+			realm: 'EXAMPLE.TEST',
+			nameType: 1,
+			nameString: ['user'],
+		} as const;
+		const certificate = await createCertificate({
+			issuer: { commonName: 'Empty Subject KRB5 CA' },
+			subject: {},
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: { subjectAltNames: [principal] },
+		});
+		const parsed = unwrap(parseCertificateDer(certificate.der));
+		expect(parsed.subject.rdns).toHaveLength(0);
+		expect(parsed.subjectAltNames).toEqual([principal]);
+	});
+
 	it('rejects an empty subject DN without a subjectAltName (RFC 5280 §4.2.1.6)', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Empty Subject CA 2' },
