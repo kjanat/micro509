@@ -53,7 +53,7 @@ async function abortUpload(port: number): Promise<void> {
 	});
 }
 
-test('an aborted parse upload does not stop the demo server', async () => {
+test('the demo server contains aborted uploads and completed-request failures', async () => {
 	const nodePath = Bun.which('node');
 	if (nodePath === null) throw new Error('Node.js is required for the demo server regression test');
 	const port = await availablePort();
@@ -76,6 +76,15 @@ test('an aborted parse upload does not stop the demo server', async () => {
 
 		await abortUpload(port);
 		await Bun.sleep(50);
+
+		// This complete upload exceeds the recursive AST processing limits.
+		const failed = await fetch(`http://127.0.0.1:${port}/parse`, {
+			method: 'POST',
+			body: `const value = ${'1 + '.repeat(10_000)}1;`,
+			signal: AbortSignal.timeout(3_000),
+		});
+		expect(failed.status).toBe(500);
+		expect(await failed.text()).toBe('Internal Server Error');
 
 		const page = await fetch(`http://127.0.0.1:${port}/`);
 		expect(page.status).toBe(200);

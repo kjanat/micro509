@@ -60,7 +60,7 @@ createServer((request, response) => {
 		response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
 		response.end(page);
 	})().catch(() => {
-		if (request.destroyed || response.destroyed || response.writableEnded) return;
+		if (response.destroyed || response.writableEnded) return;
 		if (response.headersSent) {
 			response.destroy();
 			return;
