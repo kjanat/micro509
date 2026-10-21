@@ -431,6 +431,58 @@ describe('checkChainRevocation', () => {
 		expect(leafStatus?.indeterminateReasons).toContain('crl_signer_not_authorized');
 	});
 
+	it('ignores rejected reason codes from an untrusted CRL signer before and after trusted evidence', async () => {
+		const { caName, ca, chain, parsedLeaf, at, fresh } = await createOcspChainFixture();
+		const forgedSigner = await createSelfSignedCertificate({
+			subject: { commonName: caName },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const forgedCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: caName },
+			signerPrivateKey: forgedSigner.keyPair.privateKey,
+			issuerPublicKey: forgedSigner.keyPair.publicKey,
+			...fresh,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: fresh.thisUpdate,
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+		const rejectedCrl = await withRevokedEntryReasonCode(
+			forgedCrl.der,
+			forgedSigner.keyPair.privateKey,
+			7,
+		);
+		const goodCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			...fresh,
+			revokedCertificates: [],
+		});
+		for (const crls of [
+			[rejectedCrl, goodCrl.der],
+			[goodCrl.der, rejectedCrl],
+		]) {
+			const result = await checkChainRevocation({
+				chain: [...chain],
+				crls,
+				extraCertificates: [forgedSigner.certificate.pem],
+				at,
+				policy: { unrecognizedReasonCode: 'reject' },
+			});
+			expect(result.value.certificates[0]?.status).toBe('good');
+			expect(result.value.decision).toBe('allow');
+		}
+	});
+
 	it('authorizes a delegated CRL signer issued by a chain intermediate', async () => {
 		const at = new Date(Date.now() + 5_000);
 		const root = await createSelfSignedCertificate({

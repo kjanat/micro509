@@ -1192,6 +1192,10 @@ async function resolveBaseCrlAgainstSigners(
 			state.sawCrlSignerIndeterminate = true;
 			continue;
 		}
+		if (resolved.kind === 'reason_code_unrecognized') {
+			state.sawUnrecognizedReasonCode = true;
+			return undefined;
+		}
 		if (resolved.kind === 'delta_unusable') {
 			state.sawDeltaCrlUnusable = true;
 			return undefined;
@@ -1444,6 +1448,7 @@ type DeltaCandidateOutcome =
 			readonly crlThisUpdate: Date;
 	  }
 	| { readonly kind: 'unusable_base' }
+	| { readonly kind: 'reason_code_unrecognized' }
 	| {
 			readonly kind: 'delta_unusable';
 			readonly complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>;
@@ -1567,7 +1572,7 @@ function settleAuthenticatedCrlOutcome(
 		state.sawStaleCrl = true;
 	}
 	if (!result.ok && result.code === 'reason_code_unrecognized') {
-		state.sawUnrecognizedReasonCode = true;
+		return { kind: 'reason_code_unrecognized' };
 	}
 	if (outcome.kind === 'delta_rejected') {
 		return undefined;

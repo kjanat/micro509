@@ -462,6 +462,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Under `unrecognizedReasonCode: 'reject'`, a CRL with an unrecognized reason
+  affects the chain verdict only after its signer is authorized and its
+  revocation status is checked. An untrusted signer supplied through
+  `extraCertificates` can no longer make trusted good evidence indeterminate.
 - A received dNSName or rfc822Name ending in the root dot, such as
   `evil.example.com.`, matched no dNSName or rfc822Name constraint, so an
   excluded `example.com` did not exclude it. While constraints of its type are

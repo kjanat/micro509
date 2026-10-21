@@ -457,7 +457,8 @@ export interface ValidateOcspResponseInput {
 	/**
 	 * Treatment of a `responderRevocationCrls` entry that revokes the responder
 	 * with an unrecognized CRLReason. See {@linkcode UnrecognizedReasonCodePolicy}.
-	 * `'reject'` leaves that CRL out of the evidence. Defaults to `'revoked'`.
+	 * `'reject'` blocks validation with `responder_revocation_unknown`, even when
+	 * another CRL provides good coverage. Defaults to `'revoked'`.
 	 */
 	readonly responderRevocationUnrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
 	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
