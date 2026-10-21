@@ -51,6 +51,7 @@ const teletexSubject = sequence([
 async function fixture() {
 	const chain = await issueChain();
 	const crl = await createCertificateRevocationList({
+		crlNumber: 1,
 		issuer: { commonName: 'Verify Intermediate CA' },
 		signerPrivateKey: chain.intermediateKeys.privateKey,
 		issuerPublicKey: chain.intermediateKeys.publicKey,
@@ -136,6 +137,7 @@ describe('decode refusals at the CRL boundaries', () => {
 		});
 		expect(parseCertificatePem(leaf.pem).ok).toBe(true);
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
@@ -302,6 +304,7 @@ describe('decode refusals in RSA-PSS signature parameters', () => {
 			subject: { commonName: 'pss-limit-issuer.example' },
 		});
 		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
 			issuer: { commonName: 'pss-limit-issuer.example' },
 			signerPrivateKey: keyPair.privateKey,
 			issuerPublicKey: keyPair.publicKey,

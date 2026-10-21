@@ -279,6 +279,18 @@ export function decodeIntegerMagnitude(bytes: Uint8Array, label = 'INTEGER'): In
 }
 
 /**
+ * Decodes DER INTEGER or ENUMERATED content octets holding a non-negative value of any length into a `bigint`.
+ *
+ * @param bytes DER content octets to decode.
+ * @param label Field name for error messages (defaults to `"INTEGER"`).
+ * @throws if the value is empty, negative, or non-minimally encoded.
+ */
+export function decodeNonNegativeIntegerBigInt(bytes: Uint8Array, label = 'INTEGER'): bigint {
+	decodeIntegerMagnitude(bytes, label);
+	return BigInt(`0x${toHex(bytes)}`);
+}
+
+/**
  * Like {@linkcode decodeIntegerNumber}, but optionally rewrites thrown error messages with a caller-specific field label.
  *
  * @param bytes DER INTEGER content octets to decode.

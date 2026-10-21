@@ -629,6 +629,61 @@ export async function addRevokedEntryCertificateIssuers(
 	]);
 }
 
+/** Re-signs a CRL with the cRLReason of every revoked entry set to the raw ENUMERATED `code`. */
+export async function withRevokedEntryReasonCode(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	code: number | bigint,
+	critical = false,
+): Promise<Uint8Array> {
+	const tbsDer = childAt(crlDer, 0);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const revokedIndex = tbsChildren.findIndex((child, index) => {
+		const previous = tbsChildren[index - 1]?.tag;
+		return child.tag === 0x30 && (previous === 0x17 || previous === 0x18);
+	});
+	const revokedCertificates = tbsChildren[revokedIndex];
+	if (revokedCertificates === undefined) {
+		throw new Error('CRL missing revokedCertificates sequence');
+	}
+	const hex = BigInt(code).toString(16);
+	const enumerated = concatBytes([
+		Uint8Array.of(0x0a),
+		integer(hexToBytes(hex.length % 2 === 0 ? hex : `0${hex}`)).subarray(1),
+	]);
+	const reason = encodeExtension(OIDS.cRLReason, enumerated, critical);
+	const rebuiltEntries = childrenOf(tbsDer, revokedCertificates).map((entry) => {
+		const entryDer = sliceElement(tbsDer, entry);
+		const [serialNumber, revocationDate, extensions] = readSequenceChildren(entryDer);
+		if (serialNumber === undefined || revocationDate === undefined) {
+			throw new Error('Revoked certificate entry is incomplete');
+		}
+		const kept = (extensions === undefined ? [] : childrenOf(entryDer, extensions))
+			.map((extension) => sliceElement(entryDer, extension))
+			.filter((extensionDer) => {
+				const oid = readSequenceChildren(extensionDer)[0];
+				return oid === undefined || decodeObjectIdentifier(oid.value) !== OIDS.cRLReason;
+			});
+		return sequence([
+			sliceElement(entryDer, serialNumber),
+			sliceElement(entryDer, revocationDate),
+			sequence([...kept, reason]),
+		]);
+	});
+	const rebuiltTbsDer = sequence(
+		tbsChildren.map((child, index) =>
+			index === revokedIndex ? sequence(rebuiltEntries) : sliceElement(tbsDer, child),
+		),
+	);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
+
 /**
  * Drop-in {@link createSelfSignedCertificate} that splices `customExtensions`
  * into the signed TBSCertificate instead of routing them through the builder.
