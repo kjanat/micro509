@@ -47,7 +47,7 @@ async function ocspPki(withNextUpdate: boolean) {
 		subject: { commonName: 'rfc9919-leaf.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: ca.keyPair.privateKey,
-		issuerPublicKey: ca.keyPair.publicKey,
+		issuerCertificate: ca.certificate.der,
 	});
 	const at = evaluationTime();
 	const thisUpdate = new Date(at.getTime() - HOUR_MS);

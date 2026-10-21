@@ -7,6 +7,7 @@
  * @module
  */
 
+import { DECODE_REFUSAL_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import {
 	bitString,
 	explicitContext,
@@ -31,15 +32,22 @@ import { exportSpkiDer, generateKeyPair } from '#micro509/keys/keys';
 import { pemEncode } from '#micro509/pem/pem';
 import { throwMicro509Error } from '#micro509/result/result';
 import type { CertificateExtensionsInput } from '#micro509/x509/extensions';
-import { buildCertificateExtensions } from '#micro509/x509/extensions';
+import {
+	buildCertificateExtensions,
+	buildSubjectKeyIdentifier,
+	issuerKeyIdentifier,
+} from '#micro509/x509/extensions';
 import type { NameInput } from '#micro509/x509/name';
 import { encodeName, isNameInputEmpty } from '#micro509/x509/name';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificateFromSource } from '#micro509/x509/parse';
 
 export type * from '#micro509/x509/extensions';
 export type * from '#micro509/x509/name';
 
 /** Machine-readable reason a certificate builder rejected its construction input. */
 export type CreateCertificateErrorCode =
+	| 'issuer_certificate_invalid'
 	| 'issuer_distinguished_name_empty'
 	| 'serial_number_not_positive'
 	| 'serial_number_too_long'
@@ -92,12 +100,12 @@ export interface CreateCertificateInput {
 	 */
 	readonly signerPrivateKey: CryptoKey;
 	/**
-	 * Issuer public key.
-	 *
-	 * Provide this when extension builders need issuer key material, such as
-	 * authority key identifier derivation.
+	 * Certificate of the issuer. Its subject key identifier becomes the
+	 * authority key identifier (RFC 5280 §4.2.1.1, §4.2.1.2). An issuer
+	 * certificate without one yields a key identifier derived from its public
+	 * key. Omit it to leave the authority key identifier out.
 	 */
-	readonly issuerPublicKey?: CryptoKey;
+	readonly issuerCertificate?: string | Uint8Array | ParsedCertificate;
 	/**
 	 * Validity window configuration.
 	 */
@@ -241,13 +249,12 @@ export async function createSelfSignedCertificate(
 		subject: input.subject,
 		publicKey: keyPair.publicKey,
 		signerPrivateKey: keyPair.privateKey,
-		issuerPublicKey: keyPair.publicKey,
 		...(input.validity !== undefined ? { validity: input.validity } : {}),
 		...(input.serialNumber !== undefined ? { serialNumber: input.serialNumber } : {}),
 		...(input.extensions !== undefined ? { extensions: input.extensions } : {}),
 		...(input.signature !== undefined ? { signature: input.signature } : {}),
 	} satisfies CreateCertificateInput;
-	const certificate = await createCertificate(certificateInput);
+	const certificate = await issueCertificate(certificateInput, 'subject');
 
 	return { certificate, keyPair };
 }
@@ -266,21 +273,34 @@ export async function createSelfSignedCertificate(
  * 	issuer: { commonName: 'Example Root CA' },
  * 	subject: { commonName: 'example.com' },
  * 	publicKey: leafKeys.publicKey,
- * 	signerPrivateKey: issuerKeys.privateKey,
- * 	issuerPublicKey: issuerKeys.publicKey,
+ * 	signerPrivateKey: issuer.keyPair.privateKey,
+ * 	issuerCertificate: issuer.certificate.der,
  * });
  * ```
  *
  * @param input Issuer, subject, key, validity, and extension settings.
  * @returns The encoded certificate material.
  */
-export async function createCertificate(
+export function createCertificate(input: CreateCertificateInput): Promise<CertificateMaterial> {
+	return issueCertificate(input, 'issuer');
+}
+
+/**
+ * Signs a certificate whose authority key identifier comes from
+ * `input.issuerCertificate`, or from its own subject key when `authority` is
+ * `'subject'` (RFC 5280 §4.2.1.1).
+ */
+async function issueCertificate(
 	input: CreateCertificateInput,
+	authority: 'issuer' | 'subject',
 ): Promise<CertificateMaterial> {
 	const subjectPublicKeyInfo = await exportSpkiDer(input.publicKey);
-	const issuerPublicKeyInfo = input.issuerPublicKey
-		? await exportSpkiDer(input.issuerPublicKey)
-		: undefined;
+	const authorityKeyIdentifier =
+		authority === 'subject'
+			? buildSubjectKeyIdentifier(subjectPublicKeyInfo)
+			: input.issuerCertificate === undefined
+				? undefined
+				: issuerKeyIdentifier(issuerCertificateOf(input.issuerCertificate));
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const validity = resolveValidity(input.validity);
 	if (isNameInputEmpty(input.issuer)) {
@@ -292,7 +312,7 @@ export async function createCertificate(
 	const subjectIsEmpty = isNameInputEmpty(input.subject);
 	const extensions = buildCertificateExtensions(
 		subjectPublicKeyInfo,
-		issuerPublicKeyInfo,
+		authorityKeyIdentifier,
 		input.extensions,
 		subjectIsEmpty,
 	);
@@ -319,6 +339,19 @@ export async function createCertificate(
 	]);
 
 	return materializeCertificate(certificateDer);
+}
+
+/** The parsed issuer certificate of a certificate being built. */
+function issuerCertificateOf(source: string | Uint8Array | ParsedCertificate): ParsedCertificate {
+	try {
+		return parseCertificateFromSource(source);
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
+		return throwMicro509Error<CreateCertificateErrorCode>(
+			'issuer_certificate_invalid',
+			'issuerCertificate must be a PEM, DER or parsed certificate',
+		);
+	}
 }
 
 /**

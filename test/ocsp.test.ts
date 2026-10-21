@@ -61,7 +61,7 @@ describe('ocsp', () => {
 				subject: { commonName: 'ocsp-date.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: issuer.keyPair.privateKey,
-				issuerPublicKey: issuer.keyPair.publicKey,
+				issuerCertificate: issuer.certificate.der,
 			});
 			await expectRejectedErrorCode(
 				createOcspResponse({
@@ -93,7 +93,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'ocsp-date.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		await expectRejectedErrorCode(
 			createOcspResponse({
@@ -123,7 +123,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'ocsp-reason.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const respond = (revocationReasonCode: number) =>
 			createOcspResponse({
@@ -166,7 +166,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'ocsp-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -245,7 +245,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'OCSP Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -257,7 +257,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'delegated-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -300,7 +300,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Actual Embedded Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -311,7 +311,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Wrong Embedded Responder' },
 			publicKey: otherResponderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -323,7 +323,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'embedded-responder.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -358,7 +358,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'status-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const revokedResponse = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -410,7 +410,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'reason-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -448,7 +448,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'der-verify.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -488,7 +488,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'wrong-signer.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -521,7 +521,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Bad Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -533,7 +533,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'delegate-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -569,7 +569,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'No EKU Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 			},
@@ -580,7 +580,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'missing-eku.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -616,7 +616,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Named Responder', organization: 'Example Org' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -628,7 +628,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'byname-match.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const responderParsed = unwrap(parseCertificatePem(responder.pem));
 		const response = await createSignedOcspResponseWithResponderId({
@@ -662,7 +662,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Actual Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -674,7 +674,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'byname-mismatch.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const response = await createSignedOcspResponseWithResponderId({
@@ -714,7 +714,7 @@ describe('ocsp', () => {
 			subject: responderSubject,
 			publicKey: responderAKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -725,7 +725,7 @@ describe('ocsp', () => {
 			subject: responderSubject,
 			publicKey: responderBKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -737,7 +737,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bykeyhash-mismatch.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const responderBParsed = unwrap(parseCertificatePem(responderB.pem));
 		const response = await createSignedOcspResponseWithResponderId({
@@ -774,7 +774,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Shared Subject CA' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -786,7 +786,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'shared-subject.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const response = await createSignedOcspResponseWithResponderId({
@@ -821,7 +821,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'der-req.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -869,7 +869,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'certid-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -904,7 +904,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'clock-skew.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const now = new Date();
@@ -1041,7 +1041,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'pem-resp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1076,7 +1076,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'parsed-resp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1112,7 +1112,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'tampered-parsed-resp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1169,7 +1169,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'pem-verify.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1200,7 +1200,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'parsed-verify.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1261,7 +1261,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'malformed-parsed-verify.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1342,7 +1342,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'malformed-parsed-validate.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1486,7 +1486,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'unsupported-certid-hash.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
@@ -1549,7 +1549,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'DER Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -1561,7 +1561,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'chain-delegate.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -1607,7 +1607,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Bad Chain Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: otherCa.keyPair.privateKey,
-			issuerPublicKey: otherCa.keyPair.publicKey,
+			issuerCertificate: otherCa.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -1619,7 +1619,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bad-chain.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -1656,7 +1656,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'sha256-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -1713,7 +1713,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'stale.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -1752,7 +1752,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'future-produced-at.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const at = new Date('2024-01-01T00:00:00Z');
 		const response = await createSignedOcspResponseWithResponderId({
@@ -1802,7 +1802,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'inconsistent-produced-at.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -1841,7 +1841,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'req-mismatch.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const otherLeafKeys = await generateKeyPair();
 		const otherLeaf = await createCertificate({
@@ -1849,7 +1849,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'other.example' },
 			publicKey: otherLeafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		// Request is for otherLeaf
 		const request = await createOcspRequest({
@@ -1890,7 +1890,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'req-coverage.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const otherLeafKeys = await generateKeyPair();
 		const otherLeaf = await createCertificate({
@@ -1898,7 +1898,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'req-coverage-other.example' },
 			publicKey: otherLeafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [
@@ -1940,7 +1940,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'req-complete-a.example' },
 			publicKey: firstLeafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const secondLeafKeys = await generateKeyPair();
 		const secondLeaf = await createCertificate({
@@ -1948,7 +1948,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'req-complete-b.example' },
 			publicKey: secondLeafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [
@@ -1994,7 +1994,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Parsed Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -2006,7 +2006,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'parsed-source.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -2043,7 +2043,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'der-parse.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -2067,7 +2067,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'malformed-request-wrapper.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -2112,7 +2112,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'parsed-req.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -2154,7 +2154,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'tampered-parsed-req.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -2209,7 +2209,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'derless-parsed-req.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -2252,7 +2252,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'duplicate-response-certid.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -2286,7 +2286,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'duplicate-serial-hash.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const parsedIssuer = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const responderKeyHash = new Uint8Array(
@@ -2336,7 +2336,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'mismatch-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		// Create OCSP response signed by issuer
 		const response = await createOcspResponse({
@@ -2382,7 +2382,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Delegated OCSP Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: validationIssuer.keyPair.privateKey,
-			issuerPublicKey: validationIssuer.keyPair.publicKey,
+			issuerCertificate: validationIssuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -2394,7 +2394,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'issuer-mismatch-valid-chain.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: actualIssuer.keyPair.privateKey,
-			issuerPublicKey: actualIssuer.keyPair.publicKey,
+			issuerCertificate: actualIssuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -2432,7 +2432,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Bad OCSP Intermediate' },
 			publicKey: badIntermediateKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				basicConstraints: { ca: false },
 				keyUsage: ['digitalSignature'],
@@ -2444,7 +2444,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Bad Chain Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: badIntermediateKeys.privateKey,
-			issuerPublicKey: badIntermediateKeys.publicKey,
+			issuerCertificate: badIntermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -2456,7 +2456,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bad-chain.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -2495,7 +2495,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'revoked-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const revokedAt = new Date('2026-01-15T00:00:00Z');
 		const response = await createOcspResponse({
@@ -2537,7 +2537,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'ver-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		// Build ResponseData with version [0] EXPLICIT manually
 		// ResponseData is a SEQUENCE inside BasicResponse inside the outer structure.
@@ -2616,7 +2616,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'byname-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
@@ -2728,7 +2728,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'nonce-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
@@ -2874,7 +2874,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'duplicate-nonce-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
@@ -2941,7 +2941,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bad-extension-value-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
@@ -3005,7 +3005,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bad-extension-middle-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
@@ -3071,7 +3071,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bad-cert-status-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 
 		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
@@ -3133,7 +3133,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'bad-certid-serial-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -3173,7 +3173,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'OCSP Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: otherCa.keyPair.privateKey,
-			issuerPublicKey: otherCa.keyPair.publicKey,
+			issuerCertificate: otherCa.certificate.der,
 			extensions: {
 				extendedKeyUsage: ['ocspSigning'],
 			},
@@ -3184,7 +3184,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'src-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerCertificate: responderCert.pem,
@@ -3227,7 +3227,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Indirect Responder Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3239,7 +3239,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Indirect Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -3251,7 +3251,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'indirect-responder.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -3288,7 +3288,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Allowed Indirect Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -3300,7 +3300,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'Allowed Indirect Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -3312,7 +3312,7 @@ describe('ocsp', () => {
 			subject: { commonName: 'allowed-indirect-responder.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -3772,7 +3772,7 @@ describe('ocsp Result forms', () => {
 			subject: { commonName: 'result-form.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -3830,7 +3830,7 @@ describe('RFC 6960 ResponderID byKey and time encoding', () => {
 			subject: { commonName: 'interop-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		return { ca, leaf };
 	};

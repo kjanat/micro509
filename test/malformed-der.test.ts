@@ -372,7 +372,7 @@ describe('malformed DER corpus', () => {
 			subject: { commonName: 'malformed-cert.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 
 		const corpus: readonly CorpusCase[] = [
@@ -437,13 +437,13 @@ describe('malformed DER corpus', () => {
 			subject: { commonName: 'malformed-crl.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const parsedLeaf = unwrap(parseCertificateDer(leaf.der));
 		const crl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'Malformed CRL CA' },
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			signerPrivateKey: issuer.keyPair.privateKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
@@ -512,7 +512,7 @@ describe('malformed DER corpus', () => {
 			subject: { commonName: 'malformed-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.der, issuerCertificate: issuer.certificate.der }],
@@ -722,7 +722,7 @@ describe('malformed DER corpus', () => {
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Scalar Root' },
 			signerPrivateKey: certificate.keyPair.privateKey,
-			issuerPublicKey: certificate.keyPair.publicKey,
+			issuerCertificate: certificate.certificate.der,
 			crlNumber: 1,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
@@ -782,7 +782,7 @@ describe('malformed DER corpus', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Nested Malformed CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			freshestCrlDistributionPoints: [
 				{
 					distributionPoint: {

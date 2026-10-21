@@ -102,7 +102,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'partial-reason.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -119,7 +119,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Partial Reason CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
@@ -311,7 +311,7 @@ describe('checkChainRevocation', () => {
 				subject: { commonName: 'Split Keys CA' },
 				publicKey: keyPair.publicKey,
 				signerPrivateKey: root.keyPair.privateKey,
-				issuerPublicKey: root.keyPair.publicKey,
+				issuerCertificate: root.certificate.der,
 				extensions: { basicConstraints: { ca: true }, keyUsage: [...keyUsage] },
 			});
 			return { keyPair, certificate: unwrap(parseCertificatePem(certificate.pem)) };
@@ -324,20 +324,20 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'split-keys.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate,
 		});
 		const leafCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'Split Keys CA' },
 			signerPrivateKey: crlSigner.keyPair.privateKey,
-			issuerPublicKey: crlSigner.keyPair.publicKey,
+			issuerCertificate: crlSigner.certificate,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const rootCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'Split Keys Root' },
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			revokedCertificates: [
 				{
 					serialNumber: hexToBytes(crlSigner.certificate.serialNumberHex),
@@ -401,14 +401,14 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'revoked-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: realCa.keyPair.privateKey,
-			issuerPublicKey: realCa.keyPair.publicKey,
+			issuerCertificate: realCa.certificate.der,
 		});
 		const at = new Date(Date.now() + 5_000);
 		const forgedCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: anchorName },
 			signerPrivateKey: forgedSigner.keyPair.privateKey,
-			issuerPublicKey: forgedSigner.keyPair.publicKey,
+			issuerCertificate: forgedSigner.certificate.der,
 			thisUpdate: new Date(at.getTime() - HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 			revokedCertificates: [],
@@ -444,7 +444,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: forgedSigner.keyPair.privateKey,
-			issuerPublicKey: forgedSigner.keyPair.publicKey,
+			issuerCertificate: forgedSigner.certificate.der,
 			...fresh,
 			revokedCertificates: [
 				{
@@ -463,7 +463,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			...fresh,
 			revokedCertificates: [],
 		});
@@ -498,7 +498,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Delegated Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -514,7 +514,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Delegated Intermediate' },
 			publicKey: signerKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: { keyUsage: ['cRLSign'] },
 		});
 		const leafKeys = await generateKeyPair();
@@ -523,7 +523,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'delegated-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
@@ -531,7 +531,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Delegated Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
-			issuerPublicKey: signerKeys.publicKey,
+			issuerCertificate: signer.der,
 			thisUpdate: new Date(at.getTime() - HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 			revokedCertificates: [
@@ -574,7 +574,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Signer Scope Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -589,7 +589,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Signer Scope CRL CA' },
 			publicKey: signerCaKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -601,7 +601,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Signer Scope Intermediate' },
 			publicKey: signerKeys.publicKey,
 			signerPrivateKey: signerCaKeys.privateKey,
-			issuerPublicKey: signerCaKeys.publicKey,
+			issuerCertificate: signerCa.der,
 			extensions: { keyUsage: ['cRLSign'] },
 		});
 		const leafKeys = await generateKeyPair();
@@ -610,14 +610,14 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'signer-scope-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const leafCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: 'Signer Scope Intermediate' },
 			signerPrivateKey: signerKeys.privateKey,
-			issuerPublicKey: signerKeys.publicKey,
+			issuerCertificate: signer.der,
 			thisUpdate: new Date(at.getTime() - HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 		});
@@ -632,7 +632,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Signer Scope CRL CA' },
 			signerPrivateKey: signerCaKeys.privateKey,
-			issuerPublicKey: signerCaKeys.publicKey,
+			issuerCertificate: signerCa.der,
 			thisUpdate: new Date(at.getTime() - HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 			issuingDistributionPoint: { onlySomeReasons: ['keyCompromise'] },
@@ -656,7 +656,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Signer Scope CRL CA' },
 			signerPrivateKey: signerCaKeys.privateKey,
-			issuerPublicKey: signerCaKeys.publicKey,
+			issuerCertificate: signerCa.der,
 			thisUpdate: new Date(at.getTime() - HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 		});
@@ -687,7 +687,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Shadow CA' },
 			publicKey: caKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -701,7 +701,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Shadow CA' },
 			publicKey: signerKeys.publicKey,
 			signerPrivateKey: caKeys.privateKey,
-			issuerPublicKey: caKeys.publicKey,
+			issuerCertificate: issuerCa.der,
 			validity: {
 				notBefore: new Date(at.getTime() - 400 * 24 * HOUR_MS),
 				notAfter: new Date(at.getTime() - HOUR_MS),
@@ -713,7 +713,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'Shadow CA' },
 			publicKey: signerKeys.publicKey,
 			signerPrivateKey: caKeys.privateKey,
-			issuerPublicKey: caKeys.publicKey,
+			issuerCertificate: issuerCa.der,
 			validity: {
 				notBefore: new Date(at.getTime() - HOUR_MS),
 				notAfter: new Date(at.getTime() + 400 * 24 * HOUR_MS),
@@ -726,7 +726,7 @@ describe('checkChainRevocation', () => {
 			subject: { commonName: 'shadow-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: caKeys.privateKey,
-			issuerPublicKey: caKeys.publicKey,
+			issuerCertificate: issuerCa.der,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
@@ -734,7 +734,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Shadow CA' },
 			signerPrivateKey: signerKeys.privateKey,
-			issuerPublicKey: signerKeys.publicKey,
+			issuerCertificate: validSigner.der,
 			thisUpdate: new Date(at.getTime() - HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 			revokedCertificates: [
@@ -785,7 +785,7 @@ async function createOcspChainFixture() {
 		subject: { commonName: 'ocsp-chain-leaf.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: ca.keyPair.privateKey,
-		issuerPublicKey: ca.keyPair.publicKey,
+		issuerCertificate: ca.certificate.der,
 	});
 	const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 	const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
@@ -1097,7 +1097,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			...fresh,
 			revokedCertificates: [
 				{
@@ -1146,7 +1146,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 				crlNumber: 1,
 				issuer: { commonName: caName },
 				signerPrivateKey: ca.keyPair.privateKey,
-				issuerPublicKey: ca.keyPair.publicKey,
+				issuerCertificate: ca.certificate.der,
 				...fresh,
 				revokedCertificates: [
 					{
@@ -1226,7 +1226,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			...fresh,
 		});
 
@@ -1271,7 +1271,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			...fresh,
 		});
 
@@ -1316,7 +1316,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 		});
@@ -1353,7 +1353,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			thisUpdate: staleThisUpdate,
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 			revokedCertificates: [
@@ -1386,7 +1386,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			subject: { commonName: caName },
 			publicKey: delegateKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: { keyUsage: ['cRLSign'] },
 		});
 		const parsedDelegate = unwrap(parseCertificatePem(delegate.pem));
@@ -1398,14 +1398,14 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: delegateKeys.privateKey,
-			issuerPublicKey: delegateKeys.publicKey,
+			issuerCertificate: delegate.der,
 			...fresh,
 		});
 		const staleCaCrl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 		});
@@ -1449,7 +1449,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		const baseCrl = await createCertificateRevocationList({
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 5,
 			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
@@ -1458,7 +1458,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		const deltaCrl = await createCertificateRevocationList({
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 6,
 			baseCrlNumber: 5,
 			thisUpdate: deltaThisUpdate,
@@ -1495,7 +1495,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			subject: { commonName: 'Externally Trusted Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: outsiderCa.keyPair.privateKey,
-			issuerPublicKey: outsiderCa.keyPair.publicKey,
+			issuerCertificate: outsiderCa.certificate.der,
 		});
 		const response = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -1550,7 +1550,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			subject: { commonName: 'OCSP Scope Intermediate' },
 			publicKey: intermediateKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1562,7 +1562,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			subject: { commonName: 'ocsp-scope-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 		});
 		const responder = await createSelfSignedCertificate({
 			subject: { commonName: 'Intermediate Scoped Responder' },
@@ -1613,7 +1613,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			subject: { commonName: 'Delegated OCSP Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: { extendedKeyUsage: ['ocspSigning'] },
 		});
 		// No embedded certificates — discovery must fall back to extraCertificates
@@ -1817,13 +1817,13 @@ describe('checkChainRevocation CRL maximum age policy', () => {
 			subject: { commonName: 'chain-max-age-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const crl = await createCertificateRevocationList({
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			thisUpdate: new Date('2020-01-01T00:00:00Z'),
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});

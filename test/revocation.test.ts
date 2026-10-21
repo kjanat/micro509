@@ -87,7 +87,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			revokedCertificates: [
 				{
 					serialNumber: hexToBytes(certificate.serialNumberHex),
@@ -126,7 +126,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			revokedCertificates: [{ serialNumber: Uint8Array.of(0x7f) }],
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
@@ -161,7 +161,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'scoped-revoked.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -178,7 +178,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Scoped Revocation CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			issuingDistributionPoint: {
 				distributionPoint: {
 					type: 'fullName',
@@ -221,7 +221,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'partial-coverage.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -238,7 +238,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Partial Coverage CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await checkCertificateRevocation({
@@ -271,7 +271,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'delta-revoked.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -287,7 +287,7 @@ describe('revocation boundary', () => {
 		const completeCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Revocation CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 4,
 			issuingDistributionPoint: {
 				distributionPoint: {
@@ -300,7 +300,7 @@ describe('revocation boundary', () => {
 		const deltaCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Revocation CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			crlNumber: 5,
 			baseCrlNumber: 4,
 			issuingDistributionPoint: {
@@ -358,7 +358,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'indirect-revoked.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: certificateIssuer.keyPair.privateKey,
-			issuerPublicKey: certificateIssuer.keyPair.publicKey,
+			issuerCertificate: certificateIssuer.certificate.der,
 			serialNumber,
 			extensions: {
 				crlDistributionPoints: [
@@ -376,7 +376,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Indirect Revocation CRL Issuer' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
-			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			issuerCertificate: crlIssuer.certificate.der,
 			issuingDistributionPoint: {
 				distributionPoint: {
 					type: 'fullName',
@@ -428,7 +428,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'scope-mismatch.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -445,7 +445,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Scope Mismatch CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			issuingDistributionPoint: {
 				distributionPoint: {
 					type: 'fullName',
@@ -492,7 +492,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			issuingDistributionPoint: {
 				onlyContainsCACerts: true,
 			},
@@ -579,7 +579,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			revokedCertificates: [
 				{ serialNumber: hexToBytes(certificate.serialNumberHex), reasonCode: 'keyCompromise' },
 			],
@@ -669,7 +669,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'Responder Without EKU' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 			},
@@ -680,7 +680,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'ocsp-invalid.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 		});
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: responderKeys.privateKey,
@@ -729,7 +729,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'other-ocsp-status.example' },
 			publicKey: otherLeafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 		});
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -778,7 +778,7 @@ describe('revocation boundary', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			issuingDistributionPoint: {
 				onlyContainsCACerts: true,
 			},
@@ -851,7 +851,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'aia-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				authorityInfoAccess: [
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
@@ -897,7 +897,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'raw-aia.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaDer }] },
 		});
 		expect(getCertificateOcspResponderUris(leaf.pem)).toEqual(['http://ocsp.example.test']);
@@ -921,7 +921,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'tampered-aia-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				authorityInfoAccess: [
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://real-ocsp.example.test' } },
@@ -958,7 +958,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'Local OCSP Responder' },
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
@@ -970,7 +970,7 @@ describe('revocation boundary', () => {
 			subject: { commonName: 'configured-ocsp.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			issuerCertificate: issuer.certificate.der,
 			extensions: {
 				authorityInfoAccess: [
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-aia.example.test' } },

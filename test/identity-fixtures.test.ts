@@ -33,7 +33,7 @@ async function matchIdentityFixture(input: {
 		subject: { commonName: input.commonName },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		extensions:
 			input.subjectAltNames === undefined
 				? ({ keyUsage: ['digitalSignature'] } satisfies NonNullable<

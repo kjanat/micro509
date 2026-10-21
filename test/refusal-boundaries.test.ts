@@ -54,7 +54,7 @@ async function fixture() {
 		crlNumber: 1,
 		issuer: { commonName: 'Verify Intermediate CA' },
 		signerPrivateKey: chain.intermediateKeys.privateKey,
-		issuerPublicKey: chain.intermediateKeys.publicKey,
+		issuerCertificate: chain.intermediate.der,
 		nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 	});
 	const ocsp = await createOcspResponse({
@@ -123,7 +123,7 @@ describe('decode refusals at the CRL boundaries', () => {
 			subject: { commonName: 'teletex-distribution-point.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			extensions: {
 				crlDistributionPoints: [
 					{
@@ -140,7 +140,7 @@ describe('decode refusals at the CRL boundaries', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
-			issuerPublicKey: intermediateKeys.publicKey,
+			issuerCertificate: intermediate.der,
 			issuingDistributionPoint: {
 				distributionPoint: {
 					type: 'fullName',
@@ -307,7 +307,7 @@ describe('decode refusals in RSA-PSS signature parameters', () => {
 			crlNumber: 1,
 			issuer: { commonName: 'pss-limit-issuer.example' },
 			signerPrivateKey: keyPair.privateKey,
-			issuerPublicKey: keyPair.publicKey,
+			issuerCertificate: certificate.der,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(parseCertificateDer(withAlgorithm(certificate.der))).toMatchObject(limitExceeded);

@@ -38,7 +38,7 @@ describe('pkcs domain', () => {
 			subject: { commonName: 'pkcs-domain-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 
 		const pfx = unwrap(
@@ -154,7 +154,7 @@ describe('pkcs domain', () => {
 			subject: { commonName: 'pkcs7-domain-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			issuerCertificate: root.certificate.der,
 		});
 
 		const bag = unwrap(createPkcs7CertBag([leaf.pem, root.certificate.pem]));

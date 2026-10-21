@@ -46,7 +46,7 @@ describe('pfx', () => {
 			subject: { commonName: 'pfx-leaf.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 		});
 		const pfx = await buildPfx({
 			certificates: [

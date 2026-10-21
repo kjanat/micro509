@@ -39,7 +39,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'identity-ip.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -76,7 +76,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'identity-ip.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -114,7 +114,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'different.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -159,7 +159,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'wildcard.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -202,7 +202,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'idna.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -239,7 +239,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'pattern.example.com' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'a*b.example.com' }],
 			},
@@ -268,7 +268,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'fallback.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -302,7 +302,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'fallback.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -344,7 +344,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'fallback.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -386,7 +386,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'fallback.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -428,7 +428,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'fallback.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -463,7 +463,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'other.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 			},
@@ -510,7 +510,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'ipv6.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				subjectAltNames: [{ type: 'ip', value: '::1' }],
 			},
@@ -539,7 +539,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'uri.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -576,7 +576,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'sip.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -622,7 +622,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'uri-host.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -653,7 +653,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'uri-missing.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -690,7 +690,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'uri-idna.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -721,7 +721,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'srv.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -758,7 +758,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'srv-domain.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -789,7 +789,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'srv-missing.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -887,7 +887,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'unsupported-type.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'unsupported-type.example' }],
@@ -919,7 +919,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'hostile-value.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				subjectAltNames: [{ type: 'dns', value: 'hostile-value.example' }],
@@ -956,7 +956,7 @@ describe('identity boundary', () => {
 			subject: { commonName: 'srv-idna.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth'],
@@ -993,7 +993,7 @@ async function verifyServiceIdentity(
 		subject: { commonName: 'service-host-leaf' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
-		issuerPublicKey: root.keyPair.publicKey,
+		issuerCertificate: root.certificate.der,
 		extensions: { keyUsage: ['digitalSignature'], subjectAltNames },
 	});
 	const result = await verifyCertificateChain({
