@@ -102,6 +102,8 @@ describe('subjectAltNameLabel', () => {
 				{ type: 'uri', value: 'a' },
 				{ type: 'srv', value: 'a' },
 				{ type: 'smtpUtf8Mailbox', value: 'a' },
+				{ type: 'upn', value: 'a' },
+				{ type: 'krb5PrincipalName', realm: 'A', nameType: 1, nameString: ['a'] },
 				{ type: 'directoryName', derHex: '3000' },
 				{ type: 'otherName', typeId: '1.2.3', value: new Uint8Array() },
 				{ type: 'x400Address', value: new Uint8Array() },
@@ -117,6 +119,8 @@ describe('subjectAltNameLabel', () => {
 			'URI',
 			'SRV',
 			'SmtpUTF8Mailbox',
+			'UPN',
+			'KRB5PrincipalName',
 			'DirName',
 			'othername',
 			'X400Name',
@@ -124,6 +128,23 @@ describe('subjectAltNameLabel', () => {
 			'Registered ID',
 			'[tag 8]',
 		]);
+	});
+
+	it('renders a KRB5PrincipalName as its components joined by "/" before "@" and the realm', () => {
+		expect(
+			subjectAltNameToString(
+				{
+					type: 'krb5PrincipalName',
+					realm: 'EXAMPLE.COM',
+					nameType: 3,
+					nameString: ['host', 'www.example.com'],
+				},
+				{ prefix: true },
+			),
+		).toBe('KRB5PrincipalName:host/www.example.com@EXAMPLE.COM');
+		expect(
+			subjectAltNameToString({ type: 'upn', value: 'user@example.com' }, { prefix: true }),
+		).toBe('UPN:user@example.com');
 	});
 
 	it('renders an otherName as its type-id and value hex, and a registeredID as its OID', () => {

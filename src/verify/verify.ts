@@ -1772,6 +1772,8 @@ function findUnprocessedCriticalExtension(certificate: ParsedCertificate): strin
 
 const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = new Set([
 	'otherName',
+	'upn',
+	'krb5PrincipalName',
 	'x400Address',
 	'ediPartyName',
 	'unknown',
