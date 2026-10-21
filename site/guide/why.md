@@ -101,7 +101,7 @@ micro509 covers PKI surface that's hard to find in a single zero-dependency JS p
 
 ## Design principles
 
-- **Zero dependencies** — no transitive supply chain risk
+- **Zero runtime dependencies** — no transitive runtime packages to install
 - **Pure WebCrypto** — no Node builtins in library code, runs in any modern runtime
 - **Narrow defaults, explicit escape hatches** — dangerous operations like CN fallback or self-signed leaf acceptance require opt-in
 - **No `any`, no type assertions, no non-null assertions** — discriminated unions and exhaustive checks throughout

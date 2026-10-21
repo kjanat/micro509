@@ -74,7 +74,86 @@ import * as micro509 from '@kjanat/micro509';
 import * as micro509 from 'jsr:@kjanat/micro509';
 ```
 
+## Choose a task
+
+| I want to…                          | Start here                          |
+| ----------------------------------- | ----------------------------------- |
+| Verify a certificate for a server   | [Verify a chain](#verify-a-chain)   |
+| Issue a certificate or create a CSR | [Certificates](./certificates.md)   |
+| Check CRL or OCSP evidence          | [Revocation](./revocation.md)       |
+| Import a private key                | [Keys](./keys.md#import-and-export) |
+| Read or create a PFX bundle         | [PKCS](./pkcs.md#pfx-pkcs12)        |
+
 ## Quick Start
+
+### Verify a chain
+
+<LiveCode>
+
+```ts
+import {
+  createSelfSignedCertificate,
+  createCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
+} from 'micro509';
+
+// Create a CA root
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Demo Root CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
+});
+
+// Issue a leaf signed by the CA
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: { commonName: 'Demo Root CA' },
+  subject: { commonName: 'app.example.com' },
+  publicKey: leafKeys.publicKey,
+  signerPrivateKey: ca.keyPair.privateKey,
+  issuerCertificate: ca.certificate.pem,
+  extensions: {
+    extendedKeyUsage: ['serverAuth'],
+    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
+  },
+});
+
+// Verify the CA → leaf chain
+const result = await verifyCertificateChain({
+  leaf: leaf.pem,
+  roots: [ca.certificate.pem],
+  purpose: 'serverAuth',
+  serviceIdentity: {
+    type: 'dns',
+    value: 'app.example.com',
+  },
+});
+
+if (result.ok) {
+  const { leaf: parsed } = result.value;
+  console.log(`\
+verified ${parsed.subject.values.commonName}
+  issuer:       ${parsed.issuer.values.commonName}
+  serial:       ${parsed.serialNumberHex}
+  chain length: ${result.value.chain.length}`);
+} else {
+  console.log(`verification failed: ${result.error.code}`);
+}
+```
+
+</LiveCode>
+
+This example creates its own CA so it runs without external files. In your
+application, supply the leaf and intermediates you received and roots you
+already trust. Do not make a certificate trusted merely because it arrived
+with the leaf. `purpose` and `serviceIdentity` select the application checks;
+this example does not supply revocation evidence.
+
+See [the verification contract](./verification.md#what-verification-establishes)
+for what a successful result establishes and what your application supplies.
 
 ### Create a self-signed certificate
 
@@ -169,62 +248,6 @@ sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
 key usage: ${parsed.keyUsage?.flags.join(', ') ?? 'none'}
 SANs:      ${sans}`);
-}
-```
-
-</LiveCode>
-
-### Verify a chain
-
-<LiveCode>
-
-```ts
-import {
-  createSelfSignedCertificate,
-  createCertificate,
-  generateKeyPair,
-  verifyCertificateChain,
-} from 'micro509';
-
-// Create a CA root
-const ca = await createSelfSignedCertificate({
-  subject: { commonName: 'Demo Root CA' },
-  extensions: {
-    basicConstraints: { ca: true },
-    keyUsage: ['keyCertSign', 'cRLSign'],
-  },
-});
-
-// Issue a leaf signed by the CA
-const leafKeys = await generateKeyPair();
-const leaf = await createCertificate({
-  issuer: { commonName: 'Demo Root CA' },
-  subject: { commonName: 'app.example.com' },
-  publicKey: leafKeys.publicKey,
-  signerPrivateKey: ca.keyPair.privateKey,
-  issuerCertificate: ca.certificate.pem,
-  extensions: {
-    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
-  },
-});
-
-// Verify the CA → leaf chain
-const result = await verifyCertificateChain({
-  leaf: leaf.pem,
-  roots: [ca.certificate.pem],
-  serviceIdentity: {
-    type: 'dns',
-    value: 'app.example.com',
-  },
-});
-
-if (result.ok) {
-  const { leaf: parsed } = result.value;
-  console.log(`\
-verified ${parsed.subject.values.commonName}
-  issuer:       ${parsed.issuer.values.commonName}
-  serial:       ${parsed.serialNumberHex}
-  chain length: ${result.value.chain.length}`);
 }
 ```
 

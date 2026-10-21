@@ -129,6 +129,48 @@ describe('renderModulePages inline links', () => {
 	});
 });
 
+describe('renderModulePages literal types', () => {
+	it('preserves quotes around string literals from deno doc', () => {
+		const literalModules = {
+			'file:///workspace/src/example/index.ts': {
+				symbols: [
+					{
+						name: 'DnsName',
+						declarations: [
+							{
+								location,
+								declarationKind: 'export',
+								kind: 'typeAlias',
+								def: {
+									tsType: {
+										kind: 'typeLiteral',
+										value: {
+											properties: [
+												{
+													name: 'type',
+													readonly: true,
+													tsType: {
+														repr: 'dns',
+														kind: 'literal',
+														value: { kind: 'string', string: 'dns' },
+													},
+												},
+											],
+										},
+									},
+								},
+							},
+						],
+					},
+				],
+			} satisfies ApiModule,
+		} satisfies Record<string, ApiModule>;
+
+		const result = renderModulePages(literalModules, { packageName: 'example' });
+		expect(result.pages[0]?.markdown).toContain('readonly type: "dns"');
+	});
+});
+
 describe('root entrypoint', () => {
 	it('supports directory and flat-file entrypoint layouts', () => {
 		const layoutModules = {

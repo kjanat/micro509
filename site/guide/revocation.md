@@ -7,9 +7,14 @@ outline: [2, 3]
 The examples below build their own `ca`, `leaf`, CRL, and OCSP material
 inline so each one runs on its own.
 
+Revocation checking is opt-in. Pass CRLs or OCSP responses in the `revocation`
+input to `verifyCertificateChain`; micro509 does not retrieve evidence from
+certificate URLs or contact responders. Your application is responsible for
+obtaining evidence and supplying it for evaluation.
+
 ::: warning Revocation checking defaults to hard-fail
-Revocation checking only runs when you supply evidence — and once you do,
-`RevocationPolicy.mode` defaults to `'hard-fail'`: certificates whose
+Once revocation evidence is supplied, `RevocationPolicy.mode` defaults to
+`'hard-fail'`: certificates whose
 revocation status is **indeterminate** (no applicable CRL/OCSP evidence,
 expired evidence, untrusted signer) are **denied**. If availability matters
 more than strictness — partial evidence is normal in your setup — opt out

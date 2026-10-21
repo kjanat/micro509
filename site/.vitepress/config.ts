@@ -284,7 +284,7 @@ const ORDER: SidebarOrder = {
 		},
 		{
 			text: 'Workflows',
-			slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs', 'extensions'],
+			slugs: ['verification', 'certificates', 'keys', 'revocation', 'pkcs', 'extensions'],
 		},
 	],
 	reference: [
