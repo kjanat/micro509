@@ -47,17 +47,27 @@ async function body(request) {
 	return Buffer.concat(chunks).toString('utf8');
 }
 
-createServer(async (request, response) => {
-	const url = new URL(request.url ?? '/', 'http://localhost');
-	if (request.method === 'POST' && url.pathname === '/parse') {
-		const fileName = url.searchParams.get('file') === 'tsx' ? 'example.tsx' : 'example.ts';
-		const result = parse(fileName, await body(request));
-		response.writeHead(200, { 'content-type': 'application/json' });
-		response.end(JSON.stringify(result));
-		return;
-	}
-	response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-	response.end(page);
+createServer((request, response) => {
+	void (async () => {
+		const url = new URL(request.url ?? '/', 'http://localhost');
+		if (request.method === 'POST' && url.pathname === '/parse') {
+			const fileName = url.searchParams.get('file') === 'tsx' ? 'example.tsx' : 'example.ts';
+			const result = parse(fileName, await body(request));
+			response.writeHead(200, { 'content-type': 'application/json' });
+			response.end(JSON.stringify(result));
+			return;
+		}
+		response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+		response.end(page);
+	})().catch(() => {
+		if (response.destroyed || response.writableEnded) return;
+		if (response.headersSent) {
+			response.destroy();
+			return;
+		}
+		response.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+		response.end('Internal Server Error');
+	});
 }).listen(port, () => {
 	console.log(`http://localhost:${port}`);
 });
