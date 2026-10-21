@@ -122,7 +122,8 @@ const leaf = await createCertificate({
 });
 
 // Verify the CA → leaf chain
-const result = await verifyCertificateChain({
+const verificationInput = {
+  at: new Date(),
   leaf: leaf.pem,
   roots: [ca.certificate.pem],
   purpose: 'serverAuth',
@@ -130,21 +131,57 @@ const result = await verifyCertificateChain({
     type: 'dns',
     value: 'app.example.com',
   },
+} as const;
+
+console.log('Trusted root PEM (save as root.pem):\n' + ca.certificate.pem);
+console.log('Leaf PEM (save as leaf.pem):\n' + leaf.pem);
+console.log('Verification inputs:', {
+  at: verificationInput.at.toISOString(),
+  unixTime: Math.floor(verificationInput.at.getTime() / 1000),
+  purpose: verificationInput.purpose,
+  serviceIdentity: verificationInput.serviceIdentity,
+  revocation: 'not configured',
 });
 
+const result = await verifyCertificateChain(verificationInput);
 if (result.ok) {
-  const { leaf: parsed } = result.value;
-  console.log(`\
-verified ${parsed.subject.values.commonName}
-  issuer:       ${parsed.issuer.values.commonName}
-  serial:       ${parsed.serialNumberHex}
-  chain length: ${result.value.chain.length}`);
+  console.log(
+    'Validated chain (leaf to root):',
+    result.value.chain.map((cert) => ({
+      subject: cert.subject.values,
+      issuer: cert.issuer.values,
+      serial: cert.serialNumberHex,
+      notBefore: cert.notBefore.toISOString(),
+      notAfter: cert.notAfter.toISOString(),
+      subjectAltNames: cert.subjectAltNames,
+      signatureAlgorithm: cert.signatureAlgorithmName,
+    })),
+  );
 } else {
-  console.log(`verification failed: ${result.error.code}`);
+  console.log('Verification failure:', result.error);
 }
+
+// Use the same certificates and time, but ask for a different identity.
+const mismatch = await verifyCertificateChain({
+  ...verificationInput,
+  serviceIdentity: { type: 'dns', value: 'wrong.example.com' },
+});
+console.log('Wrong-hostname result (expected rejection):', mismatch);
 ```
 
 </LiveCode>
+
+To check the same material independently, save the two PEM blocks as `root.pem`
+and `leaf.pem`. Replace `UNIX_TIME_FROM_OUTPUT` with the printed `unixTime`:
+
+```bash
+openssl verify -CAfile root.pem -purpose sslserver -verify_hostname app.example.com -attime UNIX_TIME_FROM_OUTPUT leaf.pem
+openssl verify -CAfile root.pem -purpose sslserver -verify_hostname wrong.example.com -attime UNIX_TIME_FROM_OUTPUT leaf.pem
+```
+
+The first command should accept the leaf; the second should reject its hostname.
+Each run generates new certificates. Keep the printed PEMs and time to repeat
+that run's checks.
 
 This example creates its own CA so it runs without external files. In your
 application, supply the leaf and intermediates you received and roots you

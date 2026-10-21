@@ -76,7 +76,8 @@ const leaf = await createCertificate({
 });
 
 // Verify the CA → leaf chain
-const result = await verifyCertificateChain({
+const verificationInput = {
+	at: new Date(),
 	leaf: leaf.pem,
 	roots: [ca.certificate.pem],
 	purpose: 'serverAuth',
@@ -84,13 +85,42 @@ const result = await verifyCertificateChain({
 		type: 'dns',
 		value: 'app.example.com',
 	},
+} as const;
+
+console.log('Trusted root PEM (save as root.pem):\n' + ca.certificate.pem);
+console.log('Leaf PEM (save as leaf.pem):\n' + leaf.pem);
+console.log('Verification inputs:', {
+	at: verificationInput.at.toISOString(),
+	unixTime: Math.floor(verificationInput.at.getTime() / 1000),
+	purpose: verificationInput.purpose,
+	serviceIdentity: verificationInput.serviceIdentity,
+	revocation: 'not configured',
 });
 
+const result = await verifyCertificateChain(verificationInput);
 if (result.ok) {
-	console.log(`Verified ${result.value.chain.length} certificates`);
+	console.log(
+		'Validated chain (leaf to root):',
+		result.value.chain.map((cert) => ({
+			subject: cert.subject.values,
+			issuer: cert.issuer.values,
+			serial: cert.serialNumberHex,
+			notBefore: cert.notBefore.toISOString(),
+			notAfter: cert.notAfter.toISOString(),
+			subjectAltNames: cert.subjectAltNames,
+			signatureAlgorithm: cert.signatureAlgorithmName,
+		})),
+	);
 } else {
-	console.log(result.error.code, result.error.index);
+	console.log('Verification failure:', result.error);
 }
+
+// Use the same certificates and time, but ask for a different identity.
+const mismatch = await verifyCertificateChain({
+	...verificationInput,
+	serviceIdentity: { type: 'dns', value: 'wrong.example.com' },
+});
+console.log('Wrong-hostname result (expected rejection):', mismatch);
 ```
 
 A failure has a machine-readable `error.code`, a certificate `index` where

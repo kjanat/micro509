@@ -218,7 +218,6 @@ onMounted(() => {
 
 <template>
   <div ref="el" class="live-code">
-    <slot />
     <div class="live-code-bar">
       <button
         class="live-code-btn"
@@ -275,6 +274,7 @@ onMounted(() => {
 (no output)</pre
       >
     </div>
+    <slot />
   </div>
 </template>
 
