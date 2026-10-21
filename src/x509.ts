@@ -1,6 +1,9 @@
 /**
- * Canonical advanced X.509 domain surface.
- * Owns certificate, CSR, extension, name, and parse APIs behind one stable entrypoint.
+ * Create and inspect certificates, CSRs, names, and extensions.
+ *
+ * Read existing material with {@linkcode parseCertificatePem}. Issue a
+ * certificate with {@linkcode createCertificate}, or generate a key and
+ * certificate together with {@linkcode createSelfSignedCertificate}.
  *
  * DER/PEM parsing, encoding, extension decoding, and text rendering return
  * synchronously. Certificate/CSR creation and WebCrypto-backed hashing and key

@@ -24,6 +24,17 @@ for evidence selection and certificates exempted from checking.
 
 ## Chain verification
 
+For existing certificates, pass the leaf, intermediates, and trusted roots to
+`verifyCertificateChain`. The [server verification recipe](./recipes.md#verify-a-server-certificate)
+shows a function you can use with your application's PEM inputs.
+
+The runnable example below creates its own three-certificate chain. Its successful
+result contains the certificates in leaf-to-root order. On failure, branch on
+`result.error.code` and use `result.error.index` to locate the certificate.
+
+<details>
+<summary>Generate and verify a complete root, intermediate, and leaf chain</summary>
+
 <LiveCode>
 
 ```ts
@@ -97,6 +108,8 @@ At index: ${result.error.index}`);
 ```
 
 </LiveCode>
+
+</details>
 
 ## Verification purposes
 

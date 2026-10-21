@@ -196,8 +196,8 @@ const examples: DocExamplesOptions = {
 		...pagesIn(path.join(repoRoot, siteRoot, 'reference')),
 	],
 	outDir: path.join(import.meta.dirname, 'cache/examples'),
-	/** Matches a `<LiveCode>` tag wrapping a ts fence. The capture is the example. */
-	block: /<LiveCode[^>]*>\s*\n\n```ts\n([\s\S]*?)```/g,
+	/** Compile runnable examples and explicitly marked copyable recipes. */
+	block: /(?:<LiveCode[^>]*>|<!-- typecheck -->)\s*\n\n```ts\n([\s\S]*?)```/g,
 	paths: {
 		[repo.name]: [path.join(repoRoot, 'src/index.ts')],
 		[`${repo.name}/*`]: [path.join(repoRoot, 'src/*.ts')],
@@ -280,11 +280,19 @@ const ORDER: SidebarOrder = {
 	guide: [
 		{
 			text: 'Introduction',
-			slugs: ['getting-started', 'why'],
+			slugs: ['getting-started', 'why', 'migration'],
 		},
 		{
 			text: 'Workflows',
-			slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs', 'extensions'],
+			slugs: [
+				'recipes',
+				'certificates',
+				'verification',
+				'keys',
+				'revocation',
+				'pkcs',
+				'extensions',
+			],
 		},
 	],
 	reference: [

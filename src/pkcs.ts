@@ -1,8 +1,9 @@
 /**
  * PKCS container APIs: PFX/PKCS#12 and PKCS#7/CMS.
  *
- * Owns PFX archive creation and parsing, PKCS#7 certificate bags and SignedData,
- * and PKCS#12 MAC integrity helpers.
+ * Package keys and certificates with {@linkcode createPfx}, then read them with
+ * {@linkcode parsePfxDer}. Use {@linkcode createPkcs7SignedData} and
+ * {@linkcode verifyPkcs7SignedData} for signed content.
  *
  * @module micro509/pkcs
  */

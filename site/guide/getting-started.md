@@ -355,3 +355,10 @@ import { pemDecode, pemEncode } from 'micro509/pem';
 import { readDerRoot, decodeDerOid } from 'micro509/der';
 import type { Micro509Error } from 'micro509/result';
 ```
+
+## Next steps
+
+Use the [recipes](./recipes.md) to verify existing certificates, issue from a CSR,
+or import a PFX identity. See [runtime support](../reference/runtimes.md) and
+[algorithms](../reference/algorithms.md) when choosing your deployment environment.
+Upgrading from 0.14.0? Follow the [migration guide](./migration.md).
