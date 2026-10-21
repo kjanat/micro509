@@ -444,7 +444,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: forgedSigner.keyPair.privateKey,
-			issuerPublicKey: forgedSigner.keyPair.publicKey,
+			issuerCertificate: forgedSigner.certificate.der,
 			...fresh,
 			revokedCertificates: [
 				{
@@ -463,7 +463,7 @@ describe('checkChainRevocation', () => {
 			crlNumber: 1,
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
+			issuerCertificate: ca.certificate.der,
 			...fresh,
 			revokedCertificates: [],
 		});
