@@ -2,18 +2,25 @@
 
 ## What verification establishes
 
-Parsing reads certificate data; it does not establish trust. Chain verification
-checks signatures and certificate constraints against the roots you pass in
-`roots`. micro509 does not load a system trust store. Supply any intermediate
-certificates you have in `intermediates`; it does not fetch missing issuers over
-HTTP. Set `purpose` and `serviceIdentity` when your application requires those
-checks; both are optional. Validation uses the current time by default, or the
-time supplied in `at`. Revocation is checked only when you provide a
-`revocation` input with CRL or OCSP evidence; missing or unusable evidence then
-fails closed by default.
+`parseCertificatePem` reads a certificate into typed fields.
+`verifyCertificateChain` builds a path to a trust anchor and validates it using
+the inputs below.
 
-A successful result means a path validated against your trust inputs at that
-time, including the purpose, identity, and revocation checks you configured.
+| Input             | What to supply                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leaf`            | The certificate you want to verify.                                                                                                         |
+| `intermediates`   | Available issuer certificates for path building. Missing issuers are not fetched automatically.                                             |
+| `roots`           | CA certificates your application trusts. micro509 does not load a system trust store. Advanced callers can also supply bare `trustAnchors`. |
+| `purpose`         | The intended use, such as `serverAuth`. Omit it to leave out this application-purpose check.                                                |
+| `serviceIdentity` | The DNS, IP, URI, or SRV identity you expect. Omit it to leave out identity matching.                                                       |
+| `at`              | The validation time. Defaults to the current time.                                                                                          |
+| `revocation`      | CRL/OCSP evidence and policy. Omit this option to skip revocation checking. Supplying it, even as `{}`, enables the check.                  |
+
+A successful result contains the validated chain and parsed leaf. It reflects
+the purpose, identity, time, and revocation options you supplied. For certificates
+that require revocation evidence, missing or unusable evidence is indeterminate
+and fails under the default hard-fail policy. See [chain-level revocation](./revocation.md#chain-level-revocation)
+for evidence selection and certificates exempted from checking.
 
 ## Chain verification
 

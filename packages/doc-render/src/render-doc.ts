@@ -190,6 +190,14 @@ function link(name: string): string {
 	return `\`${name}\``;
 }
 
+/** Quote a string literal in a form that survives Markdown and `plain()`. */
+function renderStringLiteral(value: string): string {
+	return JSON.stringify(value).replace(/[\x60\[\]<>|]/g, (char) => {
+		const codePoint = char.charCodeAt(0).toString(16).padStart(4, '0');
+		return `\\u${codePoint}`;
+	});
+}
+
 /** Narrow a tag list to one kind without a cast (filter doesn't narrow unions). */
 function tagsOfKind<K extends JsDocTag['kind']>(
 	tags: readonly JsDocTag[],
@@ -248,7 +256,7 @@ function renderType(t: TsTypeDef | undefined): string {
 		case 'keyword':
 			return `\`${t.repr}\``;
 		case 'literal':
-			return `\`${t.value.kind === 'string' ? JSON.stringify(t.value.string) : t.repr}\``;
+			return `\`${t.value.kind === 'string' ? renderStringLiteral(t.value.string) : t.repr}\``;
 		case 'typeRef': {
 			const v = t.value;
 			const head = v.resolution?.kind === 'typeParam' ? `\`${v.typeName}\`` : link(v.typeName);
