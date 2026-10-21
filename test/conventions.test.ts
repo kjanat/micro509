@@ -137,8 +137,10 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 
 	it('site error-code table matches VERIFY_ERROR_CODES exactly', async () => {
 		const guide = await Bun.file(`${projectRoot}/site/guide/verification.md`).text();
-		// First backtick-wrapped snake_case token of each table row
-		const documented = [...guide.matchAll(/^\| `([a-z0-9_]+)`/gm)].map((m) => m[1]);
+		const section = guide.split('## Error codes\n')[1]?.split('\n## ')[0];
+		expect(section).toBeDefined();
+		// Read only error-code rows, not input tables elsewhere in the guide.
+		const documented = [...(section ?? '').matchAll(/^\| `([a-z0-9_]+)`/gm)].map((m) => m[1]);
 		expect([...documented].sort()).toEqual([...VERIFY_ERROR_CODES].sort());
 	});
 });
