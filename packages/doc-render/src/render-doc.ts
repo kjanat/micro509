@@ -248,7 +248,7 @@ function renderType(t: TsTypeDef | undefined): string {
 		case 'keyword':
 			return `\`${t.repr}\``;
 		case 'literal':
-			return `\`${t.repr}\``;
+			return `\`${t.value.kind === 'string' ? JSON.stringify(t.value.string) : t.repr}\``;
 		case 'typeRef': {
 			const v = t.value;
 			const head = v.resolution?.kind === 'typeParam' ? `\`${v.typeName}\`` : link(v.typeName);

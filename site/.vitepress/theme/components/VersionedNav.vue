@@ -59,18 +59,31 @@ const links = computed(() =>
 </script>
 
 <template>
-  <a
-    v-for="link in links"
-    :key="link.text"
-    class="VPLink link vp-external-link-icon-none VPNavBarMenuLink"
-    :class="{ active: link.active }"
-    :href="link.link"
-  >
-    {{ link.text }}
-  </a>
+  <div class="versioned-nav">
+    <a
+      v-for="link in links"
+      :key="link.text"
+      class="VPLink link vp-external-link-icon-none VPNavBarMenuLink"
+      :class="{ active: link.active }"
+      :href="link.link"
+    >
+      {{ link.text }}
+    </a>
+  </div>
 </template>
 
 <style scoped>
+.versioned-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .versioned-nav {
+    flex-direction: row;
+  }
+}
+
 .VPNavBarMenuLink {
   display: flex;
   align-items: center;

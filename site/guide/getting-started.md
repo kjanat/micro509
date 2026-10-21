@@ -74,6 +74,16 @@ import * as micro509 from '@kjanat/micro509';
 import * as micro509 from 'jsr:@kjanat/micro509';
 ```
 
+## Choose a task
+
+| Task                                | Guide                             |
+| ----------------------------------- | --------------------------------- |
+| Create certificates and CSRs        | [Certificates](./certificates.md) |
+| Verify a chain and service identity | [Verification](./verification.md) |
+| Check CRL or OCSP evidence          | [Revocation](./revocation.md)     |
+| Import, export, or encrypt keys     | [Keys](./keys.md)                 |
+| Work with PFX or PKCS#7             | [PKCS](./pkcs.md)                 |
+
 ## Quick Start
 
 ### Create a self-signed certificate

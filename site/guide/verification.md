@@ -1,5 +1,22 @@
 # Verification
 
+## What verification establishes
+
+Parsing reads certificate data; it does not establish trust. Chain verification
+checks signatures and certificate constraints against the roots you pass in
+`roots`. micro509 does not load a system trust store. Supply any intermediate
+certificates you have in `intermediates`; it does not fetch missing issuers over
+HTTP. Set `purpose` and `serviceIdentity` when your application requires those
+checks; both are optional. Validation uses the current time by default, or the
+time supplied in `at`. Revocation is checked only when you provide a
+`revocation` input with CRL or OCSP evidence; missing or unusable evidence then
+fails closed by default.
+
+A successful result means a path validated against your trust inputs at that
+time, including the purpose, identity, and revocation checks you configured.
+It does not enable checks you omitted or install the certificate into a TLS
+client or server.
+
 ## Chain verification
 
 <LiveCode>
@@ -75,25 +92,6 @@ At index: ${result.error.index}`);
 ```
 
 </LiveCode>
-
-Path building tries every issuer candidate and bare trust anchor whose subject
-matches, so an input with many same-subject certificates costs more work than
-its size suggests. `maxPathBuildingChecks` on `verifyCertificateChain`,
-`buildCandidatePath` and the `validateFor*` profiles bounds how many candidates
-and anchors one search may examine, including those it skips because they are
-already on the path or their names do not match. The default is 100,000. When the bound stops the search before a trusted path
-is found, the result is `path_building_limit_exceeded`.
-
-A user notice `explicitText` or `noticeRef` organization longer than the 200
-characters [RFC 5280 §4.2.1.4][rfc5280-section-4.2.1.4] allows a DisplayText is kept whole by the parser
-and reported as `oversizedExplicitText` on the qualifier or
-`oversizedOrganization` on the `noticeRef`, and the chain validates. [§4.2.1.4][rfc5280-section-4.2.1.4]
-asks certificate users to handle an oversized `explicitText` gracefully, and
-micro509 applies the same policy to the organization.
-`rejectOversizedDisplayText: true` on `verifyCertificateChain` or
-`validateCandidatePath` rejects such a certificate with
-`display_text_oversized` instead, and `details.userNoticeField` names the
-field. PKITS 4.8.19 leaves that choice for `explicitText` to the application.
 
 ## Verification purposes
 
@@ -246,6 +244,24 @@ Supported identity types:
 - **URI-ID** — scheme + host matching, with wildcard matching except for SIP
   and IP hosts compared by octets
 - **SRV-ID** — service name matching via otherName SAN, with wildcard matching
+
+## Advanced validation policy
+
+Path building tries issuer candidates and bare trust anchors with matching
+subjects. `maxPathBuildingChecks` on `verifyCertificateChain`,
+`buildCandidatePath`, and the `validateFor*` profiles bounds how many candidates
+and anchors a search may examine. It defaults to 100,000; if the limit stops the
+search before a trusted path is found, verification returns
+`path_building_limit_exceeded`.
+
+A user notice `explicitText` or `noticeRef` organization longer than the 200
+characters allowed for DisplayText by [RFC 5280 §4.2.1.4][rfc5280-section-4.2.1.4]
+is preserved by parsing and reported as `oversizedExplicitText` or
+`oversizedOrganization`. By default, the chain still validates. Set
+`rejectOversizedDisplayText: true` on `verifyCertificateChain` or
+`validateCandidatePath` to reject it with `display_text_oversized`; the error's
+`details.userNoticeField` identifies the field. PKITS 4.8.19 leaves handling of
+oversized `explicitText` to the application.
 
 ## Error codes
 

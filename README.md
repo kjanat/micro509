@@ -280,6 +280,10 @@ The full stable subpath list lives in the [API reference](https://micro509.kjana
 
 ## More docs
 
+- [Getting started](https://micro509.kjanat.dev/guide/getting-started)
+- [Verification and trust inputs](https://micro509.kjanat.dev/guide/verification)
+- [CRL and OCSP revocation](https://micro509.kjanat.dev/guide/revocation)
+- [Error codes](https://micro509.kjanat.dev/reference/errors)
 - API reference: [micro509.kjanat.dev/api](https://micro509.kjanat.dev/api/)
 - Standards scope: [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md)
 - PKITS harness: [`test/pkits.test.ts`](./test/pkits.test.ts)
