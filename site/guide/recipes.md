@@ -1,8 +1,8 @@
 # Recipes
 
-These short workflows start with material your application already has. Each
-function takes that material as an argument so trust roots, passwords, and
-approval decisions stay under your control. See [Getting started](./getting-started.md)
+Each recipe defines a function for your application, then calls it with
+generated demo material and prints the result. Replace the demo inputs with
+your certificates, trust roots, passwords, and approval decisions. See [Getting started](./getting-started.md)
 for key generation and certificate setup.
 
 ## Verify a server certificate
@@ -12,12 +12,17 @@ your application trusts. micro509 does not load the operating system trust
 store or fetch missing intermediates. Set both the TLS purpose and expected
 service identity so the check covers how the certificate will be used.
 
-<!-- typecheck -->
+<LiveCode>
 
 ```ts
-import { verifyCertificateChain } from 'micro509';
+import {
+  createCertificate,
+  createSelfSignedCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
+} from 'micro509';
 
-export async function verifyServer(
+async function verifyServer(
   leafPem: string,
   intermediatePems: readonly string[],
   trustedRootPems: readonly string[],
@@ -48,7 +53,32 @@ export async function verifyServer(
     chainLength: result.value.chain.length,
   };
 }
+
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Recipe CA' },
+  extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+});
+const keys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: { commonName: 'Recipe CA' },
+  subject: { commonName: 'app.example.com' },
+  publicKey: keys.publicKey,
+  signerPrivateKey: ca.keyPair.privateKey,
+  issuerCertificate: ca.certificate.pem,
+  extensions: {
+    extendedKeyUsage: ['serverAuth'],
+    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
+  },
+});
+console.log(
+  await verifyServer(leaf.pem, [], [ca.certificate.pem], 'app.example.com'),
+);
+console.log(
+  await verifyServer(leaf.pem, [], [ca.certificate.pem], 'wrong.example.com'),
+);
 ```
+
+</LiveCode>
 
 The error code identifies the failed check. The optional `index` must be read
 with `details.source`: malformed roots or intermediates refer to those input
@@ -65,16 +95,19 @@ private key. It does not approve the requested names or usages. This example
 allows one DNS name from an explicit list, then issues a server certificate
 with only that approved name.
 
-<!-- typecheck -->
+<LiveCode>
 
 ```ts
 import {
   createCertificate,
+  createCertificateSigningRequest,
+  createSelfSignedCertificate,
+  generateKeyPair,
   getSubjectPublicKeyOrThrow,
   verifyCertificateSigningRequest,
 } from 'micro509';
 
-export async function issueApprovedServerCsr(
+async function issueApprovedServerCsr(
   csrPem: string,
   approvedDnsNames: readonly string[],
   issuerName: { readonly commonName: string },
@@ -119,7 +152,30 @@ export async function issueApprovedServerCsr(
     },
   });
 }
+
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Recipe CA' },
+  extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+});
+const keys = await generateKeyPair();
+const csr = await createCertificateSigningRequest({
+  subject: { commonName: 'app.example.com' },
+  publicKey: keys.publicKey,
+  signerPrivateKey: keys.privateKey,
+  extensions: { subjectAltNames: [{ type: 'dns', value: 'app.example.com' }] },
+});
+const issued = await issueApprovedServerCsr(
+  csr.pem,
+  ['app.example.com'],
+  { commonName: 'Recipe CA' },
+  ca.certificate.pem,
+  ca.keyPair.privateKey,
+);
+console.log('Issued certificate:');
+console.log(issued.pem);
 ```
+
+</LiveCode>
 
 This deliberately constructs the issued extensions from approved values rather
 than copying the CSR's complete extension request. Add policy checks for the
@@ -131,17 +187,18 @@ Parse a password-protected PFX, import its PKCS#8 keys, and compare each key
 against the available certificates. Pair by cryptographic key match instead of
 assuming bag order identifies the client certificate.
 
-<!-- typecheck -->
+<LiveCode>
 
 ```ts
-import { matchCertificatePrivateKey } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  matchCertificatePrivateKey,
+  unwrap,
+} from 'micro509';
 import { importPkcs8DerOrThrow } from 'micro509/keys';
-import { parsePfxDer } from 'micro509/pkcs';
+import { createPfx, parsePfxDer } from 'micro509/pkcs';
 
-export async function importClientIdentity(
-  pfxDer: Uint8Array,
-  password: string,
-) {
+async function importClientIdentity(pfxDer: Uint8Array, password: string) {
   const parsed = await parsePfxDer(pfxDer, { password });
   if (!parsed.ok) {
     throw new Error(`PFX could not be read: ${parsed.error.code}`);
@@ -159,7 +216,32 @@ export async function importClientIdentity(
 
   throw new Error('PFX contains no matching private key and certificate');
 }
+
+const original = await createSelfSignedCertificate({
+  subject: { commonName: 'client.example.com' },
+  extensions: { extendedKeyUsage: ['clientAuth'] },
+});
+const pfx = unwrap(
+  await createPfx({
+    certificates: [{ certificate: original.certificate.pem }],
+    privateKeys: [{ privateKey: original.keyPair.privateKey }],
+    encryption: { password: 'demo-password' },
+    mac: { password: 'demo-password' },
+  }),
+);
+const identity = await importClientIdentity(pfx.der, 'demo-password');
+console.log('Imported identity:', {
+  subject: identity.certificate.subject.values,
+  serialNumber: identity.certificate.serialNumberHex,
+  privateKey: {
+    type: identity.privateKey.type,
+    algorithm: identity.privateKey.algorithm,
+    usages: identity.privateKey.usages,
+  },
+});
 ```
+
+</LiveCode>
 
 The parser verifies the PFX MAC when one is present and a password is supplied.
 This recipe establishes that the returned private key belongs to the returned
