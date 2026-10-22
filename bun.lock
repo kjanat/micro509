@@ -143,7 +143,9 @@
     "tsc/vue-mapper": {
       "name": "@kjanat/tsc-vue-mapper",
       "version": "0.0.0",
-      "bin": "server.ts",
+      "bin": {
+        "tsc-vue-mapper": "./dist/server.mjs",
+      },
       "dependencies": {
         "@kjanat/tsc-compat": "workspace:*",
         "@vue/language-core": "catalog:ts",
