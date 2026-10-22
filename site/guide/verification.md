@@ -30,7 +30,9 @@ shows a function you can use with your application's PEM inputs.
 
 The runnable example below creates its own three-certificate chain. Its successful
 result contains the certificates in leaf-to-root order. On failure, branch on
-`result.error.code` and use `result.error.index` to locate the certificate.
+`result.error.code`. Read the optional `result.error.index` together with
+`result.error.details.source` to distinguish a chain certificate from a bad
+root or intermediate input. A `no_trusted_root` failure has no index.
 
 <details>
 <summary>Generate and verify a complete root, intermediate, and leaf chain</summary>

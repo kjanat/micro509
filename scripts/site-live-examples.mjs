@@ -185,6 +185,11 @@ async function runAllBlocks(browser, baseUrl, route) {
 			let started;
 
 			try {
+				for (const details of await block.locator('xpath=ancestor::details').all()) {
+					if ((await details.getAttribute('open')) === null) {
+						await details.locator(':scope > summary').click();
+					}
+				}
 				await block.scrollIntoViewIfNeeded();
 				source = (await block.locator('pre code').first().innerText()).trim();
 

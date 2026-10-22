@@ -35,7 +35,8 @@ export async function verifyServer(
     return {
       ok: false as const,
       code: result.error.code,
-      certificateIndex: result.error.index,
+      index: result.error.index,
+      details: result.error.details,
       message: result.error.message,
     };
   }
@@ -49,8 +50,10 @@ export async function verifyServer(
 }
 ```
 
-The error code and index identify the failed check and certificate in the
-candidate chain. To check revocation, add a `revocation` input with the CRL or
+The error code identifies the failed check. The optional `index` must be read
+with `details.source`: malformed roots or intermediates refer to those input
+collections, not the leaf or a completed chain. Some failures, such as
+`no_trusted_root`, have no index. To check revocation, add a `revocation` input with the CRL or
 OCSP evidence your application has. Omitting the input skips revocation
 checking.
 
