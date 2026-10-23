@@ -27,6 +27,20 @@ function rewriteBareImports(code: string): string {
 	);
 }
 
+function assertOutputContract(outputs: readonly string[], deterministic: boolean): void {
+	if (outputs.some((output) => output.trim() === '')) {
+		throw new Error('example printed no output');
+	}
+	if (deterministic && outputs[0] !== outputs[1]) {
+		throw new Error('fixed-fixture example changed output between runs');
+	}
+	if (!deterministic && outputs[0] === outputs[1]) {
+		throw new Error(
+			're-running this example prints byte-identical output; show something run-varying',
+		);
+	}
+}
+
 describe('site guide LiveCode examples execute', () => {
 	beforeAll(async () => {
 		// Match the built site's guide/ and fixtures/ layout for relative asset URLs.
@@ -59,17 +73,7 @@ describe('site guide LiveCode examples execute', () => {
 					}
 					outputs.push(await new Response(child.stdout).text());
 				}
-				if (outputs.some((output) => output.trim() === '')) {
-					throw new Error('example printed no output');
-				}
-				if (deterministic && outputs[0] !== outputs[1]) {
-					throw new Error('fixed-fixture example changed output between runs');
-				}
-				if (!deterministic && outputs[0] === outputs[1]) {
-					throw new Error(
-						're-running this example prints byte-identical output; show something run-varying',
-					);
-				}
+				assertOutputContract(outputs, deterministic);
 			}, 60_000);
 		}
 	}
