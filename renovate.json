@@ -3,5 +3,119 @@
 	"extends": ["config:recommended"],
 	"github-actions": {
 		"enabled": false
+	},
+	"packageRules": [
+		{
+			"matchPackageNames": [
+				"dprint",
+				"@dprint/**",
+				"dprint-plugin-*",
+				"@biomejs/biome",
+				"tombi",
+				"kjanat/dprint-plugin-*"
+			],
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"groupName": "formatting tools"
+		},
+		{
+			"matchPackageNames": [
+				"tsdown",
+				"rolldown-plugin-wasm",
+				"publint",
+				"@arethetypeswrong/core",
+				"unplugin-unused"
+			],
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"groupName": "build tools"
+		},
+		{
+			"matchPackageNames": ["markdown-it-task-lists", "tar", "vite-robots-txt", "vite-svg-to-ico"],
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"groupName": "docs site tools"
+		},
+		{
+			"matchPackageNames": ["wrangler", "@cloudflare/vite-plugin"],
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"groupName": "Cloudflare tools"
+		},
+		{
+			"matchPackageNames": ["@vue/language-core", "@volar/typescript"],
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"groupName": "Vue compiler integration"
+		},
+		{
+			"description": "Review VitePress prereleases independently.",
+			"matchPackageNames": ["vitepress"],
+			"groupName": null
+		},
+		{
+			"matchManagers": ["gomod"],
+			"matchDepTypes": ["toolchain"],
+			"groupName": "Go toolchain"
+		},
+		{
+			"matchManagers": ["bun", "npm", "nodenv"],
+			"matchDepNames": ["node"],
+			"groupName": "Node.js"
+		},
+		{
+			"description": "The TS6 compatibility catalog must not move to TS7.",
+			"matchPackageNames": ["typescript", "@typescript/typescript6"],
+			"matchCurrentValue": "/^(?:\\^6|>=6)/",
+			"allowedVersions": "<7"
+		},
+		{
+			"description": "The TS7 catalog tracks the compiler generation supported by the native bridge.",
+			"matchPackageNames": ["typescript"],
+			"matchCurrentValue": "/^>=7/",
+			"allowedVersions": ">=7 <8"
+		},
+		{
+			"description": "This module is supplied by the local Go workspace replacement.",
+			"matchManagers": ["gomod"],
+			"matchPackageNames": ["github.com/microsoft/TypeScript/tsc/protocol"],
+			"enabled": false
+		},
+		{
+			"description": "The exec plugin is managed manually.",
+			"matchPackageNames": ["@dprint/exec"],
+			"enabled": false
+		}
+	],
+	"customManagers": [
+		{
+			"customType": "regex",
+			"managerFilePatterns": ["/^\\.dprint\\.json$/"],
+			"matchStrings": [
+				"https://plugins\\.dprint\\.dev/(?<owner>kjanat)/(?<plugin>shfmt|sortpackagejson|svg)-v?(?<currentValue>\\d+\\.\\d+\\.\\d+)\\.wasm"
+			],
+			"depNameTemplate": "{{owner}}/dprint-plugin-{{plugin}}",
+			"datasourceTemplate": "github-releases",
+			"extractVersionTemplate": "^v?(?<version>\\d+\\.\\d+\\.\\d+)$"
+		},
+		{
+			"customType": "regex",
+			"managerFilePatterns": ["/^scripts/fetch-spec\\.bun\\.ts$/"],
+			"matchStrings": [
+				"const PANDOC = \\{ repository: '(?<depName>jgm/pandoc)', version: '(?<currentValue>[^']+)' \\}"
+			],
+			"datasourceTemplate": "github-releases"
+		},
+		{
+			"customType": "regex",
+			"description": "Extract the top-level Bun catalogs that the built-in manager does not currently read.",
+			"managerFilePatterns": ["/^package\\.json$/"],
+			"matchStringsStrategy": "recursive",
+			"matchStrings": [
+				"\"catalogs?\"\\s*:\\s*\\{[\\s\\S]*?\\n\\t\\}",
+				"\"(?<depName>[^\"\\n]+)\"\\s*:\\s*\"(?:npm:(?<packageName>@?[^\"\\n]+?)@)?(?<currentValue>[^\"\\n]+)\""
+			],
+			"datasourceTemplate": "npm",
+			"versioningTemplate": "npm"
+		}
+	],
+	"lockFileMaintenance": {
+		"enabled": true,
+		"schedule": ["before 6am on monday"]
 	}
 }
