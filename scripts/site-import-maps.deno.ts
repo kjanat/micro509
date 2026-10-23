@@ -84,7 +84,10 @@ function bindsToItsOwnVersion(map: SiteMap, prefix: string): boolean {
 async function runs(imports: Readonly<Record<string, string>>): Promise<string | undefined> {
 	const dir = await Deno.makeTempDir();
 	try {
-		await Deno.writeTextFile(`${dir}/import_map.json`, JSON.stringify({ imports }));
+		const resolved = Object.fromEntries(
+			Object.entries(imports).map(([name, url]) => [name, executableUrl(url)]),
+		);
+		await Deno.writeTextFile(`${dir}/import_map.json`, JSON.stringify({ imports: resolved }));
 		await Deno.writeTextFile(`${dir}/example.ts`, EXAMPLE);
 
 		const { success, stderr } = await new Deno.Command(Deno.execPath(), {
@@ -158,9 +161,26 @@ async function published(): Promise<readonly string[]> {
 	return metadata.versions.map((entry) => entry.version);
 }
 
+/** Resolve site-local modules against the exact output checked by the browser tests. */
+function executableUrl(url: string): string {
+	return url.startsWith('/')
+		? new URL(`.${url}`, new URL('../site/.vitepress/dist/', import.meta.url)).href
+		: url;
+}
+
 async function resolvesAsModule([specifier, url]: readonly [string, string]): Promise<
 	string | undefined
 > {
+	if (url.startsWith('/')) {
+		try {
+			const body = await Deno.readTextFile(new URL(executableUrl(url)));
+			return url.endsWith('.js') && /\bexport\b/.test(body)
+				? undefined
+				: `${specifier} -> ${url} (not a module)`;
+		} catch (error) {
+			return `${specifier} -> ${url} (${String(error)})`;
+		}
+	}
 	const response = await fetchRetrying(url);
 	if (typeof response === 'string') return `${specifier} -> ${url} (${response})`;
 	const body = await response.text();

@@ -243,7 +243,7 @@
 			"@types/bun": "^1.4.2",
 			"@types/deno": "^2.7.0",
 			"@types/node": "^26.6.3",
-			"@volar/typescript": "2.4.28",
+			"@volar/typescript": "2.4.30",
 			"@vue/language-core": "^3.3.11",
 			"@vue/tsconfig": "^0.9.1",
 			"typescript": "npm:typescript@>=6,<7",
