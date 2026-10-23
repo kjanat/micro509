@@ -452,7 +452,7 @@ export async function verifySignedDataWithKeyDetailed(
 			return unsupported(signatureAlgorithmOid, 'signature hash does not match the RSA public key');
 		}
 	}
-	return verifyWithConfiguredKey(key, config.value, signature, data, encoding);
+	return await verifyWithConfiguredKey(key, config.value, signature, data, encoding);
 }
 
 /** Parse RSA-PSS algorithm parameters and build a verification config, or return failure. */
