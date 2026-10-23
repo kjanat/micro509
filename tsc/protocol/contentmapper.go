@@ -98,20 +98,20 @@ func (h *cachingHost) GetContentMappedSourceFiles(opts ast.SourceFileParseOption
 	project := h.ContentMapperProject()
 	text, ok := h.FS().ReadFile(opts.FileName)
 	if !ok || project == nil {
-		h.mapped.Delete(opts.Path)
+		h.mapped.Delete(opts.PathKey)
 		return h.CompilerHost.GetContentMappedSourceFiles(opts, mapper)
 	}
 	identity, err := project.Identity(mapper)
 	if err != nil {
 		return h.CompilerHost.GetContentMappedSourceFiles(opts, mapper)
 	}
-	if cached, ok := h.mapped.Load(opts.Path); ok && cached.text == text && cached.identity == identity &&
+	if cached, ok := h.mapped.Load(opts.PathKey); ok && cached.text == text && cached.identity == identity &&
 		cached.files.Canonical.ParseOptions() == opts {
 		return cached.files, nil
 	}
 	files, err := h.CompilerHost.GetContentMappedSourceFiles(opts, mapper)
 	if err == nil && files.Canonical != nil {
-		h.mapped.Store(opts.Path, &cachedMappedFiles{text: text, identity: identity, files: files})
+		h.mapped.Store(opts.PathKey, &cachedMappedFiles{text: text, identity: identity, files: files})
 	}
 	return files, err
 }
@@ -132,7 +132,7 @@ type verifier struct {
 var verifiers = map[string]*verifier{}
 
 func verifierKey(mapper *contentmapper.Mapper) string {
-	return strings.Join(append([]string{mapper.PackageDirectory}, mapper.Exec...), "\x00")
+	return strings.Join(append([]string{mapper.PackageDirectory.AsString()}, mapper.Exec...), "\x00")
 }
 
 func verifierFor(mapper *contentmapper.Mapper) (*verifier, error) {
@@ -140,7 +140,7 @@ func verifierFor(mapper *contentmapper.Mapper) (*verifier, error) {
 	if v, ok := verifiers[key]; ok {
 		return v, nil
 	}
-	data, err := os.ReadFile(filepath.Join(mapper.PackageDirectory, "package.json"))
+	data, err := os.ReadFile(filepath.Join(mapper.PackageDirectory.AsString(), "package.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func verifierFor(mapper *contentmapper.Mapper) (*verifier, error) {
 		verifiers[key] = nil
 		return nil, nil
 	}
-	process, err := mapperSpawner{}.Spawn(mapper.Exec, mapper.PackageDirectory, os.Stderr)
+	process, err := mapperSpawner{}.Spawn(mapper.Exec, mapper.PackageDirectory.AsString(), os.Stderr)
 	if err != nil {
 		return nil, fmt.Errorf("content mapper %s: %w", mapper.DiagnosticName(), err)
 	}
@@ -295,7 +295,7 @@ func verifyContentMapped(program *compiler.Program, configPath string, items []*
 		for _, mapped := range batch.files {
 			virtual := mapped.file.Text()
 			file := verifyFile{
-				FileName:    mapped.file.FileName(),
+				FileName:    mapped.file.FileName().AsString(),
 				Content:     mapped.file.OriginalText(),
 				VirtualText: virtual,
 				Diagnostics: make([]verifyDiagnostic, 0, len(mapped.items)),

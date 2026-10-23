@@ -1,9 +1,9 @@
 # TypeScript compiler bridges
 
-Workspace packages that give micro509's tooling access to TypeScript's native compiler. The compiler is the Go code in [microsoft/TypeScript] under `tsc/`, pinned to commit [`9adc871ff47f79b3e99ff2b1cbe9efb140d76af8`]. npm publishes that commit as the nightly `typescript@7.1.0-dev.20260930.4`. Its Go API is internal.
+Workspace packages that give micro509's tooling access to TypeScript's native compiler. The compiler is the Go code in [microsoft/TypeScript] under `tsc/`, pinned to commit [`a91e93821feafd081641f9f5d161eba626d0b2ce`]. Its Go API is internal.
 
 [microsoft/TypeScript]: https://github.com/microsoft/TypeScript
-[`9adc871ff47f79b3e99ff2b1cbe9efb140d76af8`]: https://github.com/microsoft/TypeScript/commit/9adc871ff47f79b3e99ff2b1cbe9efb140d76af8 "Update Azure pipeline Node installation task (#64547)"
+[`a91e93821feafd081641f9f5d161eba626d0b2ce`]: https://github.com/microsoft/TypeScript/commit/a91e93821feafd081641f9f5d161eba626d0b2ce "Reload cached files for Created watch events (#64909)"
 
 | Package                    | Directory       | Contents                                                                         |
 | -------------------------- | --------------- | -------------------------------------------------------------------------------- |

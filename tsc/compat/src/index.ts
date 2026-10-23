@@ -1,6 +1,6 @@
 import path from 'node:path';
-import type { Node, NodeArray, SourceFile as SyntaxTree } from 'typescript/unstable/ast';
-import { ScriptKind, ScriptTarget, SyntaxKind } from 'typescript/unstable/ast';
+import type { Node, NodeArray, SourceFile as SyntaxTree } from 'typescript/ast';
+import { ScriptKind, ScriptTarget, SyntaxKind } from 'typescript/ast';
 import { compiler, decodeSourceFile, encodeWtf8, unwrap } from '#runtime';
 import type { ParseConfigHost } from '#sys';
 
@@ -12,13 +12,13 @@ export type {
 	NodeArray,
 	ObjectLiteralExpression,
 	StringLiteral,
-} from 'typescript/unstable/ast';
+} from 'typescript/ast';
 export {
 	getLeadingCommentRanges,
 	getTokenPosOfNode,
 	getTrailingCommentRanges,
-} from 'typescript/unstable/ast';
-export * from 'typescript/unstable/ast/is';
+} from 'typescript/ast';
+export * from 'typescript/ast/is';
 export type { FileSystemEntries, ParseConfigHost, System } from '#sys';
 export { sys } from '#sys';
 export { ScriptKind, ScriptTarget, SyntaxKind };

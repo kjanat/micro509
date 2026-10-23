@@ -20,8 +20,8 @@ ts.forEachChild(file, (node) => console.log(ts.isVariableStatement(node)));
 | `createSourceFile`                                                                 | The compiler's parser. Each file carries its `parseDiagnostics`.  |
 | `readJsonConfigFile`, `convertToObject`                                            | The compiler's JSON parser and tsconfig conversion.               |
 | `parseJsonSourceFileConfigFileContent`                                             | The compiler's tsconfig reader, with `extends` read through host. |
-| `forEachChild`, `getTokenPosOfNode`, `getLeadingCommentRanges`, `is*`              | `typescript/unstable/ast` of the matching npm nightly.            |
-| `SyntaxKind`, `ScriptKind`, `ScriptTarget`                                         | `typescript/unstable/ast` of the matching npm nightly.            |
+| `forEachChild`, `getTokenPosOfNode`, `getLeadingCommentRanges`, `is*`              | `typescript/ast` of the matching npm nightly.                     |
+| `SyntaxKind`, `ScriptKind`, `ScriptTarget`                                         | `typescript/ast` of the matching npm nightly.                     |
 | `isFunctionLike`, `isStringLiteralLike`, `findConfigFile`, `ScriptSnapshot`, `sys` | This package.                                                     |
 
 Nodes are TypeScript 7 nodes, so `SyntaxKind` values differ from TypeScript 6.
@@ -40,9 +40,11 @@ Importing the package instantiates the module synchronously, and its exports run
 synchronously, so a caller gets a parsed file back without awaiting. Text crosses
 into the module as WTF-8, and the compiler returns each file in the binary AST encoding of its
 `internal/api/encoder`. The `RemoteSourceFile` decoder of the npm nightly
-`typescript@7.1.0-dev.20260930.4` reads that encoding lazily. The nightly was
-built from the pinned commit, so the encoder and the decoder agree. Moving the pin
-means moving this dependency to the nightly of the new commit.
+`typescript@7.1.0-dev.20261022.1` reads that encoding lazily. This nightly is built
+from `98add1bbed1c814e97457587c2da407dc3f78330`. The two commits between it and
+the Go compiler pin affect project file watching and repository instructions,
+not the AST encoding. When updating the compiler, check the decoder against its
+encoding changes, including new syntax.
 
 Host callbacks such as `readFile` run during the call, in the order TypeScript 6
 makes them, which `@vue/language-core` relies on to collect `vueCompilerOptions`

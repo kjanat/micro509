@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { SourceFile } from 'typescript/unstable/ast';
+import type { SourceFile } from 'typescript/ast';
 import initCompat from '../bin/compat.wasm?init&sync';
 
 interface GoRuntime {

@@ -30,10 +30,10 @@ type diagnostic struct {
 }
 
 type config struct {
-	FileNames []string              `json:"fileNames"`
-	Options   *core.CompilerOptions `json:"options"`
-	Raw       any                   `json:"raw,omitzero"`
-	Errors    []diagnostic          `json:"errors"`
+	FileNames []tspath.RootedFilePath `json:"fileNames"`
+	Options   *core.CompilerOptions   `json:"options"`
+	Raw       any                     `json:"raw,omitzero"`
+	Errors    []diagnostic            `json:"errors"`
 }
 
 func convert(items []*ast.Diagnostic) []diagnostic {
@@ -51,7 +51,7 @@ func convert(items []*ast.Diagnostic) []diagnostic {
 			positions := file.GetPositionMap()
 			start := positions.UTF8ToUTF16(pos)
 			length := positions.UTF8ToUTF16(end) - start
-			converted.FileName = file.FileName()
+			converted.FileName = file.FileName().AsString()
 			converted.Start = &start
 			converted.Length = &length
 		}
@@ -61,18 +61,18 @@ func convert(items []*ast.Diagnostic) []diagnostic {
 }
 
 func parse(fileName string, text string, kind core.ScriptKind, cwd string) (map[string]any, error) {
+	path := tspath.RootedDirectoryPathFromAbsolute(cwd).ResolveFile(fileName)
 	if kind == core.ScriptKindUnknown {
-		kind = core.EnsureScriptKindFromFileName(fileName)
+		kind = core.EnsureScriptKindFromFileName(path)
 	}
 	switch kind {
 	case core.ScriptKindJS, core.ScriptKindJSX, core.ScriptKindTS, core.ScriptKindTSX, core.ScriptKindJSON:
 	default:
 		return nil, fmt.Errorf("invalid scriptKind %d", kind)
 	}
-	fileName = tspath.GetNormalizedAbsolutePath(fileName, cwd)
 	file := parser.ParseSourceFile(ast.SourceFileParseOptions{
-		FileName: fileName,
-		Path:     tspath.Path(fileName),
+		FileName: path,
+		PathKey:  tspath.CaseSensitive.PathKey(path.AsPath()),
 	}, text, kind)
 	data, _, err := encoder.EncodeSourceFile(file)
 	if err != nil {
@@ -88,8 +88,8 @@ func parse(fileName string, text string, kind core.ScriptKind, cwd string) (map[
 }
 
 func toObject(fileName string, text string, cwd string) (map[string]any, error) {
-	fileName = tspath.GetNormalizedAbsolutePath(fileName, cwd)
-	value, errs := tsoptions.ParseConfigFileTextToJson(fileName, tspath.Path(fileName), text)
+	path := tspath.RootedDirectoryPathFromAbsolute(cwd).ResolveFile(fileName)
+	value, errs := tsoptions.ParseConfigFileTextToJson(path, tspath.CaseSensitive.PathKey(path.AsPath()), text)
 	object, err := json.Marshal(value)
 	if err != nil {
 		return nil, err
@@ -116,30 +116,37 @@ func (f hostFS) UseCaseSensitiveFileNames() bool {
 	return f.host.Get("useCaseSensitiveFileNames").Truthy()
 }
 
-func (f hostFS) FileExists(path string) bool {
-	return f.host.Call("fileExists", path).Truthy()
+func (f hostFS) CaseSensitivity() tspath.CaseSensitivity {
+	if f.UseCaseSensitiveFileNames() {
+		return tspath.CaseSensitive
+	}
+	return tspath.CaseInsensitive
 }
 
-func (f hostFS) ReadFile(path string) (string, bool) {
-	value := f.host.Call("readFile", path)
+func (f hostFS) FileExists(path tspath.RootedFilePath) bool {
+	return f.host.Call("fileExists", path.AsString()).Truthy()
+}
+
+func (f hostFS) ReadFile(path tspath.RootedFilePath) (string, bool) {
+	value := f.host.Call("readFile", path.AsString())
 	if value.Type() != js.TypeObject {
 		return "", false
 	}
 	return wtf8(value), true
 }
 
-func (f hostFS) DirectoryExists(path string) bool {
+func (f hostFS) DirectoryExists(path tspath.RootedDirectoryPath) bool {
 	if !f.has("directoryExists") {
 		return true
 	}
-	return f.host.Call("directoryExists", path).Truthy()
+	return f.host.Call("directoryExists", path.AsString()).Truthy()
 }
 
-func (f hostFS) Realpath(path string) string {
+func (f hostFS) Realpath(path tspath.RootedPath) tspath.RootedPath {
 	if !f.has("realpath") {
 		return path
 	}
-	return f.host.Call("realpath", path).String()
+	return tspath.RootedPathFromAbsolute(f.host.Call("realpath", path.AsString()).String())
 }
 
 func stringArray(value js.Value) []string {
@@ -153,48 +160,35 @@ func stringArray(value js.Value) []string {
 	return result
 }
 
-func (f hostFS) GetAccessibleEntries(path string) vfs.Entries {
+func (f hostFS) GetAccessibleEntries(path tspath.RootedDirectoryPath) vfs.Entries {
 	if !f.has("getAccessibleFileSystemEntries") {
 		return vfs.Entries{}
 	}
-	entries := f.host.Call("getAccessibleFileSystemEntries", path)
+	entries := f.host.Call("getAccessibleFileSystemEntries", path.AsString())
 	return vfs.Entries{
 		Files:       stringArray(entries.Get("files")),
 		Directories: stringArray(entries.Get("directories")),
 	}
 }
 
-func (f hostFS) Stat(path string) vfs.FileInfo {
+func (f hostFS) Stat(path tspath.RootedPath) vfs.FileInfo {
 	return nil
 }
 
-func (f hostFS) WriteFile(path string, data string) error {
+func (f hostFS) WriteFile(path tspath.RootedFilePath, data string) error {
 	return errors.ErrUnsupported
 }
 
-func (f hostFS) AppendFile(path string, data string) error {
+func (f hostFS) AppendFile(path tspath.RootedFilePath, data string) error {
 	return errors.ErrUnsupported
 }
 
-func (f hostFS) Remove(path string) error {
+func (f hostFS) Remove(path tspath.RootedPath) error {
 	return errors.ErrUnsupported
 }
 
-func (f hostFS) Chtimes(path string, aTime time.Time, mTime time.Time) error {
+func (f hostFS) Chtimes(path tspath.RootedPath, aTime time.Time, mTime time.Time) error {
 	return errors.ErrUnsupported
-}
-
-type configHost struct {
-	fs  hostFS
-	cwd string
-}
-
-func (h configHost) FS() vfs.FS {
-	return h.fs
-}
-
-func (h configHost) GetCurrentDirectory() string {
-	return h.cwd
 }
 
 func parseConfig(fileName string, text string, basePath string, configFileName string, host js.Value) (map[string]any, error) {
@@ -203,13 +197,17 @@ func parseConfig(fileName string, text string, basePath string, configFileName s
 	if fs.has("getCurrentDirectory") {
 		cwd = host.Call("getCurrentDirectory").String()
 	}
-	fileName = tspath.GetNormalizedAbsolutePath(fileName, cwd)
+	base := tspath.RootedDirectoryPathFromAbsolute(cwd).ResolveDirectory(basePath)
+	path := tspath.RootedDirectoryPathFromAbsolute(cwd).ResolveFile(fileName)
+	if configFileName != "" {
+		path = base.ResolveFile(configFileName)
+	}
 	source := tsoptions.NewTsconfigSourceFileFromFilePath(
-		fileName,
-		tspath.ToPath(fileName, cwd, fs.UseCaseSensitiveFileNames()),
+		path,
+		fs.CaseSensitivity().PathKey(path.AsPath()),
 		text,
 	)
-	parsed := tsoptions.ParseJsonSourceFileConfigFileContent(source, configHost{fs: fs, cwd: cwd}, basePath, nil, nil, configFileName, nil, nil)
+	parsed := tsoptions.ParseJsonSourceFileConfigFileContent(source, tsoptions.NewDefaultParseConfigHost(fs), base, nil, nil, nil, nil)
 	value, err := json.Marshal(config{
 		FileNames: parsed.FileNames(),
 		Options:   parsed.CompilerOptions(),
