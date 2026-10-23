@@ -2,7 +2,7 @@ module github.com/microsoft/TypeScript/tsc/wasm
 
 go 1.27
 
-toolchain go1.27.1
+toolchain go1.27.3
 
 require github.com/microsoft/TypeScript/tsc/protocol v0.0.0
 
