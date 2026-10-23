@@ -197,7 +197,7 @@
 	"catalog": {
 		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
 		"biome": "npm:@biomejs/biome@^2.5.14",
-		"dprint": "^0.58.0",
+		"dprint": "^0.64.0",
 		"runner-run": "^0.28.0",
 		"tombi": "^1.5.10",
 		"vue": "^3.5.43"
@@ -221,10 +221,10 @@
 			"importmapify": "^1.7.0"
 		},
 		"dprint": {
-			"@dprint/biome": "^0.13.13",
-			"@dprint/formatter": "^0.5.1",
+			"@dprint/biome": "^0.15.0",
+			"@dprint/formatter": "^0.6.0",
 			"@dprint/json": "^0.25.0",
-			"@dprint/markdown": "^0.24.0",
+			"@dprint/markdown": "^0.28.0",
 			"@dprint/typescript": "^0.96.1",
 			"dprint-plugin-malva": "^0.16.0",
 			"dprint-plugin-markup": "^0.27.5",

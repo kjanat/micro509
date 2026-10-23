@@ -33,8 +33,8 @@ draft additionally uses ReSpec 37.2.0.
 ```sh
 snapshot_dir=$(mktemp -d)
 render_text() {
-  w3m -dump -cols 110 "$1" |
-    perl -0pe 's/[ \t]+(?=\n)//g; s/\n+\z/\n/' > "$2"
+  w3m -dump -cols 110 "$1" \
+    | perl -0pe 's/[ \t]+(?=\n)//g; s/\n+\z/\n/' >"$2"
 }
 
 curl --fail --location --silent --show-error \

@@ -32,8 +32,8 @@ content are at <https://www.iana.org/help/licensing-terms>.
 ## Regenerate
 
 ```sh
-curl -fsSL https://www.iana.org/assignments/idna-tables-12.0.0/idna-tables-properties.csv |
-  tr -d '\r' > docs/idna/idna-tables-properties-12.0.0.csv
+curl -fsSL https://www.iana.org/assignments/idna-tables-12.0.0/idna-tables-properties.csv \
+  | tr -d '\r' >docs/idna/idna-tables-properties-12.0.0.csv
 for file in extracted/DerivedBidiClass.txt extracted/DerivedJoiningType.txt \
   extracted/DerivedCombiningClass.txt extracted/DerivedGeneralCategory.txt Scripts.txt \
   UnicodeData.txt; do
