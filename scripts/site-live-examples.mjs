@@ -7,6 +7,7 @@
  *
  * @module
  */
+import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -507,6 +508,33 @@ function createTeardown(browser, server) {
 		})());
 }
 
+/** Prove the browser route actually aborts and reports a matching module request.
+ * @param {import('playwright').Browser} browser
+ * @param {string} baseUrl
+ */
+async function verifyBlockerInterception(browser, baseUrl) {
+	const context = await browser.newContext({ serviceWorkers: 'block' });
+	try {
+		const page = await context.newPage();
+		const { failures } = await installNetworkGuard(page, baseUrl);
+		await page.goto(baseUrl, { waitUntil: 'networkidle' });
+		const blockedUrl = `${baseUrl}/fingerprint.js`;
+		const failed = page.waitForEvent('requestfailed', {
+			predicate: (request) => request.url() === blockedUrl,
+			timeout: 10_000,
+		});
+		await assert.rejects(page.addScriptTag({ url: blockedUrl, type: 'module' }));
+		const request = await failed;
+		assert.match(request.failure()?.errorText ?? '', /ERR_BLOCKED_BY_CLIENT/);
+		assert.ok(
+			failures.some((failure) => failure.includes(`${blockedUrl} (matches /fingerprint.js^`)),
+		);
+		console.log('[live-examples] content-blocker interception verified');
+	} finally {
+		await context.close();
+	}
+}
+
 /**
  * @param {Result[]} results
  * @param {string} baseUrl
@@ -598,6 +626,7 @@ async function main() {
 	}
 
 	try {
+		await verifyBlockerInterception(browser, baseUrl);
 		for (const pageInfo of pages) {
 			for (const result of await runAllBlocks(browser, baseUrl, pageInfo)) report(result);
 		}

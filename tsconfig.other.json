@@ -34,6 +34,7 @@
 		"test/**/*.ts",
 		".claude/hooks/**/*.ts",
 		"scripts",
+		"scripts/**/*.json",
 		"packages/**/*.ts",
 		"*.config.ts",
 		"*.d.ts",
