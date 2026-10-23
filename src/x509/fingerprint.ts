@@ -83,6 +83,32 @@ export async function certificateFingerprint(
 	};
 }
 
+/**
+ * Compute the SHA-256 fingerprint of a certificate's complete DER
+ * SubjectPublicKeyInfo. Unlike {@linkcode certificateFingerprint}, this
+ * identifies the public key rather than the certificate. Cross-signed
+ * certificates carrying the same SPKI therefore have the same fingerprint.
+ *
+ * The SPKI is read from the reparsed certificate DER. No cryptographic key
+ * import is performed, so this works for algorithms micro509 cannot use with
+ * WebCrypto.
+ */
+export async function subjectPublicKeyInfoFingerprint(
+	certificate: CertificateFingerprintSource,
+): Promise<CertificateFingerprint> {
+	const source =
+		typeof certificate === 'string' || certificate instanceof Uint8Array
+			? certificate
+			: certificate.der;
+	const parsed = parseCertificateFromSource(source);
+	const digest = await getCrypto().subtle.digest(
+		'SHA-256',
+		toArrayBuffer(parsed.subjectPublicKeyInfoDer),
+	);
+	const bytes = new Uint8Array(digest);
+	return { bytes, hex: toHex(bytes), colonHex: toColonHex(bytes) };
+}
+
 /** Renders bytes as uppercase, colon-separated hex (openssl fingerprint style). */
 function toColonHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, '0').toUpperCase()).join(':');

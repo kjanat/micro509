@@ -38,6 +38,7 @@ import {
 	createPolicyValidationState,
 	evaluatePolicyChain,
 } from '#micro509/internal/verify/policy-engine';
+import { createSpkiDistrustCheck } from '#micro509/internal/verify/spki-distrust';
 import {
 	assertPathBuildingChecks,
 	authorityKeyIdentifierMismatch,
@@ -183,6 +184,7 @@ export interface TrustAnchor {
  * - `name_constraints_violated` — a subject name violates a permitted/excluded subtree.
  * - `unsupported_signature_algorithm_parameters` — the signature algorithm uses unrecognized parameters.
  * - `ec_domain_parameters_missing` — an elliptic curve public key carries no namedCurve domain parameters.
+ * - `public_key_distrusted` — a certificate or bare trust anchor uses an explicitly distrusted SHA-256 SPKI.
  * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
  * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
  * - `unsupported` — a certificate source holds a construct micro509 does not decode (see `ParseCertificateErrorCode`).
@@ -213,6 +215,7 @@ export const VERIFY_ERROR_CODES = [
 	'name_constraints_violated',
 	'unsupported_signature_algorithm_parameters',
 	'ec_domain_parameters_missing',
+	'public_key_distrusted',
 	'certificate_revoked',
 	'revocation_indeterminate',
 	'unsupported',
@@ -267,6 +270,14 @@ export interface VerifyChainFailure
 
 /** Input for {@linkcode buildCandidatePath}. */
 export interface BuildCandidatePathInput {
+	/**
+	 * SHA-256 hashes of complete DER SubjectPublicKeyInfo values to distrust.
+	 * Supply 64 hexadecimal characters per hash (case-insensitive, no separators).
+	 * Defaults to an empty list. Malformed entries throw RangeError.
+	 * Applies to every path certificate and bare trust anchor, before revocation.
+	 * A match returns `public_key_distrusted`, with the hash in `details.actual`.
+	 */
+	readonly distrustedSpkiSha256?: readonly string[];
 	/** End-entity certificate to verify. */
 	readonly leaf: CertificateSource;
 	/** Intermediate CA certificates available for path building. Order does not matter. */
@@ -298,6 +309,8 @@ export interface CandidatePath {
 	 * anchor verified the terminal certificate, which stays a path certificate.
 	 */
 	readonly anchorCertificateInChain: boolean;
+	/** Selected bare trust anchor, when the path terminates without a root certificate. */
+	readonly trustAnchor?: TrustAnchor;
 }
 
 /** Result of {@linkcode buildCandidatePath}. On success, contains the {@linkcode CandidatePath}. */
@@ -314,6 +327,14 @@ export type BuildCandidatePathResult =
 export interface ValidateCandidatePathInput
 	extends PolicyValidationInput,
 		InitialNameConstraintsInput {
+	/**
+	 * SHA-256 hashes of complete DER SubjectPublicKeyInfo values to distrust.
+	 * Supply 64 hexadecimal characters per hash (case-insensitive, no separators).
+	 * Defaults to an empty list. Malformed entries throw RangeError.
+	 * Applies to every path certificate and bare trust anchor, before revocation.
+	 * A match returns `public_key_distrusted`, with the hash in `details.actual`.
+	 */
+	readonly distrustedSpkiSha256?: readonly string[];
 	/** Nested policy validation overrides (takes precedence over flat fields). */
 	readonly policy?: PolicyValidationInput;
 	/** Nested name constraint overrides (takes precedence over flat fields). */
@@ -340,6 +361,8 @@ export interface ValidateCandidatePathInput
 	 * reports such a value as `oversizedExplicitText` or `oversizedOrganization`.
 	 */
 	readonly rejectOversizedDisplayText?: boolean;
+	/** Bare anchor returned by buildCandidatePath. Required for distrust checks when anchorCertificateInChain is false. */
+	readonly trustAnchor?: TrustAnchor;
 }
 
 /** Success payload from {@linkcode validateCandidatePath}. */
@@ -386,6 +409,14 @@ export interface ChainRevocationInput {
 export interface VerifyCertificateChainInput
 	extends PolicyValidationInput,
 		InitialNameConstraintsInput {
+	/**
+	 * SHA-256 hashes of complete DER SubjectPublicKeyInfo values to distrust.
+	 * Supply 64 hexadecimal characters per hash (case-insensitive, no separators).
+	 * Defaults to an empty list. Malformed entries throw RangeError.
+	 * Applies to every path certificate and bare trust anchor, before revocation.
+	 * A match returns `public_key_distrusted`, with the hash in `details.actual`.
+	 */
+	readonly distrustedSpkiSha256?: readonly string[];
 	/** Nested policy validation overrides. */
 	readonly policy?: PolicyValidationInput;
 	/** Nested name constraint overrides. */
@@ -432,6 +463,8 @@ export interface VerifiedCertificateChain {
 	readonly root: ParsedCertificate;
 	/** Final RFC 5280 §6 / RFC 9618 constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
+	/** Selected bare trust anchor, when the path terminates without a root certificate. */
+	readonly trustAnchor?: TrustAnchor;
 }
 
 /** Result of {@linkcode verifyCertificateChain}. On success, contains the {@linkcode VerifiedCertificateChain}. */
@@ -644,6 +677,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 	| VerifyChainFailure
 > {
 	assertPathBuildingChecks(input.maxPathBuildingChecks);
+	const distrust = createSpkiDistrustCheck(input.distrustedSpkiSha256);
 	let leaf: ParsedCertificate;
 	try {
 		leaf = loadSingleCertificate(input.leaf);
@@ -665,6 +699,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 		{ failure, detail },
 		undefined,
 		input.maxPathBuildingChecks,
+		distrust,
 	);
 	const chain = buildResult.chain;
 
@@ -704,6 +739,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 			chain,
 			root,
 			anchorCertificateInChain: buildResult.anchorCertificateInChain ?? true,
+			...(buildResult.trustAnchor !== undefined && { trustAnchor: buildResult.trustAnchor }),
 		},
 	};
 }
@@ -750,7 +786,17 @@ export async function buildCandidatePath(
 async function validateCandidatePathRaw(
 	input: ValidateCandidatePathInput,
 ): Promise<ValidateCandidatePathRawResult> {
+	const distrust = createSpkiDistrustCheck(input.distrustedSpkiSha256);
+	if (
+		input.distrustedSpkiSha256?.length &&
+		input.anchorCertificateInChain === false &&
+		input.trustAnchor === undefined
+	) {
+		throw new RangeError('trustAnchor is required to check distrust on a path with a bare anchor');
+	}
 	const chain = input.chain;
+	const distrustFailure = await validatePathDistrust(input, distrust);
+	if (distrustFailure !== undefined) return distrustFailure;
 	const at = input.at ?? new Date();
 	const validationStateResult = buildValidationState(input, chain.length);
 	if (!validationStateResult.ok) {
@@ -780,6 +826,43 @@ async function validateCandidatePathRaw(
 	if (!policyResult.ok) return policyResult;
 
 	return validateLeaf(leaf, input, policyResult.policyValidation);
+}
+
+/** Checks signed certificate SPKIs and the separately supplied bare anchor. */
+async function validatePathDistrust(
+	input: ValidateCandidatePathInput,
+	distrust: (spki: Uint8Array) => Promise<string | undefined>,
+): Promise<VerifyChainFailure | undefined> {
+	if (!input.distrustedSpkiSha256?.length) return undefined;
+	for (const [index, certificate] of input.chain.entries()) {
+		let parsed: ParsedCertificate;
+		try {
+			parsed = parseCertificateDerOrThrow(certificate.der);
+		} catch (error) {
+			return { ...certificateSourceFailure(error, undefined), index };
+		}
+		const hash = await distrust(parsed.subjectPublicKeyInfoDer);
+		if (hash !== undefined) {
+			return failure(
+				'public_key_distrusted',
+				'certificate public key is explicitly distrusted',
+				index,
+				detail({ subjectCommonName: parsed.subject.values.commonName, actual: hash }),
+			);
+		}
+	}
+	if (input.trustAnchor !== undefined) {
+		const hash = await distrust(input.trustAnchor.subjectPublicKeyInfoDer);
+		if (hash !== undefined) {
+			return failure(
+				'public_key_distrusted',
+				'bare trust anchor public key is explicitly distrusted',
+				undefined,
+				detail({ actual: hash }),
+			);
+		}
+	}
+	return undefined;
 }
 
 /** RFC 5280 §3.2 makes a self-issued certificate self-signed only when the public key it binds verifies its signature. */
@@ -1163,6 +1246,8 @@ export async function validateCandidatePath(
 export async function verifyCertificateChain(
 	input: VerifyCertificateChainInput,
 ): Promise<VerifyChainResult> {
+	const distrustedSpkiSha256 =
+		input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256];
 	assertCrlMaxAge(input.revocation?.policy?.crlMaxAgeMs);
 	const buildResult = await buildCandidatePath({
 		leaf: input.leaf,
@@ -1177,6 +1262,7 @@ export async function verifyCertificateChain(
 		...(input.maxPathBuildingChecks !== undefined && {
 			maxPathBuildingChecks: input.maxPathBuildingChecks,
 		}),
+		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
 	});
 	if (!buildResult.ok) {
 		return buildResult;
@@ -1185,6 +1271,10 @@ export async function verifyCertificateChain(
 	const validateResult = await validateCandidatePath({
 		chain: buildResult.value.chain,
 		anchorCertificateInChain: buildResult.value.anchorCertificateInChain,
+		...(buildResult.value.trustAnchor !== undefined && {
+			trustAnchor: buildResult.value.trustAnchor,
+		}),
+		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
 		...copyValidationInputs(input),
@@ -1258,7 +1348,7 @@ function revocationFailureResult(
 			failure(
 				'certificate_revoked',
 				`certificate revoked: ${firstRevoked.subject.values.commonName ?? 'unknown'}`,
-				undefined,
+				revocationFailureIndex(value, 'revoked'),
 				detail({ subjectCommonName: firstRevoked.subject.values.commonName }),
 			),
 		);
@@ -1271,13 +1361,22 @@ function revocationFailureResult(
 		failure(
 			'revocation_indeterminate',
 			`revocation status indeterminate: ${firstIndeterminate?.subject.values.commonName ?? 'unknown'}`,
-			undefined,
+			revocationFailureIndex(value, 'indeterminate'),
 			detail({
 				subjectCommonName: firstIndeterminate?.subject.values.commonName,
 				actual: indeterminateReasons?.join(', '),
 			}),
 		),
 	);
+}
+
+/** Revocation evaluates each non-anchor chain certificate in path order. */
+function revocationFailureIndex(
+	value: Awaited<ReturnType<typeof checkChainRevocation>>['value'],
+	status: 'revoked' | 'indeterminate',
+): number | undefined {
+	const index = value.certificates.findIndex((certificate) => certificate.status === status);
+	return index < 0 ? undefined : index;
 }
 
 // verifyCertificateSigningRequest
@@ -1483,6 +1582,9 @@ function baseChainInput(
 		...(input.at !== undefined && { at: input.at }),
 		...(input.maxPathBuildingChecks !== undefined && {
 			maxPathBuildingChecks: input.maxPathBuildingChecks,
+		}),
+		...(input.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: input.distrustedSpkiSha256,
 		}),
 		...copyValidationInputs(input),
 	};
