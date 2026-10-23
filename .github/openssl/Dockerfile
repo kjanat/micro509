@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM debian:trixie@sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c AS build
+FROM debian:trixie@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308 AS build
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 ARG VERSION
 ARG SHA256
