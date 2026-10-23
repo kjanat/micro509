@@ -1,0 +1,21 @@
+{
+	"repository": "https://github.com/uBlockOrigin/uAssets",
+	"revision": "7f958ff8c9174cb9cf01a876481f293b2c05a310",
+	"lists": [
+		{
+			"file": "easyprivacy.txt",
+			"source": "thirdparties/easylist/easyprivacy.txt",
+			"sha256": "6fda95e1e478cd7edc5e266fb2f33f504c94069e3992faea0d57f8a543d0a4c2"
+		},
+		{
+			"file": "ublock-privacy.txt",
+			"source": "filters/privacy.txt",
+			"sha256": "13db98de1f6775fbfd08fdbe9a76d8f37e3914b17c75b7deb9e4c0e74a676428"
+		}
+	],
+	"publicSuffixList": {
+		"file": "public-suffix-list.dat",
+		"source": "thirdparties/publicsuffix.org/list/effective_tld_names.dat",
+		"sha256": "0232f4df0831911356e8ee1f4d5c3b6b12c0ed3f6bd66b0f81c8ab5d3d49e9ca"
+	}
+}

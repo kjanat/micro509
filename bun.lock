@@ -12,6 +12,7 @@
         "@dprint/json": "catalog:dprint",
         "@dprint/markdown": "catalog:dprint",
         "@dprint/typescript": "catalog:dprint",
+        "@gorhill/ubo-core": "0.1.30",
         "@kjanat/tsc-bridge": "workspace:*",
         "@micro509/doc-render": "workspace:*",
         "@tsconfig/node24": "catalog:ts",
@@ -413,6 +414,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.28.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
+
+    "@gorhill/ubo-core": ["@gorhill/ubo-core@0.1.30", "", {}, "sha512-0QtDqjP7r7bQbiLO67ojEYkoaOyWeYy6heCOfkpygUfpYf/+iRfgM+ceCXSOsPXpNLgZg3aKqlD4LTxBw6WjNw=="],
 
     "@iconify-json/simple-icons": ["@iconify-json/simple-icons@1.2.100", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-536pN2RCEQyy5bYwzayrs4e9egr8cmtVcbdSHLaQl/ULUsihzn1eZ0+Hhn50zgz9cbEotiynKsKQSEjFJ7qKmw=="],
 

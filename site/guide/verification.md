@@ -449,4 +449,64 @@ DER again: ${der.length} bytes`);
 
 </LiveCode>
 
+### Verify with an imported key
+
+Use `verifySignatureWithKey` when you already have a WebCrypto public key,
+including a non-extractable key. It verifies directly with that key. Pass
+the signature's algorithm OID and parameters, and select its encoding:
+`'der'` for ECDSA from `signData`, `'raw'` for ECDSA from WebCrypto or JOSE,
+and `'raw'` for RSA or Ed25519.
+
+This example imports a public JWK once, then checks a signature and an altered
+message with the same non-extractable key.
+
+<LiveCode>
+
+```ts
+import { generateKeyPair } from 'micro509/keys';
+import { signData, verifySignatureWithKey } from 'micro509/crypto';
+
+const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+const jwk = await crypto.subtle.exportKey('jwk', keys.publicKey);
+const publicKey = await crypto.subtle.importKey(
+  'jwk',
+  jwk,
+  { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+  false,
+  ['verify'],
+);
+const data = new TextEncoder().encode('release-v1.tar.gz');
+const signed = await signData(keys.privateKey, data);
+const input = {
+  publicKey,
+  signatureAlgorithm: {
+    oid: signed.algorithmOid,
+    parametersDer: signed.parametersDer,
+  },
+  signatureEncoding: 'raw',
+  signature: signed.signature,
+  data,
+} as const;
+
+console.log('Public JWK:', jwk);
+console.log('Key extractable:', publicKey.extractable);
+console.log('Verification:', await verifySignatureWithKey(input));
+console.log(
+  'Altered message:',
+  await verifySignatureWithKey({
+    ...input,
+    data: new TextEncoder().encode('release-v2.tar.gz'),
+  }),
+);
+```
+
+</LiveCode>
+
+RSA scheme and hash must match the imported key. For RSA-PSS, pass
+`parametersDer` from the signature's algorithm identifier. Supported profiles
+use SHA-256, SHA-384 or SHA-512, the same MGF1 hash, and a salt as long as
+the digest. A signature mismatch returns `{ ok: true, valid: false }`.
+An incompatible algorithm or a key without public `verify` usage returns
+an error branch with `code` and `reason`.
+
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4

@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `verifySignatureWithKey` verifies detached signatures with an existing
+  WebCrypto public key, including non-extractable keys. It supports RSA,
+  RSA-PSS, ECDSA and Ed25519 through the same algorithm policy as
+  `verifySignature`, checks key usage and algorithm compatibility, and accepts
+  an explicit raw or DER signature encoding. No key export is required.
 - `unrecognizedReasonCode` (`'revoked'` by default, or `'reject'`) on
   `checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation` and the
   chain `RevocationPolicy`, and `responderRevocationUnrecognizedReasonCode` on

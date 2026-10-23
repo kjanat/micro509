@@ -12,6 +12,7 @@ export type {
 	VerifySignatureInput,
 	VerifySignatureLimitFailure,
 	VerifySignatureResult,
+	VerifySignatureWithKeyInput,
 	VerifySignedDataFailure,
 	VerifySignedDataResult,
 	VerifySignedDataSuccess,
@@ -21,4 +22,5 @@ export {
 	ecdsaSignatureRawToDer,
 	signData,
 	verifySignature,
+	verifySignatureWithKey,
 } from '#micro509/crypto/crypto';

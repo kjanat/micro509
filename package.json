@@ -137,6 +137,7 @@
 		"@dprint/json": "catalog:dprint",
 		"@dprint/markdown": "catalog:dprint",
 		"@dprint/typescript": "catalog:dprint",
+		"@gorhill/ubo-core": "0.1.30",
 		"@kjanat/tsc-bridge": "workspace:*",
 		"@micro509/doc-render": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",

@@ -1,5 +1,5 @@
 /**
- * Detached-signature primitives: verify a signature against a signer's SPKI,
+ * Detached-signature primitives: verify a signature against a signer's SPKI or CryptoKey,
  * sign arbitrary bytes with a WebCrypto private key, and convert ECDSA
  * signatures between DER `ECDSA-Sig-Value` and fixed-width raw encodings.
  *
@@ -9,7 +9,10 @@
 import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import { derEcdsaSignatureToRaw, rawEcdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
 import type { VerifySignedDataResult } from '#micro509/internal/crypto/sig-verify';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import {
+	verifySignedDataDetailed,
+	verifySignedDataWithKeyDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
 import { getSignatureAlgorithm, signBytes } from '#micro509/internal/crypto/signing';
 import type { EcNamedCurve } from '#micro509/keys/keys';
@@ -32,7 +35,7 @@ export interface VerifySignatureLimitFailure {
 	readonly reason: string;
 }
 
-/** Result of {@linkcode verifySignature}. */
+/** Result of {@linkcode verifySignature} and {@linkcode verifySignatureWithKey}. */
 export type VerifySignatureResult = VerifySignedDataResult | VerifySignatureLimitFailure;
 
 /** Input for {@linkcode verifySignature}. */
@@ -57,6 +60,47 @@ export interface VerifySignatureInput {
 	readonly signature: Uint8Array;
 	/** The exact bytes the signature covers. */
 	readonly data: Uint8Array;
+}
+
+/** Input for {@linkcode verifySignatureWithKey}. */
+export interface VerifySignatureWithKeyInput {
+	/** An existing public key with verify usage; extractability is not required. */
+	readonly publicKey: CryptoKey;
+	/** Explicit signature OID and parameters, including RSA-PSS salt length. */
+	readonly signatureAlgorithm: VerifySignatureInput['signatureAlgorithm'];
+	/** ECDSA accepts raw r || s or DER; RSA and Ed25519 require raw. No encoding retry occurs. */
+	readonly signatureEncoding: 'raw' | 'der';
+	/** The signature bytes in the declared encoding. */
+	readonly signature: Uint8Array;
+	/** The exact bytes the signature covers. */
+	readonly data: Uint8Array;
+}
+
+/**
+ * Verifies a detached signature using an existing WebCrypto public key without
+ * exporting or importing it. Repeated calls may reuse non-extractable keys.
+ * Signature algorithms and parameters follow {@linkcode verifySignature}; RSA
+ * scheme and hash must match the key. ECDSA encoding is explicit and never retried.
+ * Returns the same validity, unsupported-parameter, operational-error and decoding-limit
+ * branches as {@linkcode verifySignature}.
+ */
+export async function verifySignatureWithKey(
+	input: VerifySignatureWithKeyInput,
+): Promise<VerifySignatureResult> {
+	try {
+		return await verifySignedDataWithKeyDetailed(
+			input.publicKey,
+			input.signatureAlgorithm.oid,
+			input.signatureAlgorithm.parametersDer,
+			input.signature,
+			input.data,
+			input.signatureEncoding,
+		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		if (refusal === undefined) throw error;
+		return { ok: false, code: refusal.code, reason: refusal.message };
+	}
 }
 
 /** Result of {@linkcode signData}: the signature plus its on-wire algorithm identity. */
