@@ -84,8 +84,8 @@ Extract it and point `OPENSSL_CONF` at its `openssl.cnf`:
 ```sh
 # ..
 dir="${PWD}/openssl"
-mkdir -p "${dir}" && \
-  tar -xzf "${file}" -C "${dir}"
+mkdir -p "${dir}" \
+  && tar -xzf "${file}" -C "${dir}"
 
 PATH="${dir}/bin:${PATH}"
 OPENSSL_CONF="${dir}/ssl/openssl.cnf"
@@ -106,7 +106,7 @@ workflow="${repo}/.github/workflows/openssl.yml"
 oci="oci://${image}"
 file="openssl-${tag}-darwin-arm64.tar.gz"
 
-gh attestation verify "${oci}"  --repo "${repo}" --signer-workflow "${workflow}" --source-ref "${ref}"
+gh attestation verify "${oci}" --repo "${repo}" --signer-workflow "${workflow}" --source-ref "${ref}"
 gh attestation verify "${file}" --repo "${repo}" --signer-workflow "${workflow}" --source-ref "${ref}"
 ```
 

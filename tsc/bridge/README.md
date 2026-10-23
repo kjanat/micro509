@@ -73,8 +73,8 @@ data; request, transport, and process failures reject the promise.
 The transport is newline-delimited JSON over stdin/stdout. For a direct smoke test:
 
 ```sh
-printf '%s\n' '{"id":1,"method":"transpile","source":"export const x: number = 1;"}' |
-  ./bin/tsc-bridge
+printf '%s\n' '{"id":1,"method":"transpile","source":"export const x: number = 1;"}' \
+  | ./bin/tsc-bridge
 ```
 
 `transpileSync(source, { fileName, executable, cwd, timeoutMs }?)` provides the
