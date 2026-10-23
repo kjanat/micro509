@@ -8,7 +8,8 @@ jobs:
     if: github.repository == 'kjanat/micro509'
     runs-on: ubuntu-latest
     permissions: { contents: read }
-    timeout-minutes: 5
+    timeout-minutes: 15
+    cancel-timeout-minutes: 5
     steps:
       - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } }
       - { uses: $/.github/actions/setup-ts, with: { install-bun: true, install-deno: true } }
@@ -19,7 +20,8 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 3
+    cancel-timeout-minutes: 5
     permissions: { pages: write, id-token: write }
     concurrency: { group: pages-deploy, cancel-in-progress: false }
     environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
