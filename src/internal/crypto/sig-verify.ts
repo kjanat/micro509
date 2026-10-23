@@ -9,7 +9,10 @@ import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import { DECODE_LIMIT_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { alternateEcdsaSignatureEncoding } from '#micro509/internal/crypto/ecdsa';
+import {
+	alternateEcdsaSignatureEncoding,
+	derEcdsaSignatureToRaw,
+} from '#micro509/internal/crypto/ecdsa';
 import { parseRsaPssParameters } from '#micro509/internal/crypto/rsa-pss';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import type { PublicKeyImportInput, RsaHash, RsaSignatureScheme } from '#micro509/keys/keys';
@@ -327,26 +330,47 @@ export async function verifySignedDataDetailed(
 	}
 	try {
 		const key = await importSpkiDerOrThrow(subjectPublicKeyInfoDer, config.value.importAlgorithm);
+		return await verifyWithConfiguredKey(key, config.value, signature, signedData, 'auto');
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
+		return verificationError(
+			error instanceof Error ? error.message : 'signature verification failed',
+		);
+	}
+}
+
+/** Execute verification for imported SPKI and caller-owned keys with the same configuration. */
+async function verifyWithConfiguredKey(
+	key: CryptoKey,
+	config: VerifySignatureConfig,
+	signature: Uint8Array,
+	signedData: Uint8Array,
+	encoding: 'auto' | 'raw' | 'der',
+): Promise<VerifySignedDataResult> {
+	try {
+		if (encoding === 'der' && config.ecdsaRawSignatureBytes !== undefined) {
+			try {
+				signature = derEcdsaSignatureToRaw(signature, config.ecdsaRawSignatureBytes / 2);
+			} catch (error) {
+				rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
+				return { ok: true, valid: false };
+			}
+		}
 		const subtle = getCrypto().subtle;
 		const signatureView = toArrayBuffer(signature);
 		const dataView = toArrayBuffer(signedData);
-		if (await subtle.verify(config.value.verifyParams, key, signatureView, dataView)) {
+		if (await subtle.verify(config.verifyParams, key, signatureView, dataView)) {
 			return { ok: true, valid: true };
 		}
-		if (config.value.ecdsaRawSignatureBytes !== undefined) {
+		if (encoding === 'auto' && config.ecdsaRawSignatureBytes !== undefined) {
 			const alternate = alternateEcdsaSignatureEncoding(
 				signature,
-				config.value.ecdsaRawSignatureBytes / 2,
+				config.ecdsaRawSignatureBytes / 2,
 			);
 			if (alternate !== undefined) {
 				return {
 					ok: true,
-					valid: await subtle.verify(
-						config.value.verifyParams,
-						key,
-						toArrayBuffer(alternate),
-						dataView,
-					),
+					valid: await subtle.verify(config.verifyParams, key, toArrayBuffer(alternate), dataView),
 				};
 			}
 		}
@@ -357,6 +381,78 @@ export async function verifySignedDataDetailed(
 			error instanceof Error ? error.message : 'signature verification failed',
 		);
 	}
+}
+
+/** Resolve a caller-owned key without exporting it, then run the shared verifier. */
+export async function verifySignedDataWithKeyDetailed(
+	key: CryptoKey,
+	signatureAlgorithmOid: string,
+	parametersDer: Uint8Array | undefined,
+	signature: Uint8Array,
+	data: Uint8Array,
+	encoding: 'raw' | 'der',
+): Promise<VerifySignedDataResult> {
+	if (key.type !== 'public' || !key.usages.includes('verify')) {
+		return verificationError('Signature verification requires a public key with verify usage');
+	}
+	const algorithm = key.algorithm;
+	let oid: string;
+	let curveOid: string | undefined;
+	switch (algorithm.name) {
+		case 'RSASSA-PKCS1-v1_5':
+		case 'RSA-PSS':
+			oid = OIDS.rsaEncryption;
+			break;
+		case 'ECDSA':
+			oid = OIDS.ecPublicKey;
+			if ('namedCurve' in algorithm) {
+				switch (algorithm.namedCurve) {
+					case 'P-256':
+						curveOid = OIDS.prime256v1;
+						break;
+					case 'P-384':
+						curveOid = OIDS.secp384r1;
+						break;
+					case 'P-521':
+						curveOid = OIDS.secp521r1;
+						break;
+				}
+			}
+			break;
+		case 'Ed25519':
+			oid = OIDS.ed25519;
+			break;
+		default:
+			return unsupported(algorithm.name, 'unsupported public key algorithm');
+	}
+	const config = getVerifySignatureConfigResult(
+		signatureAlgorithmOid,
+		parametersDer,
+		oid,
+		curveOid,
+	);
+	if (!config.ok) return config;
+	if (encoding !== 'raw' && encoding !== 'der') {
+		return unsupported(signatureAlgorithmOid, 'signature encoding must be raw or der');
+	}
+	if (encoding === 'der' && config.value.ecdsaRawSignatureBytes === undefined) {
+		return unsupported(signatureAlgorithmOid, 'DER signature encoding requires ECDSA');
+	}
+	if (algorithm.name !== config.value.verifyParams.name) {
+		return unsupported(signatureAlgorithmOid, 'signature scheme does not match the public key');
+	}
+	if (config.value.importAlgorithm.kind === 'rsa') {
+		if (
+			!('hash' in algorithm) ||
+			typeof algorithm.hash !== 'object' ||
+			algorithm.hash === null ||
+			!('name' in algorithm.hash) ||
+			algorithm.hash.name !== config.value.importAlgorithm.hash
+		) {
+			return unsupported(signatureAlgorithmOid, 'signature hash does not match the RSA public key');
+		}
+	}
+	return verifyWithConfiguredKey(key, config.value, signature, data, encoding);
 }
 
 /** Parse RSA-PSS algorithm parameters and build a verification config, or return failure. */

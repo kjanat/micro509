@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Runs the getting-started example from every built documentation version,
+ * Runs every SSR-rendered example from every built documentation version,
  * requiring non-empty output while simulating a content blocker.
  *
  * Run `site:build` first.
@@ -13,10 +13,12 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { chromium } from 'playwright';
+import { matchBlockedRequest } from './site-content-blocker.mjs';
+import { findExamplePages } from './site-live-examples-helpers.mjs';
+
+/** @typedef {{version: string, route: string}} Version */
 
 /**
- * @typedef {{ version: string, route: string }} Version
- *
  * @typedef {{
  *   version: string,
  *   source: string,
@@ -31,16 +33,6 @@ import { chromium } from 'playwright';
 const DIST = path.resolve(import.meta.dirname, '..', 'site/.vitepress/dist');
 const HOST = '127.0.0.1';
 const EXAMPLE_TIMEOUT_MS = 60_000;
-
-/** EasyPrivacy path rules. */
-const BLOCKER_RULES = [
-	'/fingerprint.js',
-	'/fingerprint.min.js',
-	'/fingerprint2.js',
-	'/analytics.js',
-	'/tracking.js',
-	'/telemetry.js',
-];
 
 /** @type {Record<string, string>} */
 const MIME_TYPES = {
@@ -104,46 +96,68 @@ function buildRoutes() {
 }
 
 /**
- * @param {Map<string, string>} routes
- * @returns {Version[]}
+ * Capture requests that violate browser expectations for every page mode.
+ * Matching blocker requests are aborted so the actual example exercises that
+ * condition; all requested URLs are checked before execution and on completion.
+ *
+ * @param {import('playwright').Page} page
+ * @param {string} baseUrl
  */
-function findVersions(routes) {
-	const archived = readdirSync(DIST, { withFileTypes: true })
-		.filter((entry) => entry.isDirectory() && /^v\d+\.\d+\.\d+$/.test(entry.name))
-		.map((entry) => entry.name)
-		.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-
-	const broken = archived.filter((version) => !routes.has(`/${version}/guide/getting-started`));
-
-	if (broken.length > 0) {
-		throw new Error(`[live-examples] ${broken.join(', ')} built no /guide/getting-started page`);
-	}
-
-	return [
-		{ version: '(latest)', route: '/guide/getting-started' },
-		{ version: 'next', route: '/next/guide/getting-started' },
-		...archived.map((version) => ({
-			version,
-			route: `/${version}/guide/getting-started`,
-		})),
-	].filter(({ version, route }) => {
-		if (routes.has(route)) return true;
-		console.warn(`[live-examples] ${version}: the built site serves no ${route}, skipping`);
-		return false;
+async function installNetworkGuard(page, baseUrl) {
+	/** @type {string[]} */
+	const failures = [];
+	/** @type {string[]} */
+	const imported = [];
+	page.on('request', (request) => {
+		const url = request.url();
+		const parsed = new URL(url);
+		if (/^https?:$/.test(parsed.protocol) && parsed.origin !== baseUrl) imported.push(url);
+		const documentUrl = requestDocumentUrl(request, page, baseUrl);
+		const rule = matchBlockedRequest(url, documentUrl, request.resourceType());
+		if (rule !== undefined) failures.push(`${url} (matches ${rule})`);
 	});
+	page.on('requestfailed', (request) => {
+		failures.push(
+			`${request.url()} (request failed: ${request.failure()?.errorText ?? 'unknown'})`,
+		);
+	});
+	page.on('response', (response) => {
+		if (response.status() >= 400) failures.push(`${response.url()} (HTTP ${response.status()})`);
+	});
+	await page.route('**/*', async (intercepted) => {
+		const url = intercepted.request().url();
+		const request = intercepted.request();
+		const documentUrl = requestDocumentUrl(request, page, baseUrl);
+		if (matchBlockedRequest(url, documentUrl, request.resourceType()) !== undefined) {
+			await intercepted.abort('blockedbyclient');
+		} else {
+			await intercepted.continue();
+		}
+	});
+
+	return { failures, imported };
 }
 
 /**
- * Every page that may carry LiveCode blocks, for one version prefix
- * ('' is the latest release at the site root, '/next' the dev tree).
- *
- * @param {Map<string, string>} routes
- * @param {string} prefix
- * @returns {string[]}
+ * @param {import('playwright').Request} request
+ * @param {import('playwright').Page} page
+ * @param {string} fallback
  */
-function findRunnablePages(routes, prefix) {
-	const pattern = new RegExp(`^${prefix}/(guide|reference)/[^/.]+$`);
-	return [...routes.keys()].filter((route) => pattern.test(route)).sort();
+function requestDocumentUrl(request, page, fallback) {
+	if (request.isNavigationRequest()) return request.url();
+	try {
+		return request.frame().url() || page.url() || fallback;
+	} catch {
+		return page.url() || fallback;
+	}
+}
+
+/** @param {string[]} failures @param {number} errorCount @param {string} output */
+function resultFailure(failures, errorCount, output) {
+	if (failures.length > 0) return failures.join(', ');
+	if (errorCount > 0) return 'the example errored';
+	if (output === '') return 'the example printed nothing';
+	return '';
 }
 
 /**
@@ -152,10 +166,10 @@ function findRunnablePages(routes, prefix) {
  *
  * @param {import('playwright').Browser} browser
  * @param {string} baseUrl
- * @param {string} route
+ * @param {{route: string, expectedBlocks: number}} pageInfo
  * @returns {Promise<Result[]>}
  */
-async function runAllBlocks(browser, baseUrl, route) {
+async function runAllBlocks(browser, baseUrl, { route, expectedBlocks }) {
 	const context = await browser.newContext({
 		baseURL: baseUrl,
 		serviceWorkers: 'block',
@@ -165,14 +179,61 @@ async function runAllBlocks(browser, baseUrl, route) {
 	page.setDefaultTimeout(EXAMPLE_TIMEOUT_MS);
 	page.setDefaultNavigationTimeout(EXAMPLE_TIMEOUT_MS);
 
+	const { failures, imported } = await installNetworkGuard(page, baseUrl);
 	/** @type {Result[]} */
 	const results = [];
 
 	try {
 		await page.goto(route, { waitUntil: 'domcontentloaded' });
+		await page.waitForFunction(() => {
+			const app = document.querySelector('#app');
+			return app !== null && '__vue_app__' in app;
+		});
 
 		const blocks = page.locator('.live-code');
 		const count = await blocks.count();
+		if (count === 0) {
+			return [
+				{
+					version: route,
+					source: '',
+					output: '',
+					failed: true,
+					why: 'SSR page contains LiveCode markup but no hydrated examples appeared',
+					ms: 0,
+					imported,
+				},
+			];
+		}
+		if (count !== expectedBlocks) {
+			return [
+				{
+					version: route,
+					source: '',
+					output: '',
+					failed: true,
+					why: `SSR rendered ${expectedBlocks} examples but the browser found ${count}; hydration did not preserve every block`,
+					ms: 0,
+					imported,
+				},
+			];
+		}
+		for (let index = 0; index < count; index += 1) {
+			const buttons = await blocks.nth(index).locator('.live-code-btn').count();
+			if (buttons !== 1) {
+				return [
+					{
+						version: route,
+						source: '',
+						output: '',
+						failed: true,
+						why: `example ${index + 1} did not hydrate exactly one Run button`,
+						ms: 0,
+						imported,
+					},
+				];
+			}
+		}
 
 		for (let index = 0; index < count; index += 1) {
 			const label = `${route}#${index}`;
@@ -208,15 +269,9 @@ async function runAllBlocks(browser, baseUrl, route) {
 				const ms = Math.round(performance.now() - started);
 				output = (await outputBlock.innerText()).trim();
 
-				let why = '';
+				const why = resultFailure(failures, await block.locator('.live-code-err').count(), output);
 
-				if ((await block.locator('.live-code-err').count()) > 0) {
-					why = 'the example errored';
-				} else if (output === '') {
-					why = 'the example printed nothing';
-				}
-
-				results.push({ version: label, source, output, failed: why !== '', why, ms, imported: [] });
+				results.push({ version: label, source, output, failed: why !== '', why, ms, imported });
 			} catch (error) {
 				results.push({
 					version: label,
@@ -225,8 +280,16 @@ async function runAllBlocks(browser, baseUrl, route) {
 					failed: true,
 					why: String(error).split('\n')[0] || 'threw',
 					ms: started === undefined ? 0 : Math.round(performance.now() - started),
-					imported: [],
+					imported,
 				});
+			}
+		}
+
+		await page.waitForLoadState('networkidle');
+		if (failures.length > 0) {
+			for (const result of results) {
+				result.failed = true;
+				result.why = failures.join(', ');
 			}
 		}
 
@@ -320,120 +383,6 @@ async function closeServer(server) {
 }
 
 /**
- * @param {import('playwright').Browser} browser
- * @param {string} baseUrl
- * @param {Version} target
- * @returns {Promise<Result>}
- */
-async function runVersion(browser, baseUrl, { version, route }) {
-	const context = await browser.newContext({
-		baseURL: baseUrl,
-		serviceWorkers: 'block',
-	});
-	const page = await context.newPage();
-
-	page.setDefaultTimeout(EXAMPLE_TIMEOUT_MS);
-	page.setDefaultNavigationTimeout(EXAMPLE_TIMEOUT_MS);
-
-	/** @type {string[]} */
-	const refused = [];
-	/** @type {string[]} */
-	const refusedBeforeRun = [];
-	/** @type {string[]} */
-	const imported = [];
-
-	let running = false;
-	let source = '';
-	let output = '';
-	let started;
-
-	page.on('request', (request) => {
-		const url = request.url();
-		const parsed = new URL(url);
-
-		if (/^https?:$/.test(parsed.protocol) && parsed.origin !== baseUrl) {
-			imported.push(url);
-		}
-	});
-
-	await page.route('**/*', async (intercepted) => {
-		const url = intercepted.request().url();
-		const rule = BLOCKER_RULES.find((candidate) => url.includes(candidate));
-
-		if (rule === undefined) {
-			await intercepted.continue();
-			return;
-		}
-
-		(running ? refused : refusedBeforeRun).push(`${url} (matches ${rule})`);
-		await intercepted.abort('blockedbyclient');
-	});
-
-	try {
-		await page.goto(route, { waitUntil: 'domcontentloaded' });
-
-		const block = page.locator('.live-code').first();
-		const button = block.locator('.live-code-btn').first();
-		const outputBlock = block.locator('.live-code-pre').first();
-
-		source = (await block.locator('pre code').first().innerText()).trim();
-
-		started = performance.now();
-		running = true;
-		await button.click();
-		await outputBlock.waitFor({ state: 'visible' });
-		await page.waitForFunction(
-			(selector) => !document.querySelector(selector)?.textContent?.includes('Running'),
-			'.live-code .live-code-btn',
-		);
-		running = false;
-
-		const ms = Math.round(performance.now() - started);
-		output = (await outputBlock.innerText()).trim();
-
-		if (refusedBeforeRun.length > 0) {
-			console.warn(
-				`[live-examples] ${version}: page assets refused before the run: ${refusedBeforeRun.join(', ')}`,
-			);
-		}
-
-		let why = '';
-
-		if (refused.length > 0) {
-			why = `a content blocker would refuse ${refused.join(', ')}`;
-		} else if ((await block.locator('.live-code-err').count()) > 0) {
-			why = 'the example errored';
-		} else if (output === '') {
-			why = 'the example printed nothing';
-		}
-
-		return {
-			version,
-			source,
-			output,
-			failed: why !== '',
-			why,
-			ms,
-			imported,
-		};
-	} catch (error) {
-		return {
-			version,
-			source,
-			output,
-			failed: true,
-			why: String(error).split('\n')[0] || 'threw',
-			ms: started === undefined ? 0 : Math.round(performance.now() - started),
-			imported,
-		};
-	} finally {
-		await context.close().catch((error) => {
-			console.warn(`[live-examples] ${version}: failed to close context: ${error}`);
-		});
-	}
-}
-
-/**
  * The scoped import map resolves by the URL of the page an example runs on. A reader
  * who lands on the root docs and clicks through to an archived version never reloads,
  * so the run after that client-side navigation must import the archive's library.
@@ -454,23 +403,17 @@ async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
 	page.setDefaultTimeout(EXAMPLE_TIMEOUT_MS);
 	page.setDefaultNavigationTimeout(EXAMPLE_TIMEOUT_MS);
 
-	/** @type {string[]} */
-	const imported = [];
+	const { failures, imported } = await installNetworkGuard(page, baseUrl);
 	let source = '';
 	let output = '';
 	let started;
 
-	page.on('request', (request) => {
-		const url = request.url();
-		const parsed = new URL(url);
-
-		if (/^https?:$/.test(parsed.protocol) && parsed.origin !== baseUrl) {
-			imported.push(url);
-		}
-	});
-
 	try {
 		await page.goto('/', { waitUntil: 'networkidle' });
+		await page.waitForFunction(() => {
+			const app = document.querySelector('#app');
+			return app !== null && '__vue_app__' in app;
+		});
 
 		await page.evaluate((href) => {
 			/** @type {Window & { __liveExamplesSpa?: boolean }} */ (window).__liveExamplesSpa = true;
@@ -481,6 +424,7 @@ async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
 			anchor.click();
 		}, route);
 		await page.waitForURL(`**${route}`);
+		await page.locator('.live-code').first().waitFor({ state: 'visible' });
 
 		const survived = await page.evaluate(
 			() =>
@@ -512,16 +456,10 @@ async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
 		const misdirected = imported.filter((url) => !url.includes(marker));
 
 		let why = '';
-
-		if (misdirected.length > 0) {
+		if (misdirected.length > 0)
 			why = `after client-side navigation to ${route}, the example imported ${misdirected.join(', ')}`;
-		} else if (imported.length === 0) {
-			why = 'the example imported nothing external';
-		} else if ((await block.locator('.live-code-err').count()) > 0) {
-			why = 'the example errored';
-		} else if (output === '') {
-			why = 'the example printed nothing';
-		}
+		else if (imported.length === 0) why = 'the example imported nothing external';
+		else why = resultFailure(failures, await block.locator('.live-code-err').count(), output);
 
 		return {
 			version: label,
@@ -609,7 +547,9 @@ async function main() {
 	}
 
 	const routes = buildRoutes();
-	const versions = findVersions(routes);
+	const pages = findExamplePages(routes, (file) => readFileSync(file, 'utf8'));
+	if (pages.length === 0)
+		throw new Error('[live-examples] the built site contains no SSR LiveCode examples');
 	const { server, baseUrl } = await startServer(routes);
 
 	let browser;
@@ -658,25 +598,17 @@ async function main() {
 	}
 
 	try {
-		for (const version of versions) {
-			report(await runVersion(browser, baseUrl, version));
+		for (const pageInfo of pages) {
+			for (const result of await runAllBlocks(browser, baseUrl, pageInfo)) report(result);
 		}
 
-		for (const prefix of ['', '/next']) {
-			for (const route of findRunnablePages(routes, prefix)) {
-				for (const result of await runAllBlocks(browser, baseUrl, route)) {
-					report(result);
-				}
-			}
-		}
-
-		const navigable = versions.find(({ version }) => /^v\d/.test(version));
+		const navigable = pages.find(({ version }) => /^v\d/.test(version));
 		if (navigable !== undefined) {
 			report(await runAfterClientNavigation(browser, baseUrl, navigable));
 		}
 
 		const count = results.length;
-		const label = count === 1 ? 'version' : 'versions';
+		const label = count === 1 ? 'example run' : 'example runs';
 		console.log(`\n[live-examples] ${count} ${label}:\n`);
 	} finally {
 		for (const [signal, handler] of signalHandlers) {
@@ -687,7 +619,9 @@ async function main() {
 	}
 
 	printSuccessfulOutputs(
-		results.filter(({ version }) => !version.startsWith('/')),
+		results.filter(
+			({ version }) => version.startsWith('spa:') || version.endsWith('/guide/getting-started#0'),
+		),
 		baseUrl,
 	);
 
@@ -706,9 +640,8 @@ async function main() {
 	}
 
 	const count = results.length;
-	const label = count === 1 ? 'version' : 'versions';
-	const pronoun = count === 1 ? 'its' : 'their';
-	console.log(`\n[live-examples] ${count} ${label} each ran ${pronoun} own example`);
+	const label = count === 1 ? 'example' : 'examples';
+	console.log(`\n[live-examples] ${count} ${label} passed across all built pages`);
 }
 
 main().catch((error) => {
