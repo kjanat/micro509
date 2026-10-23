@@ -152,3 +152,14 @@ test('decodes source-phase imports with the compiler-matched AST decoder', () =>
 	assert.equal(statement.importClause?.phaseModifier, ts.SyntaxKind.SourceKeyword);
 	assert.deepEqual(file.parseDiagnostics, []);
 });
+
+test('exposes TS6 assertion and declaration flags used by Vue bindings', () => {
+	const file = ts.createSourceFile('/project/assertion.ts', 'const value = <number>1;', 99);
+	const statement = file.statements[0];
+	assert.ok(statement !== undefined && ts.isVariableStatement(statement));
+	assert.ok(statement.declarationList.flags & ts.NodeFlags.Const);
+	const initializer = statement.declarationList.declarations[0]?.initializer;
+	assert.ok(initializer !== undefined && ts.isTypeAssertionExpression(initializer));
+	assert.equal(initializer.expression.kind, ts.SyntaxKind.NumericLiteral);
+	assert.equal(ts.isTypeAssertionExpression(statement), false);
+});
