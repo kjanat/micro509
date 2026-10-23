@@ -153,7 +153,7 @@ hosted with these docs, uses a fixed verification time, and prints the
 intermediate's fingerprint and the verification result for each issuer path.
 The distrust list contains the published compromised key hash.
 
-<LiveCode>
+<LiveCode data-output="deterministic">
 
 ```ts
 import {
@@ -162,7 +162,12 @@ import {
   verifyCertificateChain,
 } from 'micro509';
 
-const fixtures = new URL('/fixtures/emudhra/', window.location.href);
+const fixtures = new URL(
+  import.meta.url.startsWith('file:')
+    ? '../fixtures/emudhra/'
+    : '/fixtures/emudhra/',
+  import.meta.url,
+);
 async function loadFixture(name: string) {
   const response = await fetch(new URL(name, fixtures));
   if (!response.ok) throw new Error(`Fixture download failed: ${name}`);

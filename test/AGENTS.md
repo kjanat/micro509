@@ -28,7 +28,7 @@ test/
 | CRL coverage              | `crl.test.ts`, `revocation.test.ts`                        | direct CRL semantics and orchestration                                       |
 | OCSP coverage             | `ocsp.test.ts`, `ocsp-fixtures.test.ts`                    | parser/validator plus focused fixtures                                       |
 | PKCS coverage             | `pkcs7.test.ts`, `pkcs7-signeddata.test.ts`, `pfx.test.ts` | SignedData lifecycle, signer pairing, PFX bundles                            |
-| Docs example execution    | `guide-examples.test.ts`                                   | every site guide LiveCode block runs twice; identical re-run output fails    |
+| Docs example execution    | `guide-examples.test.ts`                                   | runs twice: generated output varies, fixed-fixture output matches            |
 | README example execution  | `readme-examples.test.ts`                                  | every README ts fence executes and compiles with zero diagnostics            |
 | Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus                                        |
 | Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries                                        |
