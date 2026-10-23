@@ -17,8 +17,10 @@ export {
 	getLeadingCommentRanges,
 	getTokenPosOfNode,
 	getTrailingCommentRanges,
+	NodeFlags,
 } from 'typescript/ast';
 export * from 'typescript/ast/is';
+export { isTypeAssertion as isTypeAssertionExpression } from 'typescript/ast/is';
 export type { FileSystemEntries, ParseConfigHost, System } from '#sys';
 export { sys } from '#sys';
 export { ScriptKind, ScriptTarget, SyntaxKind };
