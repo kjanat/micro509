@@ -10,6 +10,7 @@ import markdownItTaskLists from 'markdown-it-task-lists';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { build as bundleLibrary } from 'tsdown';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import type { DefaultTheme } from 'vitepress';
@@ -177,7 +178,7 @@ const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
 const devLabelUrl =
 	pull === undefined ? undefined : `${repoUrl.origin}${repoUrl.pathname}/pull/${pull}`;
 
-console.log(`[versions] tree -> GitHub @${nextRef}, labelled ${devLabel}`);
+console.log(`[versions] tree -> library @${nextRef}, labelled ${devLabel}`);
 
 /** Markdown files directly under `dir`. */
 function pagesIn(dir: string): readonly string[] {
@@ -240,10 +241,9 @@ const docs = await versionedDocs({
 		offline: process.env.DOCS_OFFLINE === '1' || pull !== undefined,
 	},
 	/**
-	 * jsDelivr serves releases. esm.sh builds the current GitHub tree by commit,
-	 * which only exists for pushed refs, so the dev server serves the local
-	 * `dist/` through vite's `/@fs` instead. `bun dev` keeps it fresh via
-	 * `build:watch`; a bare `micro509-site:dev` needs a prior `bun bd`.
+	 * jsDelivr serves releases. Current-tree examples use the library bundle
+	 * shipped with this site build. The dev server serves `dist/` through
+	 * vite's `/@fs`; `bun dev` refreshes it via `build:watch`.
 	 */
 	library: {
 		name: repo.name,
@@ -252,10 +252,9 @@ const docs = await versionedDocs({
 			if (version.tag !== devLabel) {
 				return `https://cdn.jsdelivr.net/npm/${repo.name}@${version.tag.replace(/^v/, '')}${tail}/+esm`;
 			}
-			const source = repo.registry.exports[subpath]?.replace(/^\.\//, '/');
 			return isDev
 				? `/@fs${repoRoot}/dist${subpath === '.' ? '/index' : tail}.js`
-				: `https://esm.sh/gh${repoUrl.pathname}@${nextRef}${source ?? tail}?standalone`;
+				: `/_library/@${nextRef}${subpath === '.' ? '/index' : tail}.js`;
 		},
 	},
 	generateApi,
@@ -378,7 +377,23 @@ export default defineConfig<DocsThemeConfig>({
 	transformPageData: docs.transformPageData,
 	transformHead: (context) => docs.head(context.page),
 	transformHtml: (html, _id, context) => docs.html(html, context.page),
-	buildEnd: docs.buildEnd,
+	buildEnd: async (config) => {
+		await docs.buildEnd(config);
+		await bundleLibrary({
+			config: false,
+			entry: Object.fromEntries(
+				Object.keys(repo.registry.exports).map((subpath) => {
+					const name = subpath === '.' ? 'index' : subpath.slice(2);
+					return [name, path.join(repoRoot, 'dist', `${name}.js`)];
+				}),
+			),
+			outDir: path.join(config.outDir, '_library', `@${nextRef}`),
+			platform: 'browser',
+			format: 'esm',
+			dts: false,
+			outExtensions: () => ({ js: '.js' }),
+		});
+	},
 
 	head: /* biome-ignore format: X */ [
 		['meta', { name: 'theme-color', content: '#3c8772' }],
