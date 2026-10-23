@@ -7,9 +7,16 @@ outline: [2, 3]
 The examples below build their own `ca`, `leaf`, CRL, and OCSP material
 inline so each one runs on its own.
 
+Revocation checking is opt-in. Pass CRLs or OCSP responses in the `revocation`
+input to `verifyCertificateChain`. micro509 does not retrieve evidence from
+certificate URLs or contact responders. Your application is responsible for
+obtaining evidence and supplying it for evaluation. Omitting `revocation` skips
+this step. Passing `revocation: {}` enables it with no evidence, so certificates
+that need evidence receive an indeterminate status.
+
 ::: warning Revocation checking defaults to hard-fail
-Revocation checking only runs when you supply evidence — and once you do,
-`RevocationPolicy.mode` defaults to `'hard-fail'`: certificates whose
+When chain-level revocation checking is enabled, `RevocationPolicy.mode`
+defaults to `'hard-fail'`: certificates whose
 revocation status is **indeterminate** (no applicable CRL/OCSP evidence,
 expired evidence, untrusted signer) are **denied**. If availability matters
 more than strictness — partial evidence is normal in your setup — opt out
@@ -342,6 +349,23 @@ const result = await validateOcspResponse({
 
 ## Orchestrated revocation check
 
+`checkCertificateRevocation` accepts a certificate, its issuer, and an array of
+CRL or OCSP evidence. Use `unwrap(result).status` to decide what to do:
+
+| Status          | Meaning                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| `good`          | Applicable evidence reports the certificate as not revoked.                                         |
+| `revoked`       | Evidence identifies the certificate as revoked. Inspect the revocation time and reason.             |
+| `indeterminate` | The supplied evidence cannot establish a status. Inspect the reason before deciding how to proceed. |
+
+This API represents unusable evidence as an `indeterminate` status inside an
+`ok` result. An `ok` result alone does not mean the certificate is good. Chain verification applies your revocation policy to that
+status. The example below creates both a CRL and an OCSP response that report
+the leaf as revoked.
+
+<details>
+<summary>Generate a certificate and evaluate CRL and OCSP evidence</summary>
+
 <LiveCode>
 
 ```ts
@@ -423,29 +447,29 @@ const result = await checkCertificateRevocation({
   ],
 });
 
-// Check ok, then the status discriminator
-if (!result.ok) {
-  throw new Error('unreachable: evidence was supplied');
-}
-if (result.value.status === 'revoked') {
+// Evidence failures are represented by an indeterminate status.
+const status = unwrap(result);
+if (status.status === 'revoked') {
   // CRL evidence reports a RevocationReason name,
   // OCSP a raw CRLReason integer;
   // revocationReasonFromCode() maps the integer to
   // the same name so either path yields one answer
   const reason =
-    result.value.revocationReason ??
-    revocationReasonFromCode(result.value.revocationReasonCode);
+    status.revocationReason ??
+    revocationReasonFromCode(status.revocationReasonCode);
   console.log(`\
 status:     revoked
 serial:     ${serialHex}
-revoked at: ${result.value.revokedAt?.toISOString()}
+revoked at: ${status.revokedAt?.toISOString()}
 reason:     ${reason}`);
 } else {
-  console.log('status:', result.value.status);
+  console.log('status:', status.status);
 }
 ```
 
 </LiveCode>
+
+</details>
 
 ## Chain-level revocation
 

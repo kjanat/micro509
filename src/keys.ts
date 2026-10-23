@@ -1,6 +1,9 @@
 /**
- * Canonical key generation and import/export domain surface.
- * Owns the stable `micro509/keys` entrypoint.
+ * Generate keys and move them between WebCrypto, PEM, DER, and JWK formats.
+ *
+ * Start with {@linkcode generateKeyPair}. Load a private key with
+ * {@linkcode importPkcs8Pem}, or protect an exported key with
+ * {@linkcode exportEncryptedPkcs8Pem}.
  *
  * @module micro509/keys
  */

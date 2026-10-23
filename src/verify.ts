@@ -1,6 +1,9 @@
 /**
- * Canonical advanced verification domain surface.
- * Owns chain validation, service identity, policy, and name-constraint APIs.
+ * Validate certificate chains, application purposes, and service identities.
+ *
+ * Start with {@linkcode verifyCertificateChain} and supply your trusted roots.
+ * Use {@linkcode matchCertificateServiceIdentity} for identity matching alone,
+ * or {@linkcode verifyCertificateSigningRequest} to check a CSR signature.
  *
  * @module micro509/verify
  */

@@ -89,7 +89,7 @@
 				"command": "node_modules/.bin/tombi format - --stdin-filename {{file_path}}",
 				"exts": ["toml"],
 				"cacheKeyFiles": ["tombi.toml"],
-				"setupCommand": "bun install"
+				"setupCommand": "bun install --frozen-lockfile"
 			},
 			{
 				"cwd": "tsc/bridge",

@@ -1,6 +1,41 @@
 # Verification
 
+## What verification establishes
+
+`parseCertificatePem` reads a certificate into typed fields.
+`verifyCertificateChain` builds a path to a trust anchor and validates it using
+the inputs below.
+
+| Input             | What to supply                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leaf`            | The certificate you want to verify.                                                                                                         |
+| `intermediates`   | Available issuer certificates for path building. Missing issuers are not fetched automatically.                                             |
+| `roots`           | CA certificates your application trusts. micro509 does not load a system trust store. Advanced callers can also supply bare `trustAnchors`. |
+| `purpose`         | The intended use, such as `serverAuth`. Omit it to leave out this application-purpose check.                                                |
+| `serviceIdentity` | The DNS, IP, URI, or SRV identity you expect. Omit it to leave out identity matching.                                                       |
+| `at`              | The validation time. Defaults to the current time.                                                                                          |
+| `revocation`      | CRL/OCSP evidence and policy. Omit this option to skip revocation checking. Supplying it, even as `{}`, enables the check.                  |
+
+A successful result contains the validated chain and parsed leaf. It reflects
+the purpose, identity, time, and revocation options you supplied. For certificates
+that require revocation evidence, missing or unusable evidence is indeterminate
+and fails under the default hard-fail policy. See [chain-level revocation](./revocation.md#chain-level-revocation)
+for evidence selection and certificates exempted from checking.
+
 ## Chain verification
+
+For existing certificates, pass the leaf, intermediates, and trusted roots to
+`verifyCertificateChain`. The [server verification recipe](./recipes.md#verify-a-server-certificate)
+shows a function you can use with your application's PEM inputs.
+
+The runnable example below creates its own three-certificate chain. Its successful
+result contains the certificates in leaf-to-root order. On failure, branch on
+`result.error.code`. Read the optional `result.error.index` together with
+`result.error.details.source` to distinguish a chain certificate from a bad
+root or intermediate input. A `no_trusted_root` failure has no index.
+
+<details>
+<summary>Generate and verify a complete root, intermediate, and leaf chain</summary>
 
 <LiveCode>
 
@@ -76,24 +111,7 @@ At index: ${result.error.index}`);
 
 </LiveCode>
 
-Path building tries every issuer candidate and bare trust anchor whose subject
-matches, so an input with many same-subject certificates costs more work than
-its size suggests. `maxPathBuildingChecks` on `verifyCertificateChain`,
-`buildCandidatePath` and the `validateFor*` profiles bounds how many candidates
-and anchors one search may examine, including those it skips because they are
-already on the path or their names do not match. The default is 100,000. When the bound stops the search before a trusted path
-is found, the result is `path_building_limit_exceeded`.
-
-A user notice `explicitText` or `noticeRef` organization longer than the 200
-characters [RFC 5280 §4.2.1.4][rfc5280-section-4.2.1.4] allows a DisplayText is kept whole by the parser
-and reported as `oversizedExplicitText` on the qualifier or
-`oversizedOrganization` on the `noticeRef`, and the chain validates. [§4.2.1.4][rfc5280-section-4.2.1.4]
-asks certificate users to handle an oversized `explicitText` gracefully, and
-micro509 applies the same policy to the organization.
-`rejectOversizedDisplayText: true` on `verifyCertificateChain` or
-`validateCandidatePath` rejects such a certificate with
-`display_text_oversized` instead, and `details.userNoticeField` names the
-field. PKITS 4.8.19 leaves that choice for `explicitText` to the application.
+</details>
 
 ## Verification purposes
 
@@ -246,6 +264,27 @@ Supported identity types:
 - **URI-ID** — scheme + host matching, with wildcard matching except for SIP
   and IP hosts compared by octets
 - **SRV-ID** — service name matching via otherName SAN, with wildcard matching
+
+## Advanced validation policy
+
+Path building tries every issuer candidate and bare trust anchor whose subject
+matches, so an input with many same-subject certificates costs more work than
+its size suggests. `maxPathBuildingChecks` on `verifyCertificateChain`,
+`buildCandidatePath` and the `validateFor*` profiles bounds how many candidates
+and anchors one search may examine, including those it skips because they are
+already on the path or their names do not match. The default is 100,000. When the bound stops the search before a trusted path
+is found, the result is `path_building_limit_exceeded`.
+
+A user notice `explicitText` or `noticeRef` organization longer than the 200
+characters [RFC 5280 §4.2.1.4][rfc5280-section-4.2.1.4] allows a DisplayText is kept whole by the parser
+and reported as `oversizedExplicitText` on the qualifier or
+`oversizedOrganization` on the `noticeRef`, and the chain validates. [§4.2.1.4][rfc5280-section-4.2.1.4]
+asks certificate users to handle an oversized `explicitText` gracefully, and
+micro509 applies the same policy to the organization.
+`rejectOversizedDisplayText: true` on `verifyCertificateChain` or
+`validateCandidatePath` rejects such a certificate with
+`display_text_oversized` instead, and `details.userNoticeField` names the
+field. PKITS 4.8.19 leaves that choice for `explicitText` to the application.
 
 ## Error codes
 

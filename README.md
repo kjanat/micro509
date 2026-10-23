@@ -22,9 +22,12 @@
 [![JSR](https://img.shields.io/jsr/v/@kjanat/micro509?logoColor=083344&logo=jsr&logoSize=auto&label=&labelColor=f7df1e&color=black)][jsr]
 [![Socket](https://badge.socket.dev/npm/package/micro509)][socket]
 
-A zero-dependency TypeScript PKI toolkit for certificates, verification, revocation, and PKCS workflows.
+A zero-dependency TypeScript X.509 and PKI toolkit. Create certificates and
+CSRs, verify certificate chains and identities, manage revocation, and work
+with keys and PKCS containers using WebCrypto.
 
-Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
+Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs in
+Node, Bun, Deno, browsers, and Cloudflare Workers.
 
 > **Prerelease** — API may change before 1.0.
 
@@ -34,43 +37,13 @@ Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs ever
 npm install micro509
 ```
 
-In a browser, no build step — it is WebCrypto and nothing else:
+## Quick start
 
-```html
-<script type="module">
-  import { createSelfSignedCertificate } from 'https://esm.run/micro509';
-</script>
-```
-
-Two runnable examples:
-
-- [`examples/browser`][browser-example] is that, in full: one HTML file that
-  issues a certificate and parses it back, with nothing installed and nothing
-  built. [open in stackblitz][browser-example:stackblitz]
-- [`examples/vite`][vite-example]: the same demo with types and a dev server.
-  [open in stackblitz][vite-example:stackblitz]
-
-## Why micro509
-
-JavaScript PKI libraries usually force a bad tradeoff:
-heavyweight standards toolkits, legacy crypto kitchen sinks,
-or narrow parsing utilities.
-
-micro509 is the practical middle: a modern, WebCrypto-native
-PKI toolkit with zero runtime dependencies and typed APIs for
-the workflows most applications actually need.
-
-It gives you one library for certificate and CSR creation,
-chain verification, service-identity matching, CRLs, OCSP,
-PKCS#7 SignedData, PFX/PKCS#12, PEM handling, and key
-import/export.
-
-And when verification fails, you get typed results your code
-can act on: [a typed error code for every failure mode], the failing
-certificate index, and structured failure details instead of `false`.
+Create a self-signed certificate, verify its chain and service identity, then
+see a typed failure when the requested identity does not match:
 
 ```ts
-import { createSelfSignedCertificate, unwrap, verifyCertificateChain } from 'micro509';
+import { createSelfSignedCertificate, verifyCertificateChain } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
 	subject: { commonName: 'app.example.com' },
@@ -79,219 +52,107 @@ const { certificate } = await createSelfSignedCertificate({
 	},
 });
 
-const result = await verifyCertificateChain({
+const options = {
 	leaf: certificate.pem,
 	roots: [certificate.pem],
 	allowSelfSignedLeaf: true,
-	serviceIdentity: { type: 'dns', value: 'evil.example.com' },
-});
+} as const;
 
-if (!result.ok) {
-	switch (result.error.code) {
-		case 'certificate_expired':
-			console.log('renew the certificate at index', result.error.index);
-			break;
-		case 'subject_alt_name_mismatch': {
-			const { expected, actual } = result.error.details ?? {};
-			console.log(`identity mismatch: wanted ${expected}, presented ${actual}`);
-			break;
-		}
-		default:
-			unwrap(result); // rethrows the typed error
-	}
-}
+const valid = await verifyCertificateChain({
+	...options,
+	serviceIdentity: { type: 'dns', value: 'app.example.com' },
+});
+console.log(valid.ok ? 'verified app.example.com' : valid.error.code);
+
+const mismatch = await verifyCertificateChain({
+	...options,
+	serviceIdentity: { type: 'dns', value: 'admin.example.com' },
+});
+console.log(mismatch.ok ? 'verified' : mismatch.error.code);
 ```
 
-Beyond verification, micro509 covers PKI surface that's hard to find
-in a single zero-dependency JS package:
+Output:
 
-- **OCSP** — build requests, parse and validate responses, verify responder authorization
-- **PFX / PKCS#12** — create and parse password-protected key+cert bundles
-- **PKCS#7 / CMS** — sign content, parse and verify SignedData with each signer's certificate resolved, extract cert bags
-- **CRLs** — create, parse, verify, and check revocation status
-- **Encrypted keys** — PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1, parameter inspection without the password
-- **Key import/export** — PKCS#8, SPKI, JWK, PKCS#1, SEC1 with generation for RSA, ECDSA, Ed25519
-- **Detached signatures** — sign and verify raw bytes, ECDSA DER/raw signature conversion
-- **Service identity** — wildcard DNS, IPv6 normalization, URI-ID, SRV-ID, explicit CN opt-in
-
-Narrow defaults, explicit escape hatches — dangerous operations like CN
-fallback or self-signed leaf acceptance require opt-in. All with no `any`,
-no type assertions, no non-null assertions, and no runtime DI frameworks
-that break edge runtimes.
-
-## Quick start
-
-Create a self-signed certificate:
-
-```ts
-import { createSelfSignedCertificate } from 'micro509';
-
-const { certificate, keyPair } = await createSelfSignedCertificate({
-	subject: {
-		commonName: 'example.com',
-		organization: 'Acme',
-		country: 'US',
-	},
-	validity: { days: 30 },
-	extensions: {
-		keyUsage: ['digitalSignature', 'keyEncipherment'],
-		subjectAltNames: [
-			{ type: 'dns', value: 'example.com' },
-			{ type: 'dns', value: 'www.example.com' },
-		],
-	},
-});
-
-console.log(certificate.pem);
-console.log(await keyPair.exportPkcs8Pem());
+```text
+verified app.example.com
+subject_alt_name_mismatch
 ```
 
-Create a CSR:
+A verification failure is a typed result with an error code, failing
+certificate index when relevant, and structured details. Callers can handle a
+specific case without parsing messages or collapsing every failure into
+`false`.
 
-```ts
-import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
+The self-signed leaf option above is useful for a compact local demo. In
+production, supply the appropriate trust anchors and intermediates for your
+PKI.
 
-const keyPair = await generateKeyPair({ kind: 'ed25519' });
-const csr = await createCertificateSigningRequest({
-	subject: { commonName: 'csr.example' },
-	publicKey: keyPair.publicKey,
-	signerPrivateKey: keyPair.privateKey,
-	extensions: {
-		subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
-	},
-});
+## What it covers
 
-console.log(csr.pem);
-```
+- **Certificates and CSRs:** create, parse, and encode common X.509 extensions
+- **Verification:** build and validate chains, enforce policy, and match DNS,
+  IP, URI, and SRV service identities
+- **Revocation:** create and process CRLs and OCSP requests and responses
+- **Keys and signatures:** import, export, and generate RSA, ECDSA, and
+  Ed25519 keys, plus signing and verification of detached data
+- **PKCS workflows:** PKCS#7 SignedData and password-protected PFX/PKCS#12
+- **PEM and DER:** encode, decode, and parse common formats
 
-Parse a certificate:
-
-```ts
-import { createSelfSignedCertificate, parseCertificatePem, unwrap } from 'micro509';
-
-const { certificate } = await createSelfSignedCertificate({
-	subject: { commonName: 'example.com' },
-	extensions: { extendedKeyUsage: ['serverAuth'] },
-});
-
-const parsed = unwrap(parseCertificatePem(certificate.pem));
-console.log(parsed.subject.values.commonName);
-console.log(parsed.serialNumberHex);
-console.log(parsed.extendedKeyUsage);
-```
-
-`parseCertificatePem` returns a typed `Result` — check `result.ok`, or
-`unwrap()` to throw on malformed input.
-
-Verify a chain:
-
-```ts
-import { createSelfSignedCertificate, verifyCertificateChain } from 'micro509';
-
-const { certificate } = await createSelfSignedCertificate({
-	subject: { commonName: 'example.com' },
-	extensions: {
-		extendedKeyUsage: ['serverAuth'],
-		subjectAltNames: [{ type: 'dns', value: 'example.com' }],
-	},
-});
-
-// Self-signed leaf as its own root: development shape, explicit opt-in
-const result = await verifyCertificateChain({
-	leaf: certificate.pem,
-	roots: [certificate.pem],
-	purpose: 'serverAuth',
-	serviceIdentity: { type: 'dns', value: 'example.com' },
-	allowSelfSignedLeaf: true,
-});
-
-if (result.ok) {
-	console.log(result.value.chain.length, result.value.leaf.serialNumberHex);
-} else {
-	console.log(result.error.code);
-}
-```
-
-## Runtime support
-
-| Runtime | Status    | Notes                                              |
-| ------- | --------- | -------------------------------------------------- |
-| Node    | supported | modern Node with WebCrypto globals (tested on 24+) |
-| Bun     | supported | Bun 1.3+                                           |
-| Deno    | supported | requires WebCrypto and web text/base64 globals     |
-| Browser | supported | modern browsers only                               |
-| Worker  | supported | same WebCrypto and text/base64 globals required    |
-
-The core stays ESM-only and side-effect-free.
-
-## Algorithm support
-
-| Area                           | Shipped support                                                                       |
-| ------------------------------ | ------------------------------------------------------------------------------------- |
-| Certificate and CSR signatures | RSA PKCS#1 v1.5, RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, Ed25519                  |
-| RSA key APIs                   | `scheme: 'pkcs1-v1_5'`, `'pss'`, `'oaep'` (encryption)                                |
-| ECDSA key APIs                 | `P-256`, `P-384`, `P-521`                                                             |
-| Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                                  |
-| PFX MAC                        | SHA-256-only PKCS#12 MAC; [RFC 9879][rfc9879] PBMAC1 with PBKDF2 HMAC-SHA-256/384/512 |
-| Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys                     |
-
-`micro509` focuses on algorithms that are broadly interoperable in modern X.509 and WebCrypto-backed runtimes.\
-It intentionally excludes niche, blockchain-specific, or key-agreement-only primitives from the core API unless they are needed for a PKI workflow the library explicitly supports.
-
-## Standards status
-
-| Area                                                                                    | Status   |
-| --------------------------------------------------------------------------------------- | -------- |
-| [RFC 5280][rfc5280] path validation                                                     | complete |
-| [RFC 6960][rfc6960] + [9919][rfc9919] OCSP                                              | complete |
-| [RFC 9525][rfc9525] service identity                                                    | complete |
-| [RFC 9618][rfc9618] policy validation                                                   | complete |
-| [RFC 7468][rfc7468] PEM textual encodings                                               | complete |
-| [RFC 8410][rfc8410] + [9295][rfc9295] safe-curve profiles                               | complete |
-| PKCS containers: [RFC 5652][rfc5652], [7292][rfc7292], [8018][rfc8018], [9879][rfc9879] | partial  |
-
-See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
-and the [API reference](https://micro509.kjanat.dev/api/) for the public module surface.
-
-## Imports
-
-Use the root package for most applications:
+The root package exports the usual workflows:
 
 ```ts
 import { createCertificate, parseCertificatePem, verifyCertificateChain } from 'micro509';
 ```
 
-Use domain entrypoints when you want exhaustive advanced types or a narrower
-workflow surface:
+For smaller imports or more specialized types, use domain entrypoints:
 
 ```ts
 import { parseCertificatePem } from 'micro509/x509';
-import { verifyCertificateChain, matchServiceIdentity } from 'micro509/verify';
-import { createOcspRequest, checkCertificateRevocation } from 'micro509/revocation';
+import { verifyCertificateChain } from 'micro509/verify';
+import { checkCertificateRevocation } from 'micro509/revocation';
 import { createPfx } from 'micro509/pkcs';
-import { signData, verifySignature } from 'micro509/crypto';
 import { generateKeyPair } from 'micro509/keys';
-import { pemDecode, pemEncode } from 'micro509/pem';
-import { readDerRoot, decodeDerOid } from 'micro509/der';
-import type { Micro509Error } from 'micro509/result';
 ```
 
-The full stable subpath list lives in the [API reference](https://micro509.kjanat.dev/api/).
+See the [API reference](https://micro509.kjanat.dev/api/) for the full entrypoint list.
 
-## More docs
+## Standards and algorithms
 
-- API reference: [micro509.kjanat.dev/api](https://micro509.kjanat.dev/api/)
-- Standards scope: [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md)
-- PKITS harness: [`test/pkits.test.ts`](./test/pkits.test.ts)
-- Differential harness: [`test/differential.test.ts`](./test/differential.test.ts)
-- Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+micro509 implements core certificate path validation, service identity,
+policy, PEM, safe-curve, OCSP, and PKCS container workflows. The exact claim
+boundary and partial areas are documented in the [PKIX scope](./docs/PKIX-SCOPE.md).
+See [algorithms](https://micro509.kjanat.dev/reference/algorithms) for supported
+curves and signature schemes, [runtimes](https://micro509.kjanat.dev/reference/runtimes)
+for environment support, and [standards](https://micro509.kjanat.dev/reference/standards)
+for implementation coverage.
+
+## Try it in a browser
+
+The browser example is a single HTML file that issues a certificate and parses
+it back with no build step. The Vite example adds TypeScript and a dev server.
+
+- [Browser example][browser-example], [open in StackBlitz][browser-example:stackblitz]
+- [Vite example][vite-example], [open in StackBlitz][vite-example:stackblitz]
+
+## Documentation
+
+- [Recipes: server verification, CSR issuance, PFX import](https://micro509.kjanat.dev/guide/recipes)
+- [Migration from 0.14.0](https://micro509.kjanat.dev/guide/migration)
+
+- [Getting started](https://micro509.kjanat.dev/guide/getting-started)
+- [Certificates and extensions](https://micro509.kjanat.dev/guide/certificates)
+- [Verification and trust inputs](https://micro509.kjanat.dev/guide/verification)
+- [CRL and OCSP revocation](https://micro509.kjanat.dev/guide/revocation)
+- [Keys and encrypted formats](https://micro509.kjanat.dev/guide/keys)
+- [PKCS#7 and PKCS#12](https://micro509.kjanat.dev/guide/pkcs)
+- [Error reference](https://micro509.kjanat.dev/reference/errors)
+- [API reference](https://micro509.kjanat.dev/api/)
+- [Contributing](./CONTRIBUTING.md)
 
 ## OpenSSL builds
 
-This repository also publishes statically linked OpenSSL builds to GHCR: a
-container image and tarballs for Linux, macOS and Windows, each with a build
-provenance attestation. They exist for micro509's own CI, and anyone can use
-them. See [`.github/openssl/README.md`](./.github/openssl/README.md).
+This repository also publishes statically linked OpenSSL builds to GHCR for
+micro509 CI and general use. See [build details](./.github/openssl/README.md).
 
 ## License
 
@@ -301,19 +162,6 @@ them. See [`.github/openssl/README.md`](./.github/openssl/README.md).
 [jsr]: https://jsr.io/@kjanat/micro509
 [socket]: https://socket.dev/npm/package/micro509
 [browser-example]: ./examples/browser/README.md "GitHub"
-[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser "Stackblitz"
+[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser "StackBlitz"
 [vite-example]: ./examples/vite/README.md "GitHub"
-[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite "Stackblitz"
-[a typed error code for every failure mode]: https://micro509.kjanat.dev/guide/verification#error-codes
-[rfc5280]: https://www.rfc-editor.org/rfc/rfc5280.html
-[rfc5652]: https://www.rfc-editor.org/rfc/rfc5652.html
-[rfc6960]: https://www.rfc-editor.org/rfc/rfc6960.html
-[rfc7292]: https://www.rfc-editor.org/rfc/rfc7292.html
-[rfc7468]: https://www.rfc-editor.org/rfc/rfc7468.html
-[rfc8018]: https://www.rfc-editor.org/rfc/rfc8018.html
-[rfc8410]: https://www.rfc-editor.org/rfc/rfc8410.html
-[rfc9295]: https://www.rfc-editor.org/rfc/rfc9295.html
-[rfc9525]: https://www.rfc-editor.org/rfc/rfc9525.html
-[rfc9618]: https://www.rfc-editor.org/rfc/rfc9618.html
-[rfc9879]: https://www.rfc-editor.org/rfc/rfc9879.html
-[rfc9919]: https://www.rfc-editor.org/rfc/rfc9919.html
+[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite "StackBlitz"

@@ -74,6 +74,16 @@ import * as micro509 from '@kjanat/micro509';
 import * as micro509 from 'jsr:@kjanat/micro509';
 ```
 
+## Choose a task
+
+| Task                                | Guide                             |
+| ----------------------------------- | --------------------------------- |
+| Create certificates and CSRs        | [Certificates](./certificates.md) |
+| Verify a chain and service identity | [Verification](./verification.md) |
+| Check CRL or OCSP evidence          | [Revocation](./revocation.md)     |
+| Import, export, or encrypt keys     | [Keys](./keys.md)                 |
+| Work with PFX or PKCS#7             | [PKCS](./pkcs.md)                 |
+
 ## Quick Start
 
 ### Create a self-signed certificate
@@ -345,3 +355,10 @@ import { pemDecode, pemEncode } from 'micro509/pem';
 import { readDerRoot, decodeDerOid } from 'micro509/der';
 import type { Micro509Error } from 'micro509/result';
 ```
+
+## Next steps
+
+Use the [recipes](./recipes.md) to verify existing certificates, issue from a CSR,
+or import a PFX identity. See [runtime support](../reference/runtimes.md) and
+[algorithms](../reference/algorithms.md) when choosing your deployment environment.
+Upgrading from 0.14.0? Follow the [migration guide](./migration.md).

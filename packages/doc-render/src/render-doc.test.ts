@@ -129,6 +129,50 @@ describe('renderModulePages inline links', () => {
 	});
 });
 
+describe('renderModulePages literal types', () => {
+	it('preserves string literals through plain TypeScript signature rendering', () => {
+		const literals = [
+			['dns', '"dns"'],
+			['a"b', String.raw`"a\"b"`],
+			['a\nb', String.raw`"a\nb"`],
+			['a`b', String.raw`"a\u0060b"`],
+			[String.raw`a\|b`, String.raw`"a\\\u007cb"`],
+			[String.raw`a\<b\[c\]`, String.raw`"a\\\u003cb\\\u005bc\\\u005d"`],
+		] as const;
+
+		for (const [value, expected] of literals) {
+			const literalModules = {
+				'file:///workspace/src/example/index.ts': {
+					symbols: [
+						{
+							name: 'Value',
+							declarations: [
+								{
+									location,
+									declarationKind: 'export',
+									kind: 'typeAlias',
+									def: {
+										tsType: {
+											kind: 'literal',
+											repr: value,
+											value: { kind: 'string', string: value },
+										},
+									},
+								},
+							],
+						},
+					],
+				} satisfies ApiModule,
+			} satisfies Record<string, ApiModule>;
+
+			const result = renderModulePages(literalModules, { packageName: 'example' });
+			expect(result.pages[0]?.markdown).toContain(`type Value = ${expected}`);
+			const rendered = result.pages[0]?.markdown.match(/^type Value = (.+)$/m)?.[1];
+			expect(JSON.parse(rendered ?? 'null')).toBe(value);
+		}
+	});
+});
+
 describe('root entrypoint', () => {
 	it('supports directory and flat-file entrypoint layouts', () => {
 		const layoutModules = {

@@ -1,6 +1,9 @@
 /**
- * Canonical revocation domain surface.
- * Owns CRL, OCSP, and revocation orchestration APIs.
+ * Create and validate CRLs and OCSP responses, then check certificate status.
+ *
+ * Use {@linkcode checkCertificateRevocation} with evidence your application
+ * supplies. Create evidence with {@linkcode createCertificateRevocationList}
+ * or {@linkcode createOcspResponse}. Network retrieval belongs to the caller.
  *
  * @module micro509/revocation
  */
