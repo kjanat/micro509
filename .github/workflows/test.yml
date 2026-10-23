@@ -71,7 +71,7 @@ jobs:
   tsc:
     name: TypeScript compiler bridges
     runs-on: *U
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions: { contents: *r }
     steps:
       - *checkout
