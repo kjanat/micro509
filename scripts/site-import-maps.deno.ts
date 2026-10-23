@@ -120,7 +120,9 @@ async function fetchRetrying(url: string, init?: RequestInit): Promise<Response 
 			problem = response;
 			continue;
 		}
-		if (response.status !== 429 && response.status < 500) return response;
+		// esm.sh returns 408 while a requested module is waiting to be built.
+		if (response.status !== 408 && response.status !== 429 && response.status < 500)
+			return response;
 		await response.body?.cancel();
 		problem = `${response.status} ${response.statusText}`;
 	}
