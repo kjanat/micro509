@@ -8,6 +8,7 @@ github.com/klauspost/cpuid/v2 v2.2.10 h1:tBs3QSyvjDyFTq3uoc/9xFpCuOsJQFNPiAhYdw2
 github.com/klauspost/cpuid/v2 v2.2.10/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/microsoft/TypeScript/tsc v0.0.0-20260930060646-9adc871ff47f h1:/aiv8tNkAz5ijCUaIIcK/V9d6IaRKFcG9ufe0Us91/c=
 github.com/microsoft/TypeScript/tsc v0.0.0-20260930060646-9adc871ff47f/go.mod h1:28hWKaTYwRARPm0T9Y0XvdvYpU2HtjONzsMqAdYLucY=
+github.com/microsoft/TypeScript/tsc v0.0.0-20261022190838-a91e93821fea h1:jcYw5+9uA223o9VeAt16loQRfxEvZa5wdCzwWHyIjuk=
 github.com/microsoft/TypeScript/tsc v0.0.0-20261022190838-a91e93821fea/go.mod h1:28hWKaTYwRARPm0T9Y0XvdvYpU2HtjONzsMqAdYLucY=
 github.com/peter-evans/patience v0.3.0 h1:rX0JdJeepqdQl1Sk9c9uvorjYYzL2TfgLX1adqYm9cA=
 github.com/peter-evans/patience v0.3.0/go.mod h1:Kmxu5sY1NmBLFSStvXjX1wS9mIv7wMcP/ubucyMOAu0=

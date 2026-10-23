@@ -93,7 +93,7 @@ func diagnostic(item *ast.Diagnostic, span *sourceSpan) Diagnostic {
 		Children: diagnostics(item.MessageChain()),
 	}
 	if item.File() != nil {
-		d.FileName = item.File().FileName()
+		d.FileName = item.File().FileName().AsString()
 	}
 	return d
 }
@@ -125,27 +125,27 @@ type cachedSourceFile struct {
 
 type cachingHost struct {
 	compiler.CompilerHost
-	files  *collections.SyncMap[tspath.Path, *cachedSourceFile]
-	mapped *collections.SyncMap[tspath.Path, *cachedMappedFiles]
+	files  *collections.SyncMap[tspath.PathKey, *cachedSourceFile]
+	mapped *collections.SyncMap[tspath.PathKey, *cachedMappedFiles]
 }
 
 func (h *cachingHost) GetSourceFile(opts ast.SourceFileParseOptions) *ast.SourceFile {
 	text, ok := h.FS().ReadFile(opts.FileName)
 	if !ok {
-		h.files.Delete(opts.Path)
+		h.files.Delete(opts.PathKey)
 		return nil
 	}
-	if cached, ok := h.files.Load(opts.Path); ok && cached.text == text && cached.file.ParseOptions() == opts {
+	if cached, ok := h.files.Load(opts.PathKey); ok && cached.text == text && cached.file.ParseOptions() == opts {
 		return cached.file
 	}
 	file := parser.ParseSourceFile(opts, text, core.EnsureScriptKindFromFileName(opts.FileName))
-	h.files.Store(opts.Path, &cachedSourceFile{text: text, file: file})
+	h.files.Store(opts.PathKey, &cachedSourceFile{text: text, file: file})
 	return file
 }
 
 type project struct {
-	files   collections.SyncMap[tspath.Path, *cachedSourceFile]
-	mapped  collections.SyncMap[tspath.Path, *cachedMappedFiles]
+	files   collections.SyncMap[tspath.PathKey, *cachedSourceFile]
+	mapped  collections.SyncMap[tspath.PathKey, *cachedMappedFiles]
 	mappers contentmapper.Project
 	program *incremental.Program
 }
@@ -160,13 +160,13 @@ func projectKey(configPath string, req Request) (string, error) {
 	return string(key), err
 }
 
-func parseConfig(configPath string, req Request, host compiler.CompilerHost) (*tsoptions.ParsedCommandLine, []*ast.Diagnostic, error) {
+func parseConfig(configPath string, req Request, host tsoptions.ParseConfigHost) (*tsoptions.ParsedCommandLine, []*ast.Diagnostic, error) {
 	options := &core.CompilerOptions{NoEmit: core.TSTrue}
 	if req.RunExternalCode {
 		options.RunExternalCode = core.TSTrue
 	}
 	if req.Files == nil && len(req.CompilerOptions) == 0 {
-		config, parseErrors := tsoptions.GetParsedCommandLineOfConfigFile(filepath.ToSlash(configPath), options, nil, host, nil)
+		config, parseErrors := tsoptions.GetParsedCommandLineOfConfigFile(tspath.RootedFilePathFromAbsolute(configPath), options, nil, host, nil)
 		return config, parseErrors, nil
 	}
 	overlay := map[string]any{"extends": filepath.ToSlash(configPath)}
@@ -181,12 +181,12 @@ func parseConfig(configPath string, req Request, host compiler.CompilerHost) (*t
 	if err != nil {
 		return nil, nil, err
 	}
-	dir := filepath.ToSlash(filepath.Dir(configPath))
-	name := tspath.CombinePaths(dir, "tsconfig.bridge.json")
+	dir := tspath.RootedDirectoryPathFromAbsolute(filepath.Dir(configPath))
+	name := dir.ResolveFile("tsconfig.bridge.json")
 	source := tsoptions.NewTsconfigSourceFileFromFilePath(
-		name, tspath.ToPath(name, dir, host.FS().UseCaseSensitiveFileNames()), string(text),
+		name, host.FS().CaseSensitivity().PathKey(name.AsPath()), string(text),
 	)
-	return tsoptions.ParseJsonSourceFileConfigFileContent(source, host, dir, options, nil, name, nil, nil), nil, nil
+	return tsoptions.ParseJsonSourceFileConfigFileContent(source, host, dir, options, nil, nil, nil), nil, nil
 }
 
 func loadProgram(req Request) (*incremental.Program, []*ast.Diagnostic, error) {
@@ -206,22 +206,21 @@ func loadProgram(req Request) (*incremental.Program, []*ast.Diagnostic, error) {
 		state = &project{}
 		projects[key] = state
 	}
-	dir := filepath.Dir(configPath)
 	fs := bundled.WrapFS(osvfs.FS())
-	config, parseErrors, err := parseConfig(configPath, req, compiler.NewCompilerHost(dir, fs, bundled.LibPath(), nil, nil, nil))
+	config, parseErrors, err := parseConfig(configPath, req, tsoptions.NewDefaultParseConfigHost(fs))
 	if err != nil || config == nil || len(parseErrors) != 0 {
 		return nil, parseErrors, err
 	}
 	var mappers contentmapper.Project
 	if len(config.ContentMappers()) != 0 {
 		mappers = mapperHost().Project(contentmapper.ProjectSpec{
-			ConfigFileName:  filepath.ToSlash(configPath),
+			ConfigFileName:  tspath.RootedFilePathFromAbsolute(configPath),
 			Mappers:         config.ContentMappers(),
 			CompilerOptions: config.CompilerOptions(),
 		})
 	}
 	host := &cachingHost{
-		CompilerHost: compiler.NewCompilerHost(dir, fs, bundled.LibPath(), nil, nil, mappers),
+		CompilerHost: compiler.NewCompilerHost(fs, bundled.LibPath(), nil, nil, mappers),
 		files:        &state.files,
 		mapped:       &state.mapped,
 	}
@@ -251,7 +250,7 @@ func collectCodeUnions(ctx context.Context, program *compiler.Program, req Reque
 		if err != nil {
 			return nil, err
 		}
-		source := program.GetSourceFile(filepath.ToSlash(absolute))
+		source := program.GetSourceFile(tspath.RootedFilePathFromAbsolute(absolute))
 		if source == nil {
 			return nil, fmt.Errorf("entrypoint is not in the project: %s", entry)
 		}
@@ -260,12 +259,12 @@ func collectCodeUnions(ctx context.Context, program *compiler.Program, req Reque
 			return nil, fmt.Errorf("entrypoint is not a module: %s", entry)
 		}
 		for _, exported := range c.GetExportsOfModule(module) {
-			name := exported.Name
+			name := exported.Name()
 			if !strings.HasSuffix(name, "ErrorCode") && !strings.HasSuffix(name, "ReasonCode") {
 				continue
 			}
 			symbol := exported
-			if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+			if symbol.Flags()&ast.SymbolFlagsAlias != 0 {
 				symbol = c.GetAliasedSymbol(symbol)
 			}
 			declared := c.GetDeclaredTypeOfSymbol(symbol)

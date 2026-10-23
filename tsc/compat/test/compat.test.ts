@@ -126,3 +126,29 @@ test('snapshots slice the text they were made from', () => {
 	assert.equal(snapshot.getLength(), 6);
 	assert.equal(snapshot.getChangeRange(snapshot), undefined);
 });
+
+test('uses the supplied config name for jsconfig defaults and relative paths', () => {
+	const { host: configHost } = host({});
+	const source = ts.readJsonConfigFile('/project/source.json', () => '{ "files": ["app.js"] }');
+	const parsed = ts.parseJsonSourceFileConfigFileContent(
+		source,
+		configHost,
+		'/project',
+		{},
+		'nested/jsconfig.json',
+	);
+	assert.equal(parsed.options.allowJs, true);
+	assert.deepEqual(parsed.fileNames, ['/project/nested/app.js']);
+});
+
+test('decodes source-phase imports with the compiler-matched AST decoder', () => {
+	const file = ts.createSourceFile(
+		'/project/source.ts',
+		'import source wasm from "./module.wasm";',
+		99,
+	);
+	const [statement] = file.statements;
+	assert.ok(statement !== undefined && ts.isImportDeclaration(statement));
+	assert.equal(statement.importClause?.phaseModifier, ts.SyntaxKind.SourceKeyword);
+	assert.deepEqual(file.parseDiagnostics, []);
+});
