@@ -200,7 +200,7 @@
       "wrangler": "^4.144.0",
     },
     "deno": {
-      "@deno/doc": "npm:@jsr/deno__doc@0.207.0",
+      "@deno/doc": "npm:@jsr/deno__doc@0.210.0",
       "@types/deno": "^2.7.0",
       "deno": "^2.9.6",
       "importmapify": "^1.7.0",
@@ -292,7 +292,7 @@
 
     "@deno/darwin-x64": ["@deno/darwin-x64@2.9.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-tPi3CWPRdjW1MaWlvWjORE7Ass5SADdWdj1BF1Q1PEdzi+5u/mC5YhmZzniMiPr81PpaFeqjXaLAsfb8lFsZ0Q=="],
 
-    "@deno/doc": ["@jsr/deno__doc@0.207.0", "https://npm.jsr.io/~/11/@jsr/deno__doc/0.207.0.tgz", { "dependencies": { "@jsr/deno__cache-dir": "^0.25.0", "@jsr/deno__graph": "^0.100" } }, "sha512-cn+trRnGiPqFN3wjLym71whbpC6XtZzJ1LD5ABYUfZUGo1mVw4BHBjqsQM+73QqteW+KMM26ZaDaQNxXh+xDJw=="],
+    "@deno/doc": ["@jsr/deno__doc@0.210.0", "https://npm.jsr.io/~/11/@jsr/deno__doc/0.210.0.tgz", { "dependencies": { "@jsr/deno__cache-dir": "^0.25.0", "@jsr/deno__graph": "^0.100" } }, "sha512-dCBiIoVOAcFu4av24m3E+/GMwZWoeY7k8XbwTrysQydT5nSyFRZzTVI01/xYN8kUfjdNzm5uU5P+nunEJLwBXQ=="],
 
     "@deno/linux-arm64-glibc": ["@deno/linux-arm64-glibc@2.9.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-poqhoH9B3nYloigEMPT5t8HY+wBeiuea1An5Q7fqgJzP0SYmWsoS/oUnWO/pEiA4ofzIBy1Elt/in58xKtxEoQ=="],
 
