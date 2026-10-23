@@ -166,12 +166,13 @@ A received complete CRL without `nextUpdate` now fails with `stale_crl` unless
 you supply a maximum age for its `thisUpdate`. Choose the age according to
 your revocation policy, using the option for the API you call:
 
-| API                                                                         | Option                                                       |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `validateCertificateRevocationList`, `checkCertificateRevocationAgainstCrl` | `maxAgeMs`                                                   |
-| `checkCertificateRevocation`                                                | `crlMaxAgeMs`                                                |
-| `checkChainRevocation`, `verifyCertificateChain`                            | `policy.crlMaxAgeMs`, `revocation.crlMaxAgeMs`, respectively |
-| `validateOcspResponse` when checking a delegated responder's CRL            | `responderRevocationCrlMaxAgeMs`                             |
+| API                                                                         | Option                           |
+| --------------------------------------------------------------------------- | -------------------------------- |
+| `validateCertificateRevocationList`, `checkCertificateRevocationAgainstCrl` | `maxAgeMs`                       |
+| `checkCertificateRevocation`                                                | `crlMaxAgeMs`                    |
+| `checkChainRevocation`                                                      | `policy.crlMaxAgeMs`             |
+| `verifyCertificateChain`                                                    | `revocation.policy.crlMaxAgeMs`  |
+| `validateOcspResponse` when checking a delegated responder's CRL            | `responderRevocationCrlMaxAgeMs` |
 
 For example, `24 * 60 * 60 * 1000` bounds the age to one day. An expired
 `nextUpdate` still fails even when an age bound is supplied. Delta CRLs must
