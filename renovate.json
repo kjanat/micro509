@@ -6,6 +6,11 @@
 	},
 	"packageRules": [
 		{
+			"matchDatasources": ["npm"],
+			"matchPackageNames": ["@jsr/**"],
+			"registryUrls": ["https://npm.jsr.io"]
+		},
+		{
 			"matchPackageNames": [
 				"dprint",
 				"@dprint/**",
