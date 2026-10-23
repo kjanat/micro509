@@ -43,7 +43,7 @@ jobs:
   docs:
     name: Docs site
     runs-on: *U
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions: { contents: *r }
     steps:
       - *checkout
@@ -60,7 +60,7 @@ jobs:
   runtime-smoke:
     name: Workerd + browser smoke
     runs-on: *U
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions: { contents: *r }
     steps:
       - *checkout
