@@ -4,12 +4,12 @@
 Release checklist — every box, every release:
 - [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
 - [ ] Bump version in package.json AND jsr.json
-- [ ] Bump the `micro509` range in examples/vite/package.json and examples/browser/index.html's `<script type="importmap">`
+- [ ] Bump the version in examples/browser/index.html's import map. examples/vite/package.json uses `latest`
 - [ ] Run `bun install` after the example bump so bun.lock matches; CI installs with a frozen lockfile
 - [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
-- [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z - summary"
-- [ ] Push master + tag, gh release create with milestone notes
-- [ ] Verify npm dist-tag latest + JSR after the publish workflow
+- [ ] Verify the signature on the merged release commit, then create its signed release tag
+- [ ] Push the tag to trigger the Publish workflow
+- [ ] Verify npm, JSR, the GitHub release and the documentation deployment
 -->
 
 All notable changes to this project are documented in this file.
@@ -18,6 +18,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.15.0] - 2026-10-23
+
+Security fixes for revocation decisions, name constraints and service identity,
+with bounded KDF and certificate-path work on untrusted input. Revocation checks
+examine all applicable OCSP responses and authenticate delta CRLs before selecting
+evidence. Trusted OCSP responders are scoped to the CA they are authorized to serve.
+
+This release also adds verification with existing CryptoKeys, typed UPN and Kerberos
+names, IDNA2008 processing, PBMAC1 PFX MACs and broader browser coverage for the docs.
+Certificate issuance inputs, CRL builder fields, parsed numeric values and revocation
+results have breaking changes. See the [0.14 → 0.15 migration guide](https://micro509.kjanat.dev/guide/migration).
 
 ### Added
 
@@ -703,14 +715,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   imports and 18,852 verify calls). Dead ends are now memoized per certificate
   and CA count, and each certificate-to-key signature check runs once per
   search.
-- A CRL without `nextUpdate` validates at any later time by default, so a
-  replayed CRL from before a revocation stays usable. [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5]
-  requires conforming issuers to include `nextUpdate` and does not specify how
-  a client handles a CRL without it, and [§3.3][rfc5280-section-3.3] leaves the required recency of
-  revocation data to local policy. The new `maxAgeMs`, `crlMaxAgeMs` and
-  `responderRevocationCrlMaxAgeMs` options reject a CRL whose `thisUpdate` is
-  older than the bound. The CRL APIs report `stale_crl`, and the chain reports
-  `crl_expired`. No bound is set by default.
 - The dprint TOML formatter installed `tombi` unversioned and globally from
   npm on every fresh setup, so the registry chose the code that ran. `tombi`
   is now a catalog-pinned devDependency; the exec plugin runs
@@ -1897,7 +1901,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/kjanat/micro509/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kjanat/micro509/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kjanat/micro509/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kjanat/micro509/compare/v0.11.0...v0.12.0
