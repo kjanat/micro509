@@ -140,54 +140,77 @@ When validating a path built against a bare trust anchor, pass the
 distrust list is nonempty, omitting that anchor throws `RangeError` because the
 bare anchor's public key must also be checked.
 
-This LiveCode example creates a root and leaf, fingerprints the root key, then
-uses that fingerprint as caller-supplied distrust policy:
+### eMudhra: one compromised key, two issuer paths
+
+In October 2026, eight eMudhra intermediate CA keys were found to be
+compromised. The same keys also appeared in Sectigo cross-certificates.
+[The published incident evidence](https://emudhra.we-have-a-problem.com/)
+includes both paths. Removing the eMudhra root alone does not block the path
+through Sectigo's AAA Certificate Services root.
+
+Run this example against the actual DV G3B certificates. It loads copies
+hosted with these docs, uses a fixed verification time, and prints the
+intermediate's fingerprint and the verification result for each issuer path.
+The distrust list contains the published compromised key hash.
 
 <LiveCode>
 
 ```ts
 import {
-  createCertificate,
-  createSelfSignedCertificate,
-  generateKeyPair,
+  parseCertificatesFromSource,
   subjectPublicKeyInfoFingerprint,
   verifyCertificateChain,
 } from 'micro509';
 
-const root = await createSelfSignedCertificate({
-  subject: { commonName: 'Demo Root' },
-  extensions: {
-    basicConstraints: { ca: true },
-    keyUsage: ['keyCertSign', 'cRLSign'],
-  },
-});
-const leafKeys = await generateKeyPair();
-const leaf = await createCertificate({
-  issuer: { commonName: 'Demo Root' },
-  subject: { commonName: 'api.example.com' },
-  publicKey: leafKeys.publicKey,
-  signerPrivateKey: root.keyPair.privateKey,
-  issuerCertificate: root.certificate.pem,
-});
+const fixtures = new URL('/fixtures/emudhra/', window.location.href);
+async function loadFixture(name: string) {
+  const response = await fetch(new URL(name, fixtures));
+  if (!response.ok) throw new Error(`Fixture download failed: ${name}`);
+  return response;
+}
+const aaaRoot = new Uint8Array(
+  await (await loadFixture('aaa-certificate-services-root.crt')).arrayBuffer(),
+);
+const compromisedKey =
+  'ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105';
 
-const fingerprint = await subjectPublicKeyInfoFingerprint(root.certificate.pem);
-console.log(fingerprint);
+for (const host of [
+  'dv-g3b-emudhra.we-have-a-problem.com',
+  'dv-g3b-aaa-emudhra.we-have-a-problem.com',
+]) {
+  const pem = await (await loadFixture(`${host}.pem`)).text();
+  const [leaf, intermediate, embeddedRoot] = parseCertificatesFromSource(pem);
+  if (!leaf || !intermediate) throw new Error('Incomplete incident fixture');
 
-const result = await verifyCertificateChain({
-  leaf: leaf.pem,
-  roots: [root.certificate.pem],
-  distrustedSpkiSha256: [fingerprint.hex],
-});
-console.log(result);
+  const fingerprint = await subjectPublicKeyInfoFingerprint(intermediate);
+  console.log(host, { intermediate: intermediate.subject.values, fingerprint });
+  const input = {
+    leaf: leaf.der,
+    intermediates: [intermediate.der],
+    roots: [embeddedRoot?.der ?? aaaRoot],
+    at: new Date('2026-10-23T20:00:00Z'),
+  };
+  const baseline = await verifyCertificateChain(input);
+  console.log('Without distrust or revocation evidence:', baseline.ok);
+  const blocked = await verifyCertificateChain({
+    ...input,
+    distrustedSpkiSha256: [compromisedKey],
+  });
+  console.log('With the compromised key blocked:', blocked);
+}
 ```
 
 </LiveCode>
 
-The first log is the returned object with the SHA-256 digest in `bytes`,
-lowercase `hex`, and colon-separated `colonHex`. The second log is a failed
-result with `error.code: 'public_key_distrusted'` and `error.details.actual`
-equal to `fingerprint.hex`. Generated key material makes the digest differ
-between runs.
+Both baseline paths validate with the supplied roots at that time. Both then
+fail with `error.code: 'public_key_distrusted'`, `error.index: 1`, and the same
+SPKI hash in `error.details.actual`. The intermediate certificates have
+different issuers but carry the same compromised public key.
+
+The baseline omits revocation evidence to demonstrate why signature and path
+validation alone do not reject this compromised key. The intermediates were
+also revoked. The repository's [offline incident tests](https://github.com/kjanat/micro509/blob/master/test/emudhra.test.ts)
+exercise their issuer CRLs, with [fixture provenance and hashes](https://github.com/kjanat/micro509/blob/master/test/fixtures/emudhra/README.md).
 
 ## Verification purposes
 

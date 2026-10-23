@@ -52,3 +52,7 @@ issuer CRLs identify each included intermediate as revoked. The suite checks
 revocation on the intermediate-only path and on the full leaf chain, where the
 revoked intermediate must be reported at index 1 despite missing leaf evidence.
 Tests load only local fixture files and make no network requests.
+
+The verification guide serves byte-identical copies of the two DV G3B chain
+files and the AAA Certificate Services root from `site/assets/fixtures/emudhra/`.
+Its LiveCode example uses those local assets at the same fixed evaluation time.
