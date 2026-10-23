@@ -111,7 +111,7 @@ jobs:
     permissions: &WritePkgAttestIdToken { contents: read, packages: write, id-token: write, attestations: write }
     strategy: { fail-fast: true, matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" } }
     steps:
-      - &SafeCheckout { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
+      - &SafeCheckout { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } }
       - parallel:
           - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
           - { uses: &Oras oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 } # v2.0.2
@@ -191,7 +191,7 @@ jobs:
           subject-digest: *Digest
           sbom-path: ${{ env.spdx_build }}
           create-storage-record: false
-      - uses: &Upload actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: &Upload actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: openssl-${{ matrix.release.version }}-linux-x64
           path: ${{ runner.temp }}/openssl-${{ matrix.release.version }}-linux-x64.tar.gz
@@ -331,7 +331,7 @@ jobs:
     steps:
       - parallel:
           - if: &Release matrix.release
-            uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+            uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
             with:
               pattern: openssl-${{ matrix.release.version }}-*
               merge-multiple: true

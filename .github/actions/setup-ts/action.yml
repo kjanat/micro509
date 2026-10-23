@@ -28,10 +28,10 @@ runs:
     - name: Setup runner-run
       id: setup-runner
       if: ${{ inputs.install-runner == 'true' }}
-      uses: kjanat/runner@ad30f34c7352d89884b6d03febd9b16b4807ed56 # v0.27.1
+      uses: kjanat/runner@b32ea932a1813ae0be44e755c16df9f9f5ca86a4 # v0.28.0
 
     - name: Setup dprint
-      uses: kjanat/dprint-check@2a71b9c51a4bd9935243a16de38fa830dbaa30be # v3
+      uses: kjanat/dprint-check@29c42153a7346f4d7315883ff7722cfe22cd510c # v3.1.0
       with: { install-only: true }
 
     - name: Setup Deno
@@ -43,7 +43,7 @@ runs:
     - name: Setup Node
       id: setup-node
       if: ${{ inputs.install-node == 'true' }}
-      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ case(inputs.node-version != 'file', inputs.node-version, '') }}
         node-version-file: ${{ case(inputs.node-version == 'file','.node-version', '') }}

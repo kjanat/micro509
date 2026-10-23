@@ -13,7 +13,7 @@ jobs:
     cancel-timeout-minutes: 1
     permissions: { contents: read }
     steps:
-      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
+      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } }
       - parallel:
           - { uses: $/.github/actions/setup-ts, with: { install-bun: true, install-node: true } }
           - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
