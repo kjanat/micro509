@@ -95,7 +95,10 @@ export type {
 	CertificateFingerprintAlgorithm,
 	CertificateFingerprintSource,
 } from '#micro509/x509/fingerprint';
-export { certificateFingerprint } from '#micro509/x509/fingerprint';
+export {
+	certificateFingerprint,
+	subjectPublicKeyInfoFingerprint,
+} from '#micro509/x509/fingerprint';
 
 export type {
 	NameAttribute,

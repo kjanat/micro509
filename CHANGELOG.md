@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `subjectPublicKeyInfoFingerprint` returns the SHA-256 fingerprint of a
+  certificate's DER SubjectPublicKeyInfo as bytes, lowercase hex and colon
+  hex. `distrustedSpkiSha256` on path verification and validation profiles
+  rejects caller-listed keys, including cross-signs and trust anchors, with
+  `public_key_distrusted`. The caller supplies and updates the list. No bundled
+  blocklist or network lookup is used.
+
+### Fixed
+
+- Chain verification reports the certificate index for revoked and indeterminate
+  revocation failures, including revoked intermediates.
+
 ## [0.15.0] - 2026-10-23
 
 Security fixes for revocation decisions, name constraints and service identity,

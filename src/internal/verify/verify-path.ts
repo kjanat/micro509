@@ -47,6 +47,8 @@ export interface InternalBuildResult {
 	 * anchor verified the terminal certificate, which then stays a path cert.
 	 */
 	readonly anchorCertificateInChain?: boolean;
+	/** Bare trust anchor that completed the path. */
+	readonly trustAnchor?: TrustAnchor;
 	/** Chain index where no issuer candidate existed, when the search dead-ended. */
 	readonly missingIssuerAt?: number;
 	/** Best failure encountered during the search, for diagnostic reporting. */
@@ -57,6 +59,8 @@ export interface InternalBuildResult {
 interface TrustAnchorMatchResult {
 	/** `true` if a trust anchor verified the certificate's signature. */
 	readonly matched: boolean;
+	/** Selected bare trust anchor on success. */
+	readonly anchor?: TrustAnchor;
 	/** Failure to report when matching was attempted but signature verification failed. */
 	readonly failure?: VerifyChainFailure;
 }
@@ -303,7 +307,9 @@ export async function buildChainInternal(
 	callbacks: VerifyPathCallbacks,
 	signatureChecks: VerifyPathSignatureChecks = DEFAULT_SIGNATURE_CHECKS,
 	maxIssuerChecks: number = DEFAULT_MAX_PATH_BUILDING_CHECKS,
+	distrust: (spki: Uint8Array) => Promise<string | undefined> = () => Promise.resolve(undefined),
 ): Promise<InternalBuildResult> {
+	let selectedAnchor: TrustAnchor | undefined;
 	const candidates = [...intermediates, ...roots];
 	const subjectIndex = new Map<string, ParsedCertificate[]>();
 	const order = new Map<string, number>();
@@ -344,6 +350,7 @@ export async function buildChainInternal(
 		return {
 			chain: success,
 			foundTrustedRoot: true,
+			...(selectedAnchor !== undefined && { trustAnchor: selectedAnchor }),
 			anchorCertificateInChain:
 				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
 		};
@@ -389,6 +396,22 @@ export async function buildChainInternal(
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		if (budget.exhausted) return undefined;
+		const blockedHash = await distrust(current.subjectPublicKeyInfoDer);
+		if (blockedHash !== undefined) {
+			recordFailure(
+				callbacks.failure(
+					'public_key_distrusted',
+					'certificate public key is explicitly distrusted',
+					path.length - 1,
+					callbacks.detail({
+						subjectCommonName: current.subject.values.commonName,
+						actual: blockedHash,
+					}),
+				),
+				path,
+			);
+			return undefined;
+		}
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
@@ -399,12 +422,14 @@ export async function buildChainInternal(
 			path.length - 1,
 			verifyAnchorOnce,
 			chargeBudget,
+			distrust,
 		);
 		if (budget.exhausted) return undefined;
 		if (matchedAnchor.failure !== undefined) {
 			recordFailure(matchedAnchor.failure, path);
 		}
 		if (matchedAnchor.matched) {
+			selectedAnchor = matchedAnchor.anchor;
 			return path;
 		}
 		if (path.length > maxDepth) {
@@ -802,6 +827,7 @@ async function matchTrustAnchor(
 	index: number,
 	verifyAnchor: typeof verifyTrustAnchorSignature,
 	charge: () => boolean,
+	distrust: (spki: Uint8Array) => Promise<string | undefined>,
 ): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
@@ -815,20 +841,28 @@ async function matchTrustAnchor(
 		// are non-reflexive and prepared/tagged namespaces can collide), so confirm
 		// the anchor's subject actually equals the certificate's issuer.
 		if (!compareDistinguishedNames(certificate.issuer, anchor.subject)) continue;
+		const blockedHash = await distrust(anchor.subjectPublicKeyInfoDer);
+		if (blockedHash !== undefined) {
+			firstFailure = callbacks.failure(
+				'public_key_distrusted',
+				'bare trust anchor public key is explicitly distrusted',
+				undefined,
+				callbacks.detail({ actual: blockedHash }),
+			);
+			continue;
+		}
 		const verified = await verifyAnchor(certificate, anchor);
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
-			if (firstFailure === undefined) {
-				firstFailure = callbacks.failure(
-					verified.code,
-					verified.reason,
-					index,
-					callbacks.detail({
-						subjectCommonName: certificate.subject.values.commonName,
-						actual: verified.reason,
-					}),
-				);
-			}
+			firstFailure ??= callbacks.failure(
+				verified.code,
+				verified.reason,
+				index,
+				callbacks.detail({
+					subjectCommonName: certificate.subject.values.commonName,
+					actual: verified.reason,
+				}),
+			);
 			continue;
 		}
 		if (!verified.valid) {
@@ -845,7 +879,7 @@ async function matchTrustAnchor(
 			}
 			continue;
 		}
-		return { matched: true };
+		return { matched: true, anchor };
 	}
 	return firstFailure !== undefined
 		? { matched: false, failure: firstFailure }

@@ -559,4 +559,5 @@ export {
 	relativeDistinguishedNameToString,
 	subjectAltNameLabel,
 	subjectAltNameToString,
+	subjectPublicKeyInfoFingerprint,
 } from '#micro509/x509';

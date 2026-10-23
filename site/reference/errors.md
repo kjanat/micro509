@@ -147,6 +147,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 `extended_key_usage_invalid`, `initial_policy_set_not_satisfied`,
 `intermediate_eku_constraint`, `issuer_not_found`, `key_cert_sign_required`,
 `name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,
+`public_key_distrusted`,
 `path_length_exceeded`,
 `path_building_limit_exceeded`,
 `revocation_indeterminate`, `self_signed_leaf_not_allowed`, `signature_invalid`,

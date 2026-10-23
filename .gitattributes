@@ -7,3 +7,8 @@ site/api/**/index.md            diff   -linguist-generated
 test/fixtures/pkits/manifest.ts         linguist-generated
 test/fixtures/pkits/nist/**/*           linguist-vendored
 *.ts                            diff    linguist-language=TypeScript
+
+# Public incident evidence. The authored provenance README stays reviewable.
+test/fixtures/emudhra/** -diff linguist-vendored
+test/fixtures/emudhra/README.md diff -linguist-vendored
+site/assets/fixtures/emudhra/** -diff linguist-vendored

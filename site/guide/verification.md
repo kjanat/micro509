@@ -113,6 +113,105 @@ At index: ${result.error.index}`);
 
 </details>
 
+## Distrust a public key
+
+`subjectPublicKeyInfoFingerprint(cert)` returns SHA-256 over the certificate's
+DER SubjectPublicKeyInfo as `{ bytes, hex, colonHex }`. Supply one or more
+64-digit hexadecimal SHA-256 values through `distrustedSpkiSha256` to
+`verifyCertificateChain`, `buildCandidatePath`, `validateCandidatePath`, or
+any `validateFor*` profile. Values are case-insensitive and must not contain
+colons. The default list is empty. Invalid values throw `RangeError`.
+
+The check applies to every certificate key in candidate paths, including
+cross-signs and roots, and to bare trust anchors. Path building can try another
+unblocked issuer candidate. A blocked key fails with
+`public_key_distrusted`; `details.actual` is its lowercase SHA-256 hex value.
+On an error, there is no returned chain. `error.index` identifies the
+certificate's position in the candidate path. A bare trust anchor has no index.
+micro509 ships no blocklist and makes no network lookup. The caller supplies
+and updates the list.
+
+This is application trust policy. [RFC 5280 §6.2](https://www.rfc-editor.org/rfc/rfc5280.html#section-6.2)
+allows additional restrictions on acceptable certification paths.
+
+When validating a path built against a bare trust anchor, pass the
+`buildCandidatePath` result's `value.trustAnchor` and set
+`anchorCertificateInChain: false` on `validateCandidatePath`. When the
+distrust list is nonempty, omitting that anchor throws `RangeError` because the
+bare anchor's public key must also be checked.
+
+### eMudhra: one compromised key, two issuer paths
+
+In October 2026, eight eMudhra intermediate CA keys were found to be
+compromised. The same keys also appeared in Sectigo cross-certificates.
+[The published incident evidence](https://emudhra.we-have-a-problem.com/)
+includes both paths. Removing the eMudhra root alone does not block the path
+through Sectigo's AAA Certificate Services root.
+
+Run this example against the actual DV G3B certificates. It loads copies
+hosted with these docs, uses a fixed verification time, and prints the
+intermediate's fingerprint and the verification result for each issuer path.
+The distrust list contains the published compromised key hash.
+
+<LiveCode data-output="deterministic">
+
+```ts
+import {
+  parseCertificatesFromSource,
+  subjectPublicKeyInfoFingerprint,
+  verifyCertificateChain,
+} from 'micro509';
+
+const fixtures = new URL('/fixtures/emudhra/', import.meta.url);
+async function loadFixture(name: string) {
+  const response = await fetch(new URL(name, fixtures));
+  if (!response.ok) throw new Error(`Fixture download failed: ${name}`);
+  return response;
+}
+const aaaRoot = new Uint8Array(
+  await (await loadFixture('aaa-certificate-services-root.crt')).arrayBuffer(),
+);
+const compromisedKey =
+  'ebed6475c2c2d80fcb199f3fe8dd6e6b3ce60b77eb15d4e42c3dec0c6f5b5105';
+
+for (const host of [
+  'dv-g3b-emudhra.we-have-a-problem.com',
+  'dv-g3b-aaa-emudhra.we-have-a-problem.com',
+]) {
+  const pem = await (await loadFixture(`${host}.pem`)).text();
+  const [leaf, intermediate, embeddedRoot] = parseCertificatesFromSource(pem);
+  if (!leaf || !intermediate) throw new Error('Incomplete incident fixture');
+
+  const fingerprint = await subjectPublicKeyInfoFingerprint(intermediate);
+  console.log(host, { intermediate: intermediate.subject.values, fingerprint });
+  const input = {
+    leaf: leaf.der,
+    intermediates: [intermediate.der],
+    roots: [embeddedRoot?.der ?? aaaRoot],
+    at: new Date('2026-10-23T20:00:00Z'),
+  };
+  const baseline = await verifyCertificateChain(input);
+  console.log('Without distrust or revocation evidence:', baseline.ok);
+  const blocked = await verifyCertificateChain({
+    ...input,
+    distrustedSpkiSha256: [compromisedKey],
+  });
+  console.log('With the compromised key blocked:', blocked);
+}
+```
+
+</LiveCode>
+
+Both baseline paths validate with the supplied roots at that time. Both then
+fail with `error.code: 'public_key_distrusted'`, `error.index: 1`, and the same
+SPKI hash in `error.details.actual`. The intermediate certificates have
+different issuers but carry the same compromised public key.
+
+The baseline omits revocation evidence to demonstrate why signature and path
+validation alone do not reject this compromised key. The intermediates were
+also revoked. The repository's [offline incident tests](https://github.com/kjanat/micro509/blob/master/test/emudhra.test.ts)
+exercise their issuer CRLs, with [fixture provenance and hashes](https://github.com/kjanat/micro509/blob/master/test/fixtures/emudhra/README.md).
+
 ## Verification purposes
 
 Four built-in validation profiles. `serverAuth`,
@@ -328,6 +427,7 @@ Every other error-code union in the library is tabled in the
 | `unsupported_signature_algorithm_parameters` | Unknown signature algorithm                    |
 | `ec_domain_parameters_missing`               | EC public key without a named curve            |
 | `certificate_revoked`                        | Revocation evidence confirms revocation        |
+| `public_key_distrusted`                      | Certificate or anchor public key is distrusted |
 | `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
 | `unsupported`                                | Certificate input micro509 does not decode     |
 | `limit_exceeded`                             | Certificate input exceeds a decoding limit     |

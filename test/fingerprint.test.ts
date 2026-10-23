@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { generateKeyPair } from '#micro509';
+import { generateKeyPair, verifyCertificateChain } from '#micro509';
 import type { CertificateFingerprintAlgorithm } from '#micro509/x509';
 import {
 	certificateFingerprint,
+	createCertificate,
 	createSelfSignedCertificate,
 	parseCertificateDerOrThrow,
 	parseCertificatePemOrThrow,
+	subjectPublicKeyInfoFingerprint,
 } from '#micro509/x509';
-import { differentialEnabled, openSslAvailable } from '#test/helpers';
+import {
+	differentialEnabled,
+	expectRejectedWith,
+	issueChain,
+	openSslAvailable,
+} from '#test/helpers';
 import { fingerprintCertificateWithOpenSsl } from '#test/oracles/openssl';
 
 const ALGORITHMS: CertificateFingerprintAlgorithm[] = ['SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'];
@@ -111,6 +118,121 @@ describe('certificateFingerprint', () => {
 		]);
 
 		expect(tampered.hex).toBe(original.hex);
+	});
+});
+
+describe('subjectPublicKeyInfoFingerprint', () => {
+	it('hashes the complete SPKI and gives the same value to cross-signed certificates', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const issuers = await Promise.all([
+			createSelfSignedCertificate({ subject: { commonName: 'Issuer One' } }),
+			createSelfSignedCertificate({ subject: { commonName: 'Issuer Two' } }),
+		]);
+		const createIssued = (issuer: (typeof issuers)[number], commonName: string) =>
+			createCertificate({
+				issuer: { commonName },
+				subject: { commonName: 'same-key.example' },
+				publicKey: keyPair.publicKey,
+				signerPrivateKey: issuer.keyPair.privateKey,
+				issuerCertificate: issuer.certificate.der,
+				extensions: { keyUsage: ['digitalSignature'] },
+			});
+		const [one, two] = await Promise.all(
+			issuers.map((issuer, index) => createIssued(issuer, `Issuer ${index === 0 ? 'One' : 'Two'}`)),
+		);
+		if (one === undefined || two === undefined)
+			throw new Error('expected two cross-signed certificates');
+		const parsed = parseCertificateDerOrThrow(one.der);
+		const result = await subjectPublicKeyInfoFingerprint(one.pem);
+		const expected = createHash('sha256').update(parsed.subjectPublicKeyInfoDer).digest();
+		const [sameSpki, firstCertificate, secondCertificate] = await Promise.all([
+			subjectPublicKeyInfoFingerprint(two.der),
+			certificateFingerprint(one.der),
+			certificateFingerprint(two.der),
+		]);
+		expect(result.bytes).toEqual(new Uint8Array(expected));
+		expect(sameSpki.hex).toBe(result.hex);
+		expect(firstCertificate.hex).not.toBe(secondCertificate.hex);
+	});
+
+	it('accepts parsed certificates and rejects invalid sources', async () => {
+		const { certificate } = await sampleCertificate();
+		const parsed = parseCertificatePemOrThrow(certificate.pem);
+		const [pem, der, parsedResult] = await Promise.all([
+			subjectPublicKeyInfoFingerprint(certificate.pem),
+			subjectPublicKeyInfoFingerprint(certificate.der),
+			subjectPublicKeyInfoFingerprint(parsed),
+		]);
+		expect(der.hex).toBe(pem.hex);
+		expect(parsedResult.hex).toBe(pem.hex);
+		await expectRejectedWith(subjectPublicKeyInfoFingerprint('invalid'), Error);
+	});
+
+	it('fingerprints X25519 SPKI without importing the subject key', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'X25519 Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const x25519 = await globalThis.crypto.subtle.generateKey({ name: 'X25519' }, true, [
+			'deriveBits',
+		]);
+		const certificate = await createCertificate({
+			issuer: { commonName: 'X25519 Issuer' },
+			subject: { commonName: 'x25519.example' },
+			publicKey: x25519.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerCertificate: ca.certificate.der,
+			extensions: { keyUsage: ['keyAgreement'] },
+		});
+		const fingerprint = await subjectPublicKeyInfoFingerprint(certificate.der);
+		const verified = await verifyCertificateChain({
+			leaf: certificate.der,
+			roots: [ca.certificate.der],
+		});
+		expect(fingerprint.bytes).toHaveLength(32);
+		expect(fingerprint.colonHex).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+		expect(verified.ok).toBe(true);
+	});
+
+	it('hashes reparsed DER when the parsed SPKI field is caller-mutated', async () => {
+		const { certificate } = await sampleCertificate();
+		const parsed = parseCertificateDerOrThrow(certificate.der);
+		const mutated = { ...parsed, subjectPublicKeyInfoDer: Uint8Array.of(1, 2, 3) };
+		const [original, fromMutated] = await Promise.all([
+			subjectPublicKeyInfoFingerprint(parsed),
+			subjectPublicKeyInfoFingerprint(mutated),
+		]);
+		expect(fromMutated.bytes).toEqual(original.bytes);
+		expect(fromMutated.colonHex).toBe(original.colonHex);
+	});
+
+	it('snapshots the SPKI denylist before asynchronous verification starts', async () => {
+		const chain = await issueChain();
+		const hash = (await subjectPublicKeyInfoFingerprint(chain.leaf.der)).hex;
+		const blocked = [hash];
+		const blockedVerification = verifyCertificateChain({
+			leaf: chain.leaf.der,
+			intermediates: [chain.intermediate.der],
+			roots: [chain.root.certificate.der],
+			distrustedSpkiSha256: blocked,
+		});
+		blocked.length = 0;
+		const blockedResult = await blockedVerification;
+		expect(blockedResult).toMatchObject({ ok: false, code: 'public_key_distrusted', index: 0 });
+
+		const initiallyEmpty: string[] = [];
+		const allowedVerification = verifyCertificateChain({
+			leaf: chain.leaf.der,
+			intermediates: [chain.intermediate.der],
+			roots: [chain.root.certificate.der],
+			distrustedSpkiSha256: initiallyEmpty,
+		});
+		initiallyEmpty.push(hash);
+		const allowedResult = await allowedVerification;
+		expect(allowedResult.ok).toBe(true);
 	});
 });
 
