@@ -31,6 +31,13 @@ const resolvedDefaultRootExport = new URL(
 /** @type {typeof import('#micro509')} */
 const micro509 = await import(resolvedDefaultRootExport.href);
 
+const resolvedCryptoExport = new URL(
+	pkg['exports']['./crypto']['default'],
+	import.meta.resolve('#pkg'),
+);
+/** @type {typeof import('#micro509/crypto')} */
+const cryptoApi = await import(resolvedCryptoExport.href);
+
 const whichVersion =
 	typeof Deno !== 'undefined'
 		? Deno.version.deno
@@ -38,4 +45,4 @@ const whichVersion =
 			? Bun.version
 			: process.version;
 
-console.log(`${await runSmoke(micro509)} (${whichVersion})`);
+console.log(`${await runSmoke(micro509, cryptoApi)} (${whichVersion})`);

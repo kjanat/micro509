@@ -3,10 +3,12 @@
  * @module
  */
 
-import { signData, verifySignatureWithKey } from '../dist/crypto.js';
-
-/** @param {typeof import('#micro509')} micro509 */
-export async function runSmoke(micro509) {
+/**
+ * @param {typeof import('#micro509')} micro509
+ * @param {typeof import('#micro509/crypto')} cryptoApi
+ */
+export async function runSmoke(micro509, cryptoApi) {
+	const { signData, verifySignatureWithKey } = cryptoApi;
 	const { certificate, keyPair } = await micro509.createSelfSignedCertificate({
 		subject: { commonName: 'smoke.example' },
 		validity: { days: 1 },

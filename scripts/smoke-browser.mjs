@@ -14,13 +14,14 @@ const root = new URL('.', import.meta.resolve('#pkg'));
 const pageHtml = `\
 <!DOCTYPE html>
   <script type="module">
-  	import * as m from '/dist/index.js';
-  	import { runSmoke } from '/scripts/smoke-core.mjs';
-  	try {
-  		globalThis.__smoke = await runSmoke(m);
-  	} catch (err) {
-  		globalThis.__smoke = 'FAIL: ' + err;
-  	}
+    import * as m from '/dist/index.js';
+    import * as cryptoApi from '/dist/crypto.js';
+    import { runSmoke } from '/scripts/smoke-core.mjs';
+    try {
+      globalThis.__smoke = await runSmoke(m, cryptoApi);
+    } catch (err) {
+      globalThis.__smoke = 'FAIL: ' + err;
+    }
   </script>
 `;
 
