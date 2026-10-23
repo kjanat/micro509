@@ -192,7 +192,7 @@ function link(name: string): string {
 
 /** Quote a string literal in a form that survives Markdown and `plain()`. */
 function renderStringLiteral(value: string): string {
-	return JSON.stringify(value).replace(/[\x60\[\]<>|]/g, (char) => {
+	return JSON.stringify(value).replace(/[\x60[\]<>|]/g, (char) => {
 		const codePoint = char.charCodeAt(0).toString(16).padStart(4, '0');
 		return `\\u${codePoint}`;
 	});
