@@ -8,13 +8,12 @@
 		"#components/*": "./theme/components/*"
 	},
 	"scripts": {
-		"build": "node ../../scripts/site-build.mjs",
-		"deploy": "node ../../scripts/check-docs-deployment.mjs && wrangler deploy",
+		"build": "vitepress build ..",
+		"deploy": "wrangler deploy",
 		"deploy:version": "wrangler versions upload",
 		"dev": "vitepress dev .. --host",
 		"fmt": "run --dir=.. dprint fmt",
 		"preview": "vitepress preview ..",
-		"render": "vitepress build ..",
 		"test": "bun test live-code.test.ts",
 		"typecheck": "bun typecheck.ts",
 		"wrangler:types": "wrangler types"

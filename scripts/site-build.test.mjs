@@ -19,19 +19,6 @@ test('copies the published tree without its git metadata', async () => {
 		const destination = path.join(root, 'dist');
 		await mkdir(path.join(source, '.git'), { recursive: true });
 		await mkdir(path.join(source, 'next'), { recursive: true });
-		await mkdir(path.join(source, 'v0.15.0'), { recursive: true });
-		await writeFile(path.join(source, 'v0.15.0/index.html'), 'release');
-		await writeFile(
-			path.join(source, 'versions.json'),
-			JSON.stringify({
-				schemaVersion: 3,
-				versions: [
-					{ channel: 'latest', tag: 'v0.15.0', base: '/' },
-					{ channel: 'next', base: '/next/' },
-					{ channel: 'archive', tag: 'v0.15.0', base: '/v0.15.0/' },
-				],
-			}),
-		);
 		await writeFile(path.join(source, '.git', 'config'), 'private git metadata');
 		await writeFile(path.join(source, 'index.html'), 'published index');
 		await writeFile(path.join(source, 'next', 'index.html'), 'published next');
