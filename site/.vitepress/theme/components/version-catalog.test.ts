@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { VersionEntry } from './version-catalog';
 import { hrefFor, mergeVersions, parseCatalog } from './version-catalog';
 
 const catalog = {
@@ -11,6 +12,7 @@ const catalog = {
 			base: '/',
 			releaseUrl: 'https://example.test/releases/v1.0.0',
 			sections: {
+				api: [{ slug: 'x509' }],
 				guide: [{ slug: 'index' }, { slug: 'getting-started' }],
 			},
 		},
@@ -20,7 +22,7 @@ const catalog = {
 			channel: 'archive',
 			base: '/v0.9.0/',
 			releaseUrl: null,
-			sections: { guide: [{ slug: 'index' }] },
+			sections: { guide: [{ slug: 'certificates' }, { slug: 'getting-started' }] },
 		},
 	],
 } as const;
@@ -60,14 +62,41 @@ describe('version catalog', () => {
 		expect(merged[0]?.sections).toEqual(entries[0]?.sections);
 	});
 
-	test('falls back to a section landing page when the version lacks the page', () => {
+	test('falls back to an existing guide page and drops the old fragment', () => {
 		const entries = parseCatalog(catalog);
 		if (entries === undefined) throw new Error('catalog parse failed');
 		const latest = entries[0];
 		const archive = entries[1];
 		if (latest === undefined || archive === undefined) throw new Error('catalog entries missing');
-		expect(hrefFor(archive, 'guide/getting-started')).toBe('/v0.9.0/guide/');
+		expect(hrefFor(archive, 'guide/nonexistent', '?view=full#old-page-symbol')).toBe(
+			'/v0.9.0/guide/getting-started?view=full',
+		);
 		expect(hrefFor(latest, 'guide/getting-started')).toBe('/guide/getting-started');
+	});
+
+	test('prefers section index, then guide getting-started, then the first page', () => {
+		const entry: VersionEntry = {
+			label: 'next',
+			prefix: 'next/',
+			sections: {
+				reference: [{ slug: 'index' }, { slug: 'standards' }],
+				guide: [{ slug: 'certificates' }, { slug: 'getting-started' }],
+				api: [{ slug: 'x509' }, { slug: 'verify' }],
+			},
+		};
+		expect(hrefFor(entry, 'reference/missing')).toBe('/next/reference/');
+		expect(hrefFor(entry, 'guide/missing')).toBe('/next/guide/getting-started');
+		expect(hrefFor(entry, 'api/missing')).toBe('/next/api/x509');
+	});
+
+	test('falls back to the version root when the section is absent or empty', () => {
+		const entry: VersionEntry = {
+			label: 'v0.9.0',
+			prefix: 'v0.9.0/',
+			sections: { guide: [] },
+		};
+		expect(hrefFor(entry, 'guide/missing', '?view=full#old-anchor')).toBe('/v0.9.0/?view=full');
+		expect(hrefFor(entry, 'reference/missing')).toBe('/v0.9.0/');
 	});
 
 	test('preserves nested symbol fragments when switching versions', () => {

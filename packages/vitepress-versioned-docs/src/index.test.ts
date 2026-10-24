@@ -29,6 +29,10 @@ describe('single-target docs builds', () => {
 		test(`${channel} uses only the checkout and publishes target metadata`, async () => {
 			const { root, site } = setup();
 			try {
+				for (const directory of ['.vitepress/cache', 'versions/v0.1.0/guide', 'guide/.hidden']) {
+					mkdirSync(path.join(site, directory), { recursive: true });
+					writeFileSync(path.join(site, directory, 'cached.md'), '# Not a published page\n');
+				}
 				const outDir = path.join(root, 'dist');
 				mkdirSync(outDir);
 				let generated = 0;
@@ -61,6 +65,7 @@ describe('single-target docs builds', () => {
 					fileGuardrail: 100,
 				});
 				assert.equal(generated, 1);
+				assert.deepEqual(Object.keys(docs.versions[0]?.sections ?? {}).sort(), ['api', 'guide']);
 				const prefix = channel === 'next' ? 'next/' : channel === 'archive' ? 'v1.2.3/' : '';
 				const expectedBase = prefix === '' ? '/' : `/${prefix}`;
 				assert.equal(docs.base, expectedBase);

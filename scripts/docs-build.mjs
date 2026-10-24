@@ -18,10 +18,9 @@ import * as tar from 'tar';
 import { assembleDocs } from './docs-publish.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const packageManifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const sourceCache = path.join(root, 'node_modules/.cache/docs-sources');
-const registry = `https://registry.npmjs.org/${packageManifest.name}`;
-const REPO = 'kjanat/micro509';
+const SOURCE_REPOSITORY = 'https://github.com/kjanat/micro509.git';
+const REQUIRED_PATHS = ['src', 'package.json', 'jsr.json', 'site/guide', 'site/reference'];
 const VERSION = /^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
 const SOURCE_PATHS = [
 	'src',
@@ -38,7 +37,7 @@ const SOURCE_PATHS = [
 
 /** @param {string} version @returns {number[] | undefined} */
 function versionParts(version) {
-	const match = version.match(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+	const match = version.match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
 	return match === null ? undefined : match.slice(1).map(Number);
 }
 
@@ -114,13 +113,16 @@ function validateArgs(options) {
 		: { channel, output, version };
 }
 
-/** @param {string} url @returns {Promise<unknown>} */
-async function responseJson(url) {
-	const response = await fetch(url, {
+/** Fetch the published micro509 release catalog once during bootstrap.
+ * @returns {Promise<unknown>}
+ */
+async function fetchPublishedVersions() {
+	const response = await fetch('https://registry.npmjs.org/micro509', {
 		headers: { accept: 'application/json', 'user-agent': 'micro509-docs-build' },
 		signal: AbortSignal.timeout(30_000),
 	});
-	if (!response.ok) throw new Error(`${url} -> ${response.status} ${response.statusText}`);
+	if (!response.ok)
+		throw new Error(`micro509 registry lookup failed: ${response.status} ${response.statusText}`);
 	return response.json();
 }
 
@@ -139,63 +141,97 @@ function latestVersion(packument) {
 	return typeof latest === 'string' ? latest : undefined;
 }
 
+/** @param {string[]} args */
+function git(args) {
+	const result = spawnSync('git', args, { cwd: root, stdio: 'inherit', timeout: 60_000 });
+	if (result.error) throw result.error;
+	if (result.status !== 0) throw new Error(`git ${args[0]} failed with status ${result.status}`);
+}
+
+/** @param {string} version */
+function validateSourceVersion(version) {
+	if (!VERSION.test(version)) throw new Error(`invalid source version: ${version}`);
+}
+
 /** @param {string} version @returns {Promise<string>} */
-async function fetchSource(version) {
+export async function fetchSource(version) {
+	validateSourceVersion(version);
 	const target = path.join(sourceCache, version);
-	const requiredPaths = ['src', 'package.json', 'jsr.json', 'site/guide', 'site/reference'];
 	const hasMarker = await exists(path.join(target, '.complete'));
-	const cached = await Promise.all(requiredPaths.map((entry) => exists(path.join(target, entry))));
+	const cached = await Promise.all(REQUIRED_PATHS.map((entry) => exists(path.join(target, entry))));
 	if (hasMarker && cached.every(Boolean)) {
 		const manifest = JSON.parse(await readFile(path.join(target, 'package.json'), 'utf8'));
-		if (manifest.name === packageManifest.name && manifest.version === version.slice(1))
-			return target;
+		if (manifest.name === 'micro509' && manifest.version === version.slice(1)) return target;
 	}
 	await mkdir(sourceCache, { recursive: true });
-	const url = `https://codeload.github.com/${REPO}/tar.gz/refs/tags/${version}`;
-	const response = await fetch(url, {
-		headers: { 'user-agent': 'micro509-docs-build' },
-		signal: AbortSignal.timeout(60_000),
-	});
-	if (!response.ok) throw new Error(`${url} -> ${response.status} ${response.statusText}`);
-	const archive = `${target}.tar.gz`;
-	const staging = `${target}.partial`;
-	await writeFile(archive, Buffer.from(await response.arrayBuffer()));
+	const gitDir = path.join(sourceCache, 'repository.git');
+	git(['init', '--bare', '--quiet', gitDir]);
+	git([
+		'--git-dir',
+		gitDir,
+		'fetch',
+		'--no-tags',
+		'--depth=1',
+		SOURCE_REPOSITORY,
+		`refs/tags/${version}:refs/tags/${version}`,
+	]);
+	return extractSourceTag(gitDir, version, target);
+}
+
+/** Extract selected source paths from a locally fetched Git tag.
+ * @param {string} gitDir @param {string} version @param {string} target
+ * @returns {Promise<string>}
+ */
+export async function extractSourceTag(gitDir, version, target) {
+	validateSourceVersion(version);
+	const temporary = await mkdtemp(path.join(os.tmpdir(), 'micro509-docs-source-'));
+	const archive = path.join(temporary, 'source.tar');
+	const staging = path.join(temporary, 'tree');
 	try {
-		await rm(staging, { recursive: true, force: true });
-		await mkdir(staging, { recursive: true });
+		git([
+			'--git-dir',
+			gitDir,
+			'archive',
+			'--format=tar',
+			`--output=${archive}`,
+			`refs/tags/${version}`,
+			...SOURCE_PATHS,
+		]);
+		await mkdir(staging);
+		let containsLink = false;
 		await tar.x({
 			file: archive,
 			cwd: staging,
-			strip: 1,
 			preservePaths: false,
-			filter: (entry) => {
-				const relative = entry.split('/').slice(1).join('/');
-				return SOURCE_PATHS.some(
-					(wanted) => relative === wanted || relative.startsWith(`${wanted}/`),
-				);
+			filter: (name, entry) => {
+				if ('type' in entry && (entry.type === 'SymbolicLink' || entry.type === 'Link')) {
+					containsLink = true;
+					return false;
+				}
+				return SOURCE_PATHS.some((wanted) => name === wanted || name.startsWith(`${wanted}/`));
 			},
 		});
-		for (const required of requiredPaths) {
-			if (
-				!(await stat(path.join(staging, required)).then(
-					() => true,
-					() => false,
-				))
-			)
-				throw new Error(`archive ${version} is missing ${required}`);
-		}
-		const manifest = JSON.parse(await readFile(path.join(staging, 'package.json'), 'utf8'));
-		if (manifest.name !== packageManifest.name || manifest.version !== version.slice(1))
-			throw new Error(`source archive ${version} has unexpected package identity or version`);
-		await rejectSymlinks(staging);
+		if (containsLink) throw new Error(`source tag ${version} contains a link`);
+		await validateSourceTree(staging, version);
 		await writeFile(path.join(staging, '.complete'), '');
 		await rm(target, { recursive: true, force: true });
 		await cp(staging, target, { recursive: true });
 	} finally {
-		await rm(archive, { force: true });
-		await rm(staging, { recursive: true, force: true });
+		await rm(temporary, { recursive: true, force: true });
 	}
 	return target;
+}
+
+/** @param {string} tree @param {string} version */
+async function validateSourceTree(tree, version) {
+	for (const required of REQUIRED_PATHS) {
+		if (!(await exists(path.join(tree, required))))
+			throw new Error(`source tag ${version} is missing ${required}`);
+	}
+	const manifest = JSON.parse(await readFile(path.join(tree, 'package.json'), 'utf8'));
+	if (manifest.name !== 'micro509' || manifest.version !== version.slice(1))
+		throw new Error(`source tag ${version} has unexpected package identity or version`);
+	await rejectSymlinks(tree);
 }
 
 /** @param {string} filename @returns {Promise<boolean>} */
@@ -265,7 +301,7 @@ async function run(options) {
 			return;
 		}
 
-		const packument = await responseJson(registry);
+		const packument = await fetchPublishedVersions();
 		const releases = stableVersions(packument);
 		const latest = latestVersion(packument);
 		if (latest === undefined || !releases.includes(latest))

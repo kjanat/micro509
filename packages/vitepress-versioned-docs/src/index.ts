@@ -266,6 +266,7 @@ function titleOf(file: string, slug: string): string {
 /** The pages a directory holds, titled by the pages themselves. */
 function markdownFiles(root: string, directory = root): readonly string[] {
 	return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+		if (entry.name.startsWith('.')) return [];
 		const file = path.join(directory, entry.name);
 		if (entry.isDirectory()) return markdownFiles(root, file);
 		return entry.isFile() && entry.name.endsWith('.md') ? [path.relative(root, file)] : [];
@@ -283,11 +284,14 @@ function sectionPages(dir: string): readonly DocsPage[] {
 }
 
 /** Every section directly under a version's page root. */
-function sectionsOf(pageRoot: string): DocsSections {
+function sectionsOf(pageRoot: string, versionsDir: string): DocsSections {
 	if (!fs.existsSync(pageRoot)) return {};
 	const sections: Record<string, readonly DocsPage[]> = {};
 	for (const entry of fs.readdirSync(pageRoot, { withFileTypes: true })) {
-		if (entry.isDirectory()) sections[entry.name] = sectionPages(path.join(pageRoot, entry.name));
+		const directory = path.join(pageRoot, entry.name);
+		if (!entry.isDirectory() || entry.name.startsWith('.') || directory === versionsDir) continue;
+		const pages = sectionPages(directory);
+		if (pages.length > 0) sections[entry.name] = pages;
 	}
 	return sections;
 }
@@ -348,7 +352,7 @@ async function resolveTargetVersion(
 			prefix: target.channel === 'next' ? 'next/' : target.channel === 'archive' ? `${tag}/` : '',
 			srcRoot,
 			exports: exportsOf(sourceRoot),
-			sections: sectionsOf(pageRoot),
+			sections: sectionsOf(pageRoot, options.versionsDir),
 			...(release === undefined ? {} : { release }),
 		},
 	];
@@ -382,7 +386,7 @@ async function resolveAllVersions(options: VersionedDocsOptions): Promise<readon
 	const treeRoot = path.join(options.repoRoot, options.siteRoot);
 	const treePackageVersion = packageVersionOf(options.repoRoot);
 	options.generateApi({ root: options.repoRoot, outDir: path.join(treeRoot, 'api') });
-	const treeSections = sectionsOf(treeRoot);
+	const treeSections = sectionsOf(treeRoot, options.versionsDir);
 
 	if (releases.length === 0) {
 		console.log('[versions] no releases resolved; serving the checked-out tree');
@@ -438,7 +442,7 @@ async function resolveAllVersions(options: VersionedDocsOptions): Promise<readon
 			prefix: isLatest ? '' : `${release.tag}/`,
 			srcRoot: path.posix.join(versionsRoot, key),
 			exports: exportsOf(tree),
-			sections: sectionsOf(pageRoot),
+			sections: sectionsOf(pageRoot, options.versionsDir),
 			release: { url: release.url, published: release.published },
 		});
 	}

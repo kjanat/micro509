@@ -18,10 +18,14 @@ import {
 import { subjectPublicKeyInfoFingerprint } from '#micro509/x509';
 import { expectRejectedWith, issueChain } from '#test/helpers';
 
-const at = new Date();
+const validity = {
+	notBefore: new Date('2020-01-01T00:00:00.000Z'),
+	notAfter: new Date('2035-01-01T00:00:00.000Z'),
+};
+const at = new Date('2025-01-01T00:00:00.000Z');
 
 async function fixture() {
-	const chain = await issueChain();
+	const chain = await issueChain({ validity });
 	const leaf = unwrap(parseCertificatePem(chain.leaf.pem));
 	const intermediate = unwrap(parseCertificatePem(chain.intermediate.pem));
 	const root = unwrap(parseCertificatePem(chain.root.certificate.pem));
@@ -100,7 +104,7 @@ describe('SPKI distrust', () => {
 
 	it('ignores an unrelated blocked key and rejects alternate cross-signed routes by key', async () => {
 		const f = await fixture();
-		const unrelated = await issueChain();
+		const unrelated = await issueChain({ validity });
 		const unrelatedHash = (await subjectPublicKeyInfoFingerprint(unrelated.intermediate.der)).hex;
 		const allowed = await verifyCertificateChain({
 			leaf: f.leaf.der,
@@ -113,6 +117,7 @@ describe('SPKI distrust', () => {
 
 		const alternateRoot = await createSelfSignedCertificate({
 			subject: { commonName: 'Alternate Root' },
+			validity,
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 		});
 		const crossSigned = await createCertificate({
@@ -121,6 +126,7 @@ describe('SPKI distrust', () => {
 			publicKey: f.chain.intermediateKeys.publicKey,
 			signerPrivateKey: alternateRoot.keyPair.privateKey,
 			issuerCertificate: alternateRoot.certificate.der,
+			validity,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
@@ -159,6 +165,7 @@ describe('SPKI distrust', () => {
 		const anchor = trustAnchorFromCertificate(f.root);
 		const wrongRoot = await createSelfSignedCertificate({
 			subject: { commonName: f.root.subject.values.commonName },
+			validity,
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 		});
 		const built = await buildCandidatePath({
@@ -328,6 +335,7 @@ describe('SPKI distrust', () => {
 			publicKey: f.chain.leafKeys.publicKey,
 			signerPrivateKey: f.chain.intermediateKeys.privateKey,
 			issuerCertificate: f.chain.intermediate.der,
+			validity,
 			extensions: { keyUsage: ['digitalSignature'], noRevAvail: true },
 		});
 		const noRevAvailResult = await verifyCertificateChain({

@@ -112,13 +112,21 @@ export function mergeVersions(
 }
 
 export function hrefFor(entry: VersionEntry, page: string, suffix = ''): string {
-	if (entry.sections !== undefined) {
-		const [section, ...tail] = page.split('/');
-		const slug = tail.join('/') || 'index';
-		const pages = entry.sections[section];
-		if (pages !== undefined && !pages.some((candidate) => candidate.slug === slug)) {
-			return `/${entry.prefix}${section}/`;
-		}
-	}
-	return `/${entry.prefix}${page}${suffix}`;
+	if (entry.sections === undefined || page === '') return `/${entry.prefix}${page}${suffix}`;
+	const [section, ...tail] = page.split('/');
+	const slug = tail.join('/') || 'index';
+	const pages = entry.sections[section];
+	if (pages?.some((candidate) => candidate.slug === slug))
+		return `/${entry.prefix}${page}${suffix}`;
+
+	const fallback =
+		pages?.find((candidate) => candidate.slug === 'index') ??
+		(section === 'guide'
+			? pages?.find((candidate) => candidate.slug === 'getting-started')
+			: undefined) ??
+		pages?.[0];
+	const query = suffix.split('#', 1)[0] ?? '';
+	if (fallback === undefined) return `/${entry.prefix}${query}`;
+	if (fallback.slug === 'index') return `/${entry.prefix}${section}/${query}`;
+	return `/${entry.prefix}${section}/${fallback.slug}${query}`;
 }
