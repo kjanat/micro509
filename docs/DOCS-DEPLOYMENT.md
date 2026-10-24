@@ -16,7 +16,10 @@ every archived version.
 ## Build one tree locally
 
 With no channel set, `site:build` builds a PR-style preview of the checked-out
-tree, offline from release discovery:
+tree. The preview embeds the production version catalog for navigation, with
+its own entry alongside `next` and released versions. Production entries link
+to the production site. Only the checked-out tree's pages are rendered.
+`DOCS_OFFLINE=1` skips fetching the catalog and builds navigation for that tree alone:
 
 ```sh
 bun run site:build

@@ -14,6 +14,8 @@ import {
   mergeVersions,
   parseCatalog,
   type VersionEntry,
+  versionForPath,
+  versionKey,
 } from './version-catalog';
 
 const { theme } = useData();
@@ -53,8 +55,11 @@ function onKeydown(event: KeyboardEvent): void {
 
 onMounted(async () => {
   document.addEventListener('pointerdown', closeOutside);
+  if (theme.value.versionCatalogUrl === false) return;
   try {
-    const response = await fetch('/versions.json', { headers: { accept: 'application/json' } });
+    const response = await fetch(theme.value.versionCatalogUrl ?? '/versions.json', {
+      headers: { accept: 'application/json' },
+    });
     if (!response.ok) return;
     const parsed = parseCatalog(await response.json());
     if (parsed !== undefined) catalogVersions.value = parsed;
@@ -68,10 +73,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
 /** Path within the current version, e.g. 'guide/keys' on /v0.8.0/guide/keys. */
 const current = computed(() => {
   const path = route.path.replace(/^\//, '');
-  // Longest prefix wins: '' matches everything and must lose to 'v0.8.0/'.
-  const version = [...versions.value]
-    .sort((a, b) => b.prefix.length - a.prefix.length)
-    .find((entry) => path.startsWith(entry.prefix));
+  const version = versionForPath(versions.value, route.path);
   return {
     version,
     page:
@@ -137,14 +139,14 @@ function hrefFor(entry: VersionEntry): string {
       >
     </button>
     <ul v-if="open && versions.length > 1" class="vs-menu">
-      <li v-for="entry in versions" :key="entry.prefix">
+      <li v-for="entry in versions" :key="versionKey(entry)">
         <!-- `target` skips VitePress SPA routing across separately deployed snapshots. -->
         <a
           class="vs-link"
           target="_self"
           :class="{
             'vs-active':
-              entry.prefix === current.version?.prefix,
+              current.version !== undefined && versionKey(entry) === versionKey(current.version),
           }"
           :href="hrefFor(entry)"
           >{{ entry.label }}</a

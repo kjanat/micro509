@@ -1,8 +1,10 @@
 export interface VersionEntry {
 	readonly label: string;
 	readonly prefix: string;
+	/** Set for versions hosted outside this app, such as production links in a PR preview. */
+	readonly origin?: string;
 	readonly labelUrl?: string;
-	readonly channel?: 'latest' | 'next' | 'archive';
+	readonly channel?: 'latest' | 'next' | 'archive' | 'preview';
 	readonly tag?: string;
 	readonly sections?: Readonly<Record<string, readonly { readonly slug: string }[]>>;
 }
@@ -15,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isChannel(value: unknown): value is NonNullable<VersionEntry['channel']> {
-	return value === 'latest' || value === 'next' || value === 'archive';
+	return value === 'latest' || value === 'next' || value === 'archive' || value === 'preview';
 }
 
 function validBase(
@@ -30,6 +32,8 @@ function validBase(
 			return base === '/next/' && PREVIEW_TAG.test(tag);
 		case 'archive':
 			return base === `/${tag}/` && RELEASE_TAG.test(tag);
+		case 'preview':
+			return base === '/' && (PREVIEW_TAG.test(tag) || /^#[1-9]\d*$/.test(tag));
 	}
 }
 
@@ -73,7 +77,7 @@ function parseVersion(value: unknown): VersionEntry | undefined {
 	};
 }
 
-export function parseCatalog(value: unknown): readonly VersionEntry[] | undefined {
+export function parseCatalog(value: unknown, origin?: string): readonly VersionEntry[] | undefined {
 	if (!isRecord(value) || value.schemaVersion !== 3 || !Array.isArray(value.versions)) {
 		return undefined;
 	}
@@ -81,43 +85,60 @@ export function parseCatalog(value: unknown): readonly VersionEntry[] | undefine
 	for (const item of value.versions) {
 		const entry = parseVersion(item);
 		if (entry === undefined) return undefined;
-		entries.push(entry);
+		entries.push(origin === undefined ? entry : { ...entry, origin });
 	}
 	return entries;
+}
+
+/** A preview and production can both serve `/` on different origins. */
+export function versionKey(entry: VersionEntry): string {
+	return `${entry.origin ?? ''}|${entry.channel === 'preview' ? 'preview|' : ''}${entry.prefix}`;
+}
+
+/** External destinations never determine which local documentation page is being read. */
+export function versionForPath(
+	versions: readonly VersionEntry[],
+	path: string,
+): VersionEntry | undefined {
+	return [...versions]
+		.filter((entry) => entry.origin === undefined)
+		.sort((a, b) => b.prefix.length - a.prefix.length)
+		.find((entry) => path.startsWith(`/${entry.prefix}`));
 }
 
 export function mergeVersions(
 	catalog: readonly VersionEntry[],
 	embedded: readonly VersionEntry[],
 ): readonly VersionEntry[] {
-	const byPrefix = new Map(catalog.map((entry) => [entry.prefix, entry]));
+	const byKey = new Map(catalog.map((entry) => [versionKey(entry), entry]));
 	const localOnly: VersionEntry[] = [];
 	for (const local of embedded) {
-		const catalogEntry = byPrefix.get(local.prefix);
+		const key = versionKey(local);
+		const catalogEntry = byKey.get(key);
 		if (catalogEntry === undefined) {
-			byPrefix.set(local.prefix, local);
+			byKey.set(key, local);
 			localOnly.push(local);
 		} else if (catalogEntry.tag !== local.tag) {
 			// A local preview at this app's base may not appear in the release catalog.
-			byPrefix.set(local.prefix, {
+			byKey.set(key, {
 				...catalogEntry,
 				label: local.label,
 				...(local.labelUrl === undefined ? {} : { labelUrl: local.labelUrl }),
 			});
 		} else if (local.labelUrl !== undefined) {
-			byPrefix.set(local.prefix, { ...catalogEntry, labelUrl: local.labelUrl });
+			byKey.set(key, { ...catalogEntry, labelUrl: local.labelUrl });
 		}
 	}
-	return [...localOnly, ...catalog.map((entry) => byPrefix.get(entry.prefix) ?? entry)];
+	return [...localOnly, ...catalog.map((entry) => byKey.get(versionKey(entry)) ?? entry)];
 }
 
 export function hrefFor(entry: VersionEntry, page: string, suffix = ''): string {
-	if (entry.sections === undefined || page === '') return `/${entry.prefix}${page}${suffix}`;
+	const base = `${entry.origin ?? ''}/${entry.prefix}`;
+	if (entry.sections === undefined || page === '') return `${base}${page}${suffix}`;
 	const [section, ...tail] = page.split('/');
 	const slug = tail.join('/') || 'index';
 	const pages = entry.sections[section];
-	if (pages?.some((candidate) => candidate.slug === slug))
-		return `/${entry.prefix}${page}${suffix}`;
+	if (pages?.some((candidate) => candidate.slug === slug)) return `${base}${page}${suffix}`;
 
 	const fallback =
 		pages?.find((candidate) => candidate.slug === 'index') ??
@@ -126,7 +147,7 @@ export function hrefFor(entry: VersionEntry, page: string, suffix = ''): string 
 			: undefined) ??
 		pages?.[0];
 	const query = suffix.split('#', 1)[0] ?? '';
-	if (fallback === undefined) return `/${entry.prefix}${query}`;
-	if (fallback.slug === 'index') return `/${entry.prefix}${section}/${query}`;
-	return `/${entry.prefix}${section}/${fallback.slug}${query}`;
+	if (fallback === undefined) return `${base}${query}`;
+	if (fallback.slug === 'index') return `${base}${section}/${query}`;
+	return `${base}${section}/${fallback.slug}${query}`;
 }

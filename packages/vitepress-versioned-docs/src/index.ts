@@ -336,7 +336,7 @@ async function resolveTargetVersion(
 	const packageVersion = packageVersionOf(sourceRoot);
 	const releaseTarget = target.channel === 'latest' || target.channel === 'archive';
 	const tag = targetTagOf(target, packageVersion) || options.devLabel;
-	const channel: DocsChannel = target.channel === 'preview' ? 'latest' : target.channel;
+	const channel = target.channel;
 	const { pageRoot, srcRoot } = await targetPageRoot(options, target, sourceRoot, channel, tag);
 	const release = releaseTarget ? { url: options.releases.url(tag), published: null } : undefined;
 	return [

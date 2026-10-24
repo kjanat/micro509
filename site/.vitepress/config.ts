@@ -4,7 +4,7 @@ import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
 import type { DocExamplesOptions } from '@micro509/vitepress-doc-examples';
 import { docExamplesPlugin } from '@micro509/vitepress-doc-examples';
 import { githubLinks } from '@micro509/vitepress-github-links';
-import type { DocsVersion, SidebarOrder } from '@micro509/vitepress-versioned-docs';
+import type { SidebarOrder } from '@micro509/vitepress-versioned-docs';
 import { versionedDocs } from '@micro509/vitepress-versioned-docs';
 import markdownItTaskLists from 'markdown-it-task-lists';
 import { execFileSync } from 'node:child_process';
@@ -17,9 +17,12 @@ import type { DefaultTheme } from 'vitepress';
 import { defineConfig } from 'vitepress';
 import { devServerCertificate } from './dev-cert.ts';
 import { repairExamples, stripTypes } from './live-code.ts';
+import type { VersionEntry } from './theme/components/version-catalog.ts';
+import { mergeVersions, parseCatalog } from './theme/components/version-catalog.ts';
 
 interface DocsThemeConfig extends DefaultTheme.Config {
-	readonly versions: readonly DocsVersion[];
+	readonly versions: readonly VersionEntry[];
+	readonly versionCatalogUrl: string | false;
 }
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -73,6 +76,22 @@ function manifestsOf(root: string): Manifests {
 
 const repo = manifestsOf(repoRoot);
 const repoUrl = new URL(repo.repository.url.replace('git+', '').replace(/\.git$/, ''));
+
+/** Preview builds embed production navigation without rebuilding production pages. */
+async function publishedVersions(): Promise<readonly VersionEntry[]> {
+	if (process.env.DOCS_OFFLINE === '1') return [];
+	const url = new URL('/versions.json', repo.homepage);
+	try {
+		const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		const entries = parseCatalog(await response.json(), url.origin);
+		if (entries === undefined) throw new Error('Invalid production version catalog');
+		return entries;
+	} catch (error) {
+		console.warn(`[versions] ${url}: ${String(error)}`);
+		return [];
+	}
+}
 
 function git(...args: readonly string[]): string | undefined {
 	try {
@@ -436,7 +455,11 @@ export default defineConfig<DocsThemeConfig>({
 			dark: '/icon-light.svg',
 			alt: repo.name,
 		},
-		versions: docs.versions,
+		versions:
+			channel === 'preview'
+				? mergeVersions(await publishedVersions(), docs.versions)
+				: docs.versions,
+		versionCatalogUrl: channel === 'preview' ? false : '/versions.json',
 		nav: [{ component: 'VersionedNav' }, { component: 'VersionSwitcher' }],
 		sidebar: docs.sidebar(ORDER),
 

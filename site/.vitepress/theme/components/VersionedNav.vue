@@ -12,12 +12,10 @@
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
 import { computed } from 'vue';
+import type { VersionEntry } from './version-catalog';
+import { versionForPath } from './version-catalog';
 
 const props = defineProps<{ readonly screenMenu?: boolean }>();
-
-interface VersionEntry {
-  readonly prefix: string;
-}
 
 const SECTIONS = [
   {
@@ -40,13 +38,7 @@ const route = useRoute();
 const prefix = computed(() => {
   const versions: readonly VersionEntry[] =
     theme.value.versions ?? [];
-  const path = route.path.replace(/^\//, '');
-  return (
-    [...versions]
-      .sort((a, b) => b.prefix.length - a.prefix.length)
-      .find((version) => path.startsWith(version.prefix))
-      ?.prefix ?? ''
-  );
+  return versionForPath(versions, route.path)?.prefix ?? '';
 });
 
 const links = computed(() =>

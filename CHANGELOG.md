@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The version button toggles the list, and Escape or an outside click closes it.
   Desktop version lists also scroll within the viewport.
   [#188](https://github.com/kjanat/micro509/issues/188)
+- PR previews have a separate version entry alongside production's `next` and
+  release entries. Switching from a preview opens the matching production page.
 
 ## [0.16.0] - 2026-10-24
 
