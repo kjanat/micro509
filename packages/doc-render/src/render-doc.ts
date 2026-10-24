@@ -170,11 +170,7 @@ function parameterAnchor(pkg: string, symbolName: string, parameterName: string)
 }
 
 /**
- * Deep-link target for a symbol: its section on the owning module page.
- *
- * Symbols are documented in full on the module page, so a link points at that
- * section rather than at a standalone page — a page per symbol would duplicate
- * the content, and cost the consumer a build artifact (or three) each.
+ * Deep-link target for a symbol: its stable per-symbol page.
  */
 function symbolUrl(name: string): string {
 	const sites = symbolIndex.get(name);
@@ -182,7 +178,7 @@ function symbolUrl(name: string): string {
 	const candidates = domainSites.length > 0 ? domainSites : (sites ?? []);
 	const site = candidates.find((candidate) => candidate.pkg === activePkg) ?? candidates[0];
 	if (site === undefined) return `${renderer.apiBase}#${name}`;
-	return `${renderer.apiBase}${site.pkg}#${site.anchor}`;
+	return `${renderer.apiBase}${site.bucket}/${encodeURIComponent(name)}`;
 }
 
 function link(name: string): string {
@@ -595,6 +591,21 @@ function renderSymbol(pkg: string, sym: Symbol, level = 3): string {
 	return out.join('\n');
 }
 
+/** Compact module entry: preserve the old section anchor and expose a short
+ * description while keeping the full declaration on its canonical symbol page. */
+function renderModuleSymbol(pkg: string, sym: Symbol): string {
+	const declaration = sym.declarations[0];
+	if (!declaration) return '';
+	const site = symbolIndex.get(sym.name)?.find((candidate) => candidate.pkg === pkg);
+	const anchor = site?.anchor ?? symbolAnchor(sym.name, bucketOf(declaration.kind));
+	const summary = renderDescription(
+		declaration.jsDoc?.doc === undefined
+			? undefined
+			: { doc: declaration.jsDoc.doc.split('\n', 1)[0] },
+	);
+	return `- <span id="${anchor}"></span>[\`${sym.name}\`](${symbolUrl(sym.name)})${summary ? ` — ${summary}` : ''}`;
+}
+
 /**
  * Open a render pass: resolve the options and index every symbol's module page
  * and anchor, so `{@link}` and typeRef links can resolve while rendering.
@@ -679,40 +690,94 @@ export type ApiModulePage = {
 	markdown: string;
 };
 
+/** Dedicated permalink for one exported symbol. */
+export type ApiSymbolPage = {
+	readonly bucket: string;
+	readonly name: string;
+	readonly markdown: string;
+};
+
 type RenderedModulePage = ApiModulePage & { title: string };
 
-/** Per-module reference pages (sidebar-visible). Symbols are `##` sections. */
+function symbolCategory(kind: string): 'Functions' | 'Types' | 'Variables' {
+	if (kind === 'function') return 'Functions';
+	if (kind === 'variable') return 'Variables';
+	return 'Types';
+}
+
+function moduleIndex(pkg: string, symbols: readonly Symbol[]): string[] {
+	const groups = new Map<string, Symbol[]>();
+	for (const sym of symbols) {
+		const declaration = sym.declarations[0];
+		if (!declaration) continue;
+		const group = groups.get(symbolCategory(declaration.kind)) ?? [];
+		group.push(sym);
+		groups.set(symbolCategory(declaration.kind), group);
+	}
+	const out: string[] = [];
+	for (const category of ['Functions', 'Types', 'Variables']) {
+		const entries = groups.get(category);
+		if (!entries?.length) continue;
+		out.push(`## ${category}`, '');
+		for (const sym of entries) out.push(renderModuleSymbol(pkg, sym));
+		out.push('');
+	}
+	return out;
+}
+
+function canonicalSymbolPages(pkg: string, symbols: readonly Symbol[]): ApiSymbolPage[] {
+	const pages: ApiSymbolPage[] = [];
+	for (const sym of symbols) {
+		const declaration = sym.declarations[0];
+		if (!declaration) continue;
+		const bucket = bucketOf(declaration.kind);
+		const canonical = symbolIndex.get(sym.name)?.find((site) => !site.reference);
+		if (canonical?.pkg !== pkg || canonical.bucket !== bucket) continue;
+		const symbol = renderSymbol(pkg, sym, 2);
+		pages.push({ bucket, name: sym.name, markdown: `# \`${sym.name}\`\n\n${symbol}` });
+	}
+	return pages;
+}
+
+function assertUniqueModuleSlug(pkg: string, url: string, pageUrls: Map<string, string>): void {
+	assertApiPageSlug(pkg);
+	const previousUrl = pageUrls.get(pkg);
+	if (previousUrl !== undefined)
+		throw new Error(`API page slug collision: ${previousUrl} and ${url} both map to ${pkg}`);
+	pageUrls.set(pkg, url);
+}
+
+/** Per-module reference pages (sidebar-visible), with compact categorized symbol indexes. */
 export function renderModulePages(
 	nodes: Record<string, ApiModule>,
 	options: RenderOptions,
 ): {
 	pages: ApiModulePage[];
+	symbolPages: ApiSymbolPage[];
 	sidebar: { text: string; link: string }[];
 } {
 	beginPass(nodes, options);
 	const pages: RenderedModulePage[] = [];
 	const pageUrls = new Map<string, string>();
+	const symbolPages: ApiSymbolPage[] = [];
 	for (const [url, mod] of Object.entries(nodes)) {
 		if (!mod.symbols.length) continue;
 		const pkg = renderer.slugOf(url);
-		assertApiPageSlug(pkg);
-		const previousUrl = pageUrls.get(pkg);
-		if (previousUrl !== undefined) {
-			throw new Error(`API page slug collision: ${previousUrl} and ${url} both map to ${pkg}`);
-		}
-		pageUrls.set(pkg, url);
+		assertUniqueModuleSlug(pkg, url, pageUrls);
 		activePkg = pkg;
 		const root = renderer.rootOf(url);
 		const title = moduleTitle(url, pkg);
 		const out = [`# \`${title}\``, ''];
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(moduleDoc, '');
-		for (const sym of mod.symbols) out.push(renderSymbol(pkg, sym, 2), '');
+		out.push(...moduleIndex(pkg, mod.symbols));
+		symbolPages.push(...canonicalSymbolPages(pkg, mod.symbols));
 		pages.push({ pkg, title, root, markdown: out.join('\n') });
 	}
 	pages.sort((a, b) => Number(b.root) - Number(a.root) || a.pkg.localeCompare(b.pkg));
 	return {
 		pages: pages.map(({ pkg, root, markdown }) => ({ pkg, root, markdown })),
+		symbolPages,
 		sidebar: pages.map((page) => ({
 			text: page.title,
 			link: `${renderer.apiBase}${page.pkg}`,

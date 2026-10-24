@@ -104,7 +104,7 @@
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; BIN=\"${BIN:-bun}\"; $BIN x jsr publish",
 		"publish:pkgprnew": "BIN=\"${BIN:-bun}\"; $BIN x pkg-pr-new publish --packageManager=bun --bun --template './examples/vite' --template './examples/tsc-compat' . ./tsc/protocol ./tsc/bridge ./tsc/wasm ./tsc/compat ./tsc/vue-mapper",
 		"rfc": "bun scripts/fetch-spec.bun.ts rfc",
-		"site:build": "run -s build micro509-site:build",
+		"site:build": "node scripts/site-build.mjs",
 		"site:import-maps": "deno run --allow-read --allow-net --allow-write --allow-run scripts/site-import-maps.deno.ts",
 		"site:live-examples": "node scripts/site-live-examples.mjs",
 		"smoke": "run build -l silent; run -p smoke:browser smoke:bun smoke:deno smoke:node smoke:workerd",

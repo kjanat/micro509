@@ -28,6 +28,13 @@ import type {
 
 /** Where the versions come from, and where their pieces are put. */
 export interface VersionedDocsOptions {
+	/** Render only the checked-out tree for an incremental publish. */
+	readonly target?: {
+		readonly channel: 'next' | 'latest' | 'archive' | 'preview';
+		readonly version?: string;
+		/** Extracted source tree for an immutable historical target. */
+		readonly sourceRoot?: string;
+	};
 	/** Working tree of the project being documented — the `/next/` channel. */
 	readonly repoRoot: string;
 	/** Directory VitePress globs for pages, relative to its `srcDir`. */
@@ -85,7 +92,7 @@ export interface VersionedDocsOptions {
 	readonly fileGuardrail: number;
 }
 
-export type DocsChannel = 'latest' | 'next' | 'archive';
+export type DocsChannel = 'latest' | 'next' | 'archive' | 'preview';
 
 /** A page a version ships, as it titles itself. */
 export interface DocsPage {
@@ -257,13 +264,19 @@ function titleOf(file: string, slug: string): string {
 }
 
 /** The pages a directory holds, titled by the pages themselves. */
+function markdownFiles(root: string, directory = root): readonly string[] {
+	return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+		const file = path.join(directory, entry.name);
+		if (entry.isDirectory()) return markdownFiles(root, file);
+		return entry.isFile() && entry.name.endsWith('.md') ? [path.relative(root, file)] : [];
+	});
+}
+
 function sectionPages(dir: string): readonly DocsPage[] {
 	if (!fs.existsSync(dir)) return [];
-	return fs
-		.readdirSync(dir)
-		.filter((entry) => entry.endsWith('.md'))
+	return markdownFiles(dir)
 		.map((entry) => {
-			const slug = entry.replace(/\.md$/, '');
+			const slug = entry.replace(/\.md$/, '').split(path.sep).join('/');
 			return { slug, title: titleOf(path.join(dir, entry), slug) };
 		})
 		.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -284,6 +297,86 @@ function sectionsOf(pageRoot: string): DocsSections {
  * newest-first. Writes each version's pages to disk before VitePress globs them.
  */
 async function resolveVersions(options: VersionedDocsOptions): Promise<readonly DocsVersion[]> {
+	if (options.target !== undefined) return resolveTargetVersion(options, options.target);
+	return resolveAllVersions(options);
+}
+
+function targetTagOf(
+	target: NonNullable<VersionedDocsOptions['target']>,
+	packageVersion: string,
+): string {
+	const releaseTarget = target.channel === 'latest' || target.channel === 'archive';
+	if (target.sourceRoot !== undefined && !releaseTarget)
+		throw new Error('[versions] sourceRoot is only valid for release targets');
+	const expected = `v${packageVersion}`;
+	const tag = target.version ?? (releaseTarget ? expected : undefined);
+	if (!releaseTarget && tag !== undefined)
+		throw new Error(`[versions] target ${target.channel} does not accept a version`);
+	if (
+		tag !== undefined &&
+		!/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(tag)
+	)
+		throw new Error(`[versions] invalid target version: ${tag}`);
+	if (releaseTarget && tag !== expected)
+		throw new Error(
+			`[versions] target version ${tag} does not match package version ${packageVersion}`,
+		);
+	return tag ?? '';
+}
+
+async function resolveTargetVersion(
+	options: VersionedDocsOptions,
+	target: NonNullable<VersionedDocsOptions['target']>,
+): Promise<readonly DocsVersion[]> {
+	const sourceRoot = target.sourceRoot ?? options.repoRoot;
+	const packageVersion = packageVersionOf(sourceRoot);
+	const releaseTarget = target.channel === 'latest' || target.channel === 'archive';
+	const tag = targetTagOf(target, packageVersion) || options.devLabel;
+	const channel: DocsChannel = target.channel === 'preview' ? 'latest' : target.channel;
+	const { pageRoot, srcRoot } = await targetPageRoot(options, target, sourceRoot, channel, tag);
+	const release = releaseTarget ? { url: options.releases.url(tag), published: null } : undefined;
+	return [
+		{
+			tag,
+			packageVersion,
+			label:
+				target.channel === 'next' ? 'next' : target.channel === 'preview' ? options.devLabel : tag,
+			...(target.channel === 'preview' && options.devLabelUrl !== undefined
+				? { labelUrl: options.devLabelUrl }
+				: {}),
+			channel,
+			prefix: target.channel === 'next' ? 'next/' : target.channel === 'archive' ? `${tag}/` : '',
+			srcRoot,
+			exports: exportsOf(sourceRoot),
+			sections: sectionsOf(pageRoot),
+			...(release === undefined ? {} : { release }),
+		},
+	];
+}
+
+async function targetPageRoot(
+	options: VersionedDocsOptions,
+	target: NonNullable<VersionedDocsOptions['target']>,
+	sourceRoot: string,
+	channel: DocsChannel,
+	tag: string,
+): Promise<{ readonly pageRoot: string; readonly srcRoot: string }> {
+	const sourceSiteRoot = path.join(sourceRoot, options.siteRoot);
+	if (target.sourceRoot === undefined) {
+		options.generateApi({ root: sourceRoot, outDir: path.join(sourceSiteRoot, 'api') });
+		return { pageRoot: sourceSiteRoot, srcRoot: options.siteRoot };
+	}
+	const key = channel === 'latest' ? 'latest' : tag;
+	const pageRoot = path.join(options.versionsDir, key);
+	await materializePages(sourceRoot, pageRoot, options);
+	options.generateApi({ root: sourceRoot, outDir: path.join(pageRoot, 'api') });
+	return {
+		pageRoot,
+		srcRoot: path.relative(options.repoRoot, pageRoot).split(path.sep).join('/'),
+	};
+}
+
+async function resolveAllVersions(options: VersionedDocsOptions): Promise<readonly DocsVersion[]> {
 	const releases = options.releases.offline === true ? [] : await fetchReleases(options);
 
 	const treeRoot = path.join(options.repoRoot, options.siteRoot);
@@ -406,11 +499,13 @@ function siteImportMap(
 	versions: readonly DocsVersion[],
 	options: VersionedDocsOptions,
 ): { readonly importMap: string; readonly origins: readonly string[] } {
-	const root = versions.find((version) => version.prefix === '');
+	const root =
+		versions.find((version) => version.prefix === '') ??
+		(options.target === undefined ? undefined : versions[0]);
 	const imports = root === undefined ? {} : entriesFor(root, options);
 	const scopes = Object.fromEntries(
 		versions
-			.filter((version) => version.prefix !== '')
+			.filter((version) => version.prefix !== '' || options.target !== undefined)
 			.map((version) => [`/${version.prefix}`, entriesFor(version, options)]),
 	);
 	const targets = [
@@ -475,9 +570,10 @@ async function emitVersionIndex(
 			label: version.label,
 			tag: version.tag,
 			channel: version.channel,
-			base: `/${version.prefix}`,
+			base: version.prefix === '' ? '/' : `/${version.prefix}`,
 			releasedAt: version.release?.published ?? null,
 			releaseUrl: version.release?.url ?? null,
+			sections: version.sections,
 		})),
 	};
 	await fsp.writeFile(path.join(outDir, 'versions.json'), `${JSON.stringify(index, null, '\t')}\n`);
@@ -485,7 +581,7 @@ async function emitVersionIndex(
 	const latest = versions.find(
 		(version) => version.channel === 'latest' && version.release !== undefined,
 	);
-	if (latest !== undefined) {
+	if (latest !== undefined && options.target === undefined) {
 		await fsp.appendFile(
 			path.join(outDir, '_redirects'),
 			`/${latest.tag} / 302\n/${latest.tag}/* /:splat 302\n`,
@@ -532,7 +628,7 @@ function sectionSidebar(
 			.map((page) => ({ text: page.title, link: linkTo(section, page) })),
 	}));
 
-	const rest = pages.filter((page) => !ordered.has(page.slug));
+	const rest = pages.filter((page) => !page.slug.includes('/') && !ordered.has(page.slug));
 	const last = items.at(-1);
 	if (rest.length > 0 && last?.items !== undefined) {
 		last.items = [
@@ -580,6 +676,8 @@ function routeOf(
 
 /** Everything a VitePress config needs to serve all versions from one app. */
 export interface VersionedDocs {
+	/** VitePress base for a single-target deployment. */
+	readonly base: string;
 	/** Every version, in timeline order: next, the root release, then archives. */
 	readonly versions: readonly DocsVersion[];
 	/** Dev-server support: the import map, which the build-only hook cannot give it. */
@@ -606,10 +704,16 @@ export interface VersionedDocs {
 
 export async function versionedDocs(options: VersionedDocsOptions): Promise<VersionedDocs> {
 	const versions = await resolveVersions(options);
-	const at = (page: string): DocsVersion | undefined => versionOfPage(page, versions);
-	const tree = versions.find((version) => version.srcRoot === options.siteRoot);
+	const routeVersions =
+		options.target === undefined
+			? versions
+			: versions.map((version) => ({ ...version, prefix: '' }));
+	const at = (page: string): DocsVersion | undefined => versionOfPage(page, routeVersions);
+	const tree = routeVersions.find((version) => version.srcRoot === options.siteRoot);
+	const inactiveVersionDirs = inactiveVersionSourceExcludes(options, versions);
 
-	const sectionLink = new RegExp(`^/(${Object.keys(tree?.sections ?? {}).join('|')})(/|#|$)`);
+	const sections = new Set(routeVersions.flatMap((version) => Object.keys(version.sections)));
+	const sectionLink = new RegExp(`^/(${[...sections].join('|')})(/|#|$)`);
 	const versionedLink = (href: string, page: string): string => {
 		if (!sectionLink.test(href)) return href;
 		const version = at(page);
@@ -620,18 +724,22 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 
 	return {
 		versions,
+		base:
+			options.target === undefined || versions[0]?.prefix === '' ? '/' : `/${versions[0]?.prefix}`,
 		plugin: importMapPlugin(versions, options),
 
-		srcExclude:
-			tree === undefined
+		srcExclude: [
+			...(tree === undefined
 				? [
 						...options.pages.map((page) => (page.endsWith('.md') ? page : `${page}/**`)),
 						`${options.siteRoot}/api/**`,
 					]
-				: [],
+				: []),
+			...inactiveVersionDirs,
+		],
 
 		rewrites: (id) => {
-			for (const version of versions) {
+			for (const version of routeVersions) {
 				if (version.srcRoot === options.siteRoot) continue;
 				const prefix = `${version.srcRoot}/`;
 				if (id.startsWith(prefix)) return `${version.prefix}${id.slice(prefix.length)}`;
@@ -683,7 +791,9 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 		},
 
 		head: (page) =>
-			at(page)?.channel === 'latest' ? [] : [['meta', { name: 'robots', content: 'noindex' }]],
+			at(page)?.channel === 'latest' && options.target?.channel !== 'preview'
+				? []
+				: [['meta', { name: 'robots', content: 'noindex' }]],
 
 		html: (html) => withImportMap(html, versions, options),
 
@@ -691,7 +801,7 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 
 		sidebar: (order) =>
 			Object.fromEntries(
-				versions.flatMap((version) =>
+				routeVersions.flatMap((version) =>
 					Object.entries(order).map(([section, groups]) => [
 						`/${version.prefix}${section}/`,
 						{
@@ -702,6 +812,44 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 				),
 			),
 
-		isIndexable: (page) => at(page)?.channel === 'latest',
+		isIndexable: (page) => at(page)?.channel === 'latest' && options.target?.channel !== 'preview',
 	};
+}
+
+/** Exclude materialized versions from prior single-target runs. A historical
+ * sourceRoot keeps only the one version directory this build just generated. */
+function inactiveVersionSourceExcludes(
+	options: VersionedDocsOptions,
+	versions: readonly DocsVersion[],
+): string[] {
+	if (options.target === undefined) return [];
+	const relativeDir = path
+		.relative(options.repoRoot, options.versionsDir)
+		.split(path.sep)
+		.join('/');
+	if (
+		relativeDir === '' ||
+		relativeDir === '..' ||
+		relativeDir.startsWith('../') ||
+		path.isAbsolute(relativeDir)
+	)
+		return [];
+	if (options.target.sourceRoot === undefined) return [`${relativeDir}/**`];
+
+	const activeRoot = versions[0]?.srcRoot;
+	const activePath = activeRoot === undefined ? '' : path.resolve(options.repoRoot, activeRoot);
+	const relativeActive = activePath === '' ? '' : path.relative(options.versionsDir, activePath);
+	const activeName =
+		relativeActive !== '' &&
+		!relativeActive.startsWith(`..${path.sep}`) &&
+		!path.isAbsolute(relativeActive)
+			? relativeActive.split(path.sep)[0]
+			: undefined;
+	if (activeName === undefined) return [`${relativeDir}/**`];
+	if (!fs.existsSync(options.versionsDir)) return [];
+	return fs
+		.readdirSync(options.versionsDir, { withFileTypes: true })
+		.filter((entry) => entry.name !== activeName)
+		.map((entry) => `${relativeDir}/${entry.name}/**`)
+		.sort();
 }

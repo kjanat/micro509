@@ -21,6 +21,9 @@ Then read the files for the area you are touching:
 - keys and signing: `src/keys/keys.ts`, `src/internal/crypto/signing.ts`, `src/internal/crypto/sig-verify.ts`, `src/internal/crypto/pbes2.ts`
 - extensions and names: `src/x509/extensions.ts`, `src/internal/x509/extension-registry.ts`, `src/x509/name.ts`, `src/internal/verify/name-constraints-engine.ts`
 
+For documentation builds and deployment, see
+[docs/DOCS-DEPLOYMENT.md](docs/DOCS-DEPLOYMENT.md).
+
 ## Setup
 
 - use Bun for installs and local checks

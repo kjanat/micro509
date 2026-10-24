@@ -90,7 +90,7 @@ const modules = {
 describe('renderModulePages inline links', () => {
 	it('links function parameters and their property paths to parameter anchors', () => {
 		const result = renderModulePages(modules, { packageName: 'example' });
-		const markdown = result.pages[0]?.markdown ?? '';
+		const markdown = result.symbolPages[0]?.markdown ?? '';
 		const prefix = 'fn-x6578616d706c65-x77616c6b-param-';
 		const optionsUrl = `#${prefix}x6f7074696f6e73`;
 
@@ -109,6 +109,8 @@ describe('renderModulePages inline links', () => {
 		expect(markdown).not.toContain('\t_: number');
 		expect(markdown).toContain('\targs: string[]');
 		expect(markdown).not.toContain('\targs: unknown');
+		expect(result.pages[0]?.markdown).toContain('[`walk`](/api/fn/walk)');
+		expect(result.pages[0]?.markdown).not.toContain('function walk(');
 	});
 
 	it('namespaces parameter anchors by module', () => {
@@ -120,12 +122,29 @@ describe('renderModulePages inline links', () => {
 		const example = result.pages.find((page) => page.pkg === 'example')?.markdown ?? '';
 		const other = result.pages.find((page) => page.pkg === 'other')?.markdown ?? '';
 
-		expect(example).toContain('id="fn-x6578616d706c65-x77616c6b-param-');
-		expect(other).toContain('id="fn-x6f74686572-x77616c6b-param-');
-		expect(example).not.toContain('id="fn-x6f74686572-');
-		expect(other).not.toContain('id="fn-x6578616d706c65-');
-		expect(example).toContain('[`walk`](/api/example#fn-walk)');
-		expect(other).toContain('[`walk`](/api/other#fn-walk)');
+		const symbolPage = result.symbolPages[0]?.markdown ?? '';
+		expect(symbolPage).toContain('id="fn-x6578616d706c65-x77616c6b-param-');
+		expect(example).toContain('id="fn-walk"');
+		expect(other).toContain('id="fn-walk"');
+		expect(example).not.toContain('function walk(');
+		expect(other).not.toContain('function walk(');
+		expect(example).toContain('[`walk`](/api/fn/walk)');
+		expect(other).toContain('[`walk`](/api/fn/walk)');
+	});
+
+	it('emits one standalone page per symbol at its bucketed permalink', () => {
+		const result = renderModulePages(modules, { packageName: 'example' });
+		expect(result.symbolPages).toHaveLength(1);
+		expect(result.symbolPages[0]).toMatchObject({ bucket: 'fn', name: 'walk' });
+		expect(result.symbolPages[0]?.markdown).toContain('Uses ');
+	});
+
+	it('keeps symbol links under a version-specific API base', () => {
+		const result = renderModulePages(modules, {
+			packageName: 'example',
+			apiBase: '/v1.2.3/api/',
+		});
+		expect(result.pages[0]?.markdown).toContain('[`walk`](/v1.2.3/api/fn/walk)');
 	});
 });
 
@@ -166,8 +185,8 @@ describe('renderModulePages literal types', () => {
 			} satisfies Record<string, ApiModule>;
 
 			const result = renderModulePages(literalModules, { packageName: 'example' });
-			expect(result.pages[0]?.markdown).toContain(`type Value = ${expected}`);
-			const rendered = result.pages[0]?.markdown.match(/^type Value = (.+)$/m)?.[1];
+			expect(result.symbolPages[0]?.markdown).toContain(`type Value = ${expected}`);
+			const rendered = result.symbolPages[0]?.markdown.match(/^type Value = (.+)$/m)?.[1];
 			expect(JSON.parse(rendered ?? 'null')).toBe(value);
 		}
 	});
@@ -203,7 +222,7 @@ describe('root entrypoint', () => {
 
 		expect(root?.pkg).toBe('root');
 		expect(root?.markdown).toStartWith('# `example`');
-		expect(root?.markdown).toContain('[`walk`](/api/example#fn-walk)');
+		expect(root?.markdown).toContain('[`walk`](/api/fn/walk)');
 		expect(result.sidebar[0]).toEqual({ text: 'example', link: '/api/root' });
 		expect(renderOverview(rootModules, { packageName: 'example' })).toContain(
 			'- [`example`](/api/root) — Stable root import.',
@@ -339,8 +358,11 @@ describe('reference anchors', () => {
 		const result = renderModulePages(referenceModules, { packageName: 'example' });
 		const domain = result.pages.find((page) => page.pkg === 'domain')?.markdown ?? '';
 
-		expect(domain).toContain('## `NamePair` {#type-namepair}');
-		expect(domain).toContain('## `namePair` {#fn-namepair}');
-		expect(domain).toContain('[`NamePair`](/api/domain#type-namepair)');
+		expect(domain).toContain('id="type-namepair"');
+		expect(domain).toContain('id="fn-namepair"');
+		expect(domain).toContain('[`NamePair`](/api/type/NamePair)');
+		expect(result.symbolPages.find((page) => page.name === 'NamePair')?.markdown).toContain(
+			'NamePair',
+		);
 	});
 });

@@ -162,7 +162,7 @@ import {
   verifyCertificateChain,
 } from 'micro509';
 
-const fixtures = new URL('/fixtures/emudhra/', import.meta.url);
+const fixtures = new URL('../fixtures/emudhra/', import.meta.url);
 async function loadFixture(name: string) {
   const response = await fetch(new URL(name, fixtures));
   if (!response.ok) throw new Error(`Fixture download failed: ${name}`);

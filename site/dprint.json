@@ -1,5 +1,5 @@
 {
-	"extends": "../.dprint.json",
+	"inherit": true,
 	"lineWidth": 80,
 	"useTabs": false,
 	"typescript": { "lineWidth": 80 },

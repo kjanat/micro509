@@ -1,28 +1,116 @@
 name: Deploy Site
 
-on: { push: { branches: [master, vitepress] }, workflow_dispatch: null }
+on:
+  push:
+    branches: [master]
+  workflow_call:
+    inputs:
+      version: { type: string, required: true }
+    secrets:
+      CF_DEPLOY_HOOK_URL: { required: true }
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [next, bootstrap, repair]
+        default: next
+        description: Build next, initialize all snapshots, or repair one archive
+      version:
+        type: string
+        description: Stable tag to repair (vX.Y.Z)
+
 permissions: {}
+concurrency: { group: docs-site, cancel-in-progress: false }
 
 jobs:
-  build:
+  publish:
     if: github.repository == 'kjanat/micro509'
     runs-on: ubuntu-latest
-    permissions: { contents: read }
-    timeout-minutes: 15
+    permissions: { contents: write }
+    timeout-minutes: 60
     cancel-timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REQUESTED_CHANNEL: ${{ inputs.channel }}
+      RELEASE_VERSION: ${{ inputs.version }}
     steps:
-      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } }
-      - { uses: $/.github/actions/setup-ts, with: { install-bun: true, install-deno: true } }
-      - { run: runner install -f site:build, env: { GITHUB_TOKEN: "${{ github.token }}" } }
-      - { name: Verify import maps, run: run site:import-maps }
-      - { uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9, with: { path: site/.vitepress/dist } }
+      - name: Validate manual deployment ref
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::Run manual documentation deployments from master. Select an archive with the version input."
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || inputs.version || github.sha }}
+      - uses: $/.github/actions/setup-ts
+        with: { install-bun: true, install-deno: true }
+      - name: Install build dependencies
+        run: bun install --frozen-lockfile
+      - name: Restore published snapshots
+        id: published
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          mkdir -p .publish
+          previous=$(git ls-remote origin refs/heads/docs-site | cut -f1)
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          if [[ -n "$previous" ]]; then
+            git fetch --depth=1 origin "$previous"
+            git archive FETCH_HEAD | tar -x -C .publish
+          fi
+      - name: Build selected documentation
+        shell: bash
+        env:
+          PREVIOUS: ${{ steps.published.outputs.previous }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PREVIOUS" ]]; then
+            if [[ -n "$RELEASE_VERSION" || "$REQUESTED_CHANNEL" == repair ]]; then
+              echo "::error::Initialize docs-site with a bootstrap run on master before releasing or repairing an archive."
+              exit 1
+            fi
+            node scripts/docs-build.mjs --channel bootstrap --output .publish
+          elif [[ "$REQUESTED_CHANNEL" == repair ]]; then
+            node scripts/docs-build.mjs --channel repair --version "$RELEASE_VERSION" --output .publish
+          elif [[ "$REQUESTED_CHANNEL" == bootstrap ]]; then
+            echo "::error::docs-site already exists. Use repair for a selected archive."
+            exit 1
+          elif [[ -n "$RELEASE_VERSION" ]]; then
+            node scripts/docs-build.mjs --channel release --version "$RELEASE_VERSION" --output .publish
+          else
+            node scripts/docs-build.mjs --channel next --output .publish
+          fi
+      - name: Publish generated tree
+        shell: bash
+        env:
+          PREVIOUS: ${{ steps.published.outputs.previous }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          export GIT_INDEX_FILE="$RUNNER_TEMP/docs-publish.index"
+          git --work-tree=.publish add --all --force -- .
+          tree=$(git write-tree)
+          commit=$(printf 'Publish documentation for %s\n' "$GITHUB_SHA" | git -c commit.gpgsign=false commit-tree "$tree")
+          git push --force-with-lease="refs/heads/docs-site:$PREVIOUS" origin "$commit:refs/heads/docs-site"
 
   deploy:
-    needs: build
+    needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 3
-    cancel-timeout-minutes: 5
-    permissions: { pages: write, id-token: write }
-    concurrency: { group: pages-deploy, cancel-in-progress: false }
-    environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
-    steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 }] # v5
+    timeout-minutes: 5
+    steps:
+      - name: Deploy prebuilt tree to Cloudflare
+        shell: bash
+        env:
+          CF_DEPLOY_HOOK_URL: ${{ secrets.CF_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CF_DEPLOY_HOOK_URL" ]]; then
+            echo "::error::CF_DEPLOY_HOOK_URL is required to deploy docs-site"
+            exit 1
+          fi
+          curl --fail --silent --show-error --request POST "$CF_DEPLOY_HOOK_URL" --output /dev/null
