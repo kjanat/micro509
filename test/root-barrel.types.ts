@@ -7,6 +7,7 @@ import type {
 	CreateSelfSignedCertificateInput,
 	CrlEncoderErrorCode,
 	ExtensionEncoderErrorCode,
+	ImportRsaKeyInput,
 	KeyAlgorithmInput,
 	KeyPairMaterial,
 	NameEncoderErrorCode,
@@ -25,6 +26,21 @@ type RootPkcs12MacData = ParsedPkcs12MacData;
 type RootSignatureProfileInput = SignatureProfileInput;
 
 function assertRootTypes(_input: {
+	readonly legacyOaepImport?: Assert<
+		IsAssignable<{ kind: 'rsa'; scheme: 'oaep'; hash: 'SHA-1' }, ImportRsaKeyInput>
+	>;
+	readonly noLegacyPssImport?: Assert<
+		IsNotAssignable<{ kind: 'rsa'; scheme: 'pss'; hash: 'SHA-1' }, ImportRsaKeyInput>
+	>;
+	readonly noLegacyPkcs1Import?: Assert<
+		IsNotAssignable<{ kind: 'rsa'; scheme: 'pkcs1-v1_5'; hash: 'SHA-1' }, ImportRsaKeyInput>
+	>;
+	readonly noImplicitLegacyImport?: Assert<
+		IsNotAssignable<{ kind: 'rsa'; hash: 'SHA-1' }, ImportRsaKeyInput>
+	>;
+	readonly noLegacyKeyGeneration?: Assert<
+		IsNotAssignable<{ kind: 'rsa'; scheme: 'oaep'; hash: 'SHA-1' }, KeyAlgorithmInput>
+	>;
 	readonly certificate?: CreateCertificateInput;
 	readonly pfx?: CreatePfxInput;
 	readonly verify?: VerifyCertificateChainInput;

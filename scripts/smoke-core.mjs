@@ -3,6 +3,8 @@
  * @module
  */
 
+import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
+
 /**
  * @param {typeof import('#micro509')} micro509
  * @param {typeof import('#micro509/crypto')} cryptoApi
@@ -49,6 +51,18 @@ export async function runSmoke(micro509, cryptoApi) {
 	const changed = await verifySignatureWithKey({ ...input, data: new Uint8Array([0]) });
 	if (publicKey.extractable || !valid.ok || !valid.valid || !changed.ok || changed.valid) {
 		throw new Error('smoke: reused non-extractable public key verification failed');
+	}
+
+	const legacyKey = await micro509.importPkcs8DerOrThrow(
+		Uint8Array.from(atob(legacyOaep.pkcs8), (char) => char.charCodeAt(0)),
+		{ kind: 'rsa', scheme: 'oaep', hash: 'SHA-1' },
+	);
+	const decrypted = await micro509.decryptRsaOaepOrThrow(
+		legacyKey,
+		Uint8Array.from(atob(legacyOaep.ciphertext), (char) => char.charCodeAt(0)),
+	);
+	if (new TextDecoder().decode(decrypted) !== legacyOaep.plaintext) {
+		throw new Error('smoke: independently generated SHA-1 OAEP ciphertext failed');
 	}
 
 	return 'smoke OK';

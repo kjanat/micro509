@@ -18,7 +18,9 @@ signature algorithm supported by micro509.
 | X448                    |         yes         |   runtime dependent[^runtime-key]   |                 no                 |            no            |      no       |        no         |
 
 RSA signature support covers PKCS#1 v1.5 and RSA-PSS. RSA-OAEP supports
-SHA-256/384/512 hashes and an optional label. The `yes` values for ECDSA and
+SHA-256/384/512 hashes and an optional label. Explicit OAEP key imports also accept
+`hash: 'SHA-1'` for legacy envelopes. SHA-256 is the default. SHA-1 is unavailable
+for key generation and RSA signature imports. The `yes` values for ECDSA and
 Ed25519 cover those signature algorithms. `verifySignatureWithKey` verifies with an
 existing WebCrypto public key, including a non-extractable key. Certificate
 verification uses the same supported signature algorithms. Ed25519, Ed448, X25519 and X448 certificate

@@ -438,6 +438,13 @@ Generate or import RSA keys with `scheme: 'oaep'` to get an encryption pair
 modulus bytes − 2 × hash bytes − 2 per call (190 bytes for RSA-2048 with
 SHA-256) — encrypt a symmetric key, not bulk data.
 
+For legacy OAEP envelopes, pass `{ kind: 'rsa', scheme: 'oaep', hash: 'SHA-1' }`
+to the key import function, then call `decryptRsaOaep` or `decryptRsaOaepOrThrow`.
+This supports Bitwarden type 4 organization-key envelopes. Type 3 uses SHA-256.
+Imports default to SHA-256. SHA-1 requires explicit import options, including for
+JWKs with `alg: 'RSA-OAEP'`. Key generation and RSA signature imports accept SHA-2
+hashes only.
+
 An optional `label` is bound to the ciphertext: decryption fails unless the
 exact same label is presented. Decryption failures are deliberately opaque
 (`decryption_failed`) — OAEP does not reveal whether the key, label, or

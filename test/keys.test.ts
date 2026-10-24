@@ -63,6 +63,7 @@ import { md5 } from '#micro509/internal/crypto/hash';
 import { encodePbes2AlgorithmIdentifier, encryptPbes2 } from '#micro509/internal/crypto/pbes2';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { hexToBytes } from '#test/helpers';
+import * as legacyOaep from './fixtures/rsa-oaep-sha1.mjs';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =
@@ -1365,6 +1366,35 @@ describe('keys: coverage — malformed inputs', () => {
 	});
 
 	describe('RSA-OAEP', () => {
+		it('decrypts independently generated SHA-1 OAEP only with an explicit hash', async () => {
+			const der = Uint8Array.from(atob(legacyOaep.pkcs8), (char) => char.charCodeAt(0));
+			const ciphertext = Uint8Array.from(atob(legacyOaep.ciphertext), (char) => char.charCodeAt(0));
+			const privateKey = unwrap(
+				await importPkcs8Der(der, { kind: 'rsa', scheme: 'oaep', hash: 'SHA-1' }),
+			);
+			expect(privateKey.usages).toEqual(['decrypt']);
+			expect(new TextDecoder().decode(await decryptRsaOaepOrThrow(privateKey, ciphertext))).toBe(
+				legacyOaep.plaintext,
+			);
+			const defaultKey = unwrap(await importPkcs8Der(der, { kind: 'rsa', scheme: 'oaep' }));
+			const wrongHash = await decryptRsaOaep(defaultKey, ciphertext);
+			expect(wrongHash.ok).toBe(false);
+			if (!wrongHash.ok) expect(wrongHash.code).toBe('decryption_failed');
+			const publicKey = await derivePublicKey(privateKey);
+			const publicJwk = await exportPublicJwk(publicKey);
+			expect(publicJwk.alg).toBe('RSA-OAEP');
+			const imported = unwrap(
+				await importPublicJwk(publicJwk, { kind: 'rsa', scheme: 'oaep', hash: 'SHA-1' }),
+			);
+			const encrypted = await encryptRsaOaepOrThrow(
+				imported,
+				new TextEncoder().encode(legacyOaep.plaintext),
+			);
+			expect(new TextDecoder().decode(await decryptRsaOaepOrThrow(privateKey, encrypted))).toBe(
+				legacyOaep.plaintext,
+			);
+		});
+
 		/** One shared OAEP pair — RSA keygen is the slow part, every test reuses it. */
 		let pairCache: Promise<KeyPairMaterial> | undefined;
 		function oaepPair(): Promise<KeyPairMaterial> {

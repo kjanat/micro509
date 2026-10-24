@@ -32,6 +32,7 @@
 		"src",
 		"src/**/*.json",
 		"test/**/*.ts",
+		"test/**/*.mjs",
 		".claude/hooks/**/*.ts",
 		"scripts",
 		"scripts/**/*.json",
