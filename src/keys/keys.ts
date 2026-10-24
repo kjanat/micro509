@@ -147,17 +147,23 @@ export interface KeyPairMaterial {
 }
 
 /** RSA variant of {@linkcode PublicKeyImportInput} / {@linkcode PrivateKeyImportInput}. */
-export interface ImportRsaKeyInput {
+export type ImportRsaKeyInput = {
 	/** Discriminant selecting RSA import. */
 	readonly kind: 'rsa';
-	/** Hash algorithm. Defaults to `'SHA-256'`. */
-	readonly hash?: RsaHash;
-	/**
-	 * Padding scheme. Defaults to `'pkcs1-v1_5'`. Pass `'oaep'` to import an
-	 * RSA-OAEP encryption key (`encrypt`/`decrypt` usage instead of `verify`/`sign`).
-	 */
-	readonly scheme?: RsaScheme;
-}
+} & (
+	| {
+			/** Signature padding scheme. Defaults to `'pkcs1-v1_5'`. */
+			readonly scheme?: RsaSignatureScheme;
+			/** Signature hash. Defaults to `'SHA-256'`. */
+			readonly hash?: RsaHash;
+	  }
+	| {
+			/** Import an encryption key with `encrypt`/`decrypt` usages. */
+			readonly scheme: 'oaep';
+			/** Hash. Defaults to `'SHA-256'`. Explicit `'SHA-1'` supports legacy OAEP envelopes. */
+			readonly hash?: RsaHash | 'SHA-1';
+	  }
+);
 
 /** ECDSA variant of {@linkcode PublicKeyImportInput} / {@linkcode PrivateKeyImportInput}. */
 export interface ImportEcKeyInput {
@@ -2390,7 +2396,7 @@ function rsaImportInputFromJwkAlg(alg: string | undefined): ImportRsaKeyInput {
 		case 'RSA-OAEP-512':
 			return { kind: 'rsa', scheme: 'oaep', hash: 'SHA-512' };
 		default:
-			// Includes plain 'RSA-OAEP' (SHA-1) — this library supports SHA-2 only.
+			// Legacy 'RSA-OAEP' (SHA-1) requires explicit scheme and hash options.
 			throw new Error(`Unsupported RSA JWK alg: ${alg}`);
 	}
 }

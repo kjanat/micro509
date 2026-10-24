@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Explicit RSA-OAEP key imports accept `hash: 'SHA-1'` for legacy envelopes,
+  including Bitwarden type 4 organization keys. SHA-256 is the default.
+  RSA signature import and key generation types accept SHA-2 hashes only.
+  [#180](https://github.com/kjanat/micro509/issues/180)
+
 - `subjectPublicKeyInfoFingerprint` returns the SHA-256 fingerprint of a
   certificate's DER SubjectPublicKeyInfo as bytes, lowercase hex and colon
   hex. `distrustedSpkiSha256` on path verification and validation profiles
