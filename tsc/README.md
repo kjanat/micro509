@@ -1,9 +1,8 @@
 # TypeScript compiler bridges
 
-Workspace packages that give micro509's tooling access to TypeScript's native compiler. The compiler is the Go code in [microsoft/TypeScript] under `tsc/`, pinned to commit [`a91e93821feafd081641f9f5d161eba626d0b2ce`]. Its Go API is internal.
+Workspace packages that give micro509's tooling access to TypeScript's native compiler. The compiler is the Go code in [microsoft/TypeScript] under `tsc/`, pinned in the four `go.mod` files to the commit of the TypeScript npm release selected by the root `ts7` catalog. Its Go API is internal.
 
 [microsoft/TypeScript]: https://github.com/microsoft/TypeScript
-[`a91e93821feafd081641f9f5d161eba626d0b2ce`]: https://github.com/microsoft/TypeScript/commit/a91e93821feafd081641f9f5d161eba626d0b2ce "Reload cached files for Created watch events (#64909)"
 
 | Package                    | Directory       | Contents                                                                         |
 | -------------------------- | --------------- | -------------------------------------------------------------------------------- |
@@ -114,3 +113,17 @@ run -s @kjanat/tsc-protocol:test @kjanat/tsc-bridge:test @kjanat/tsc-wasm:test @
 CI runs the same tests in the "TypeScript compiler bridges" job of [`.github/workflows/test.yml`][wf/test].
 
 [wf/test]: ../.github/workflows/test.yml
+
+## Compiler updates
+
+Renovate groups TypeScript 7 updates into one PR, considers releases at least
+seven days old, and updates branches on Monday before 06:00 Amsterdam time.
+The existing autofix workflow runs `bun scripts/sync-typescript.mjs` for Renovate
+PRs before refreshing the Bun lockfile. The script checks that the `ts7` catalog
+and `tsc/compat` select the same exact npm version, resolves that release's
+`gitHead`, and updates all four Go modules and their checksums to that commit.
+Standalone Renovate updates of the compiler's Go module are disabled.
+
+For a manual compiler update, change both npm pins, run
+`bun scripts/sync-typescript.mjs`, then `bun install`. Build and test the native,
+WASM, compatibility, and Vue mapper packages before merging.

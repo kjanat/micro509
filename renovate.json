@@ -70,10 +70,21 @@
 			"allowedVersions": "<7"
 		},
 		{
-			"description": "The TS7 catalog tracks the compiler generation supported by the native bridge.",
+			"description": "Update the native TypeScript compiler as one weekly batch after seven days.",
 			"matchPackageNames": ["typescript"],
-			"matchCurrentValue": "/^>=7/",
-			"allowedVersions": ">=7 <8"
+			"matchCurrentValue": "/^(?:>=|\\^|~)?7/",
+			"allowedVersions": ">=7 <8",
+			"groupName": "TypeScript compiler",
+			"minimumReleaseAge": "7 days",
+			"schedule": ["before 6am on monday"],
+			"timezone": "Europe/Amsterdam",
+			"updateNotScheduled": false
+		},
+		{
+			"description": "The TypeScript Go revision is synchronized from the selected npm release by autofix.",
+			"matchManagers": ["gomod"],
+			"matchPackageNames": ["github.com/microsoft/TypeScript/tsc"],
+			"enabled": false
 		},
 		{
 			"description": "This module is supplied by the local Go workspace replacement.",
