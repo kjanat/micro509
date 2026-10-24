@@ -965,6 +965,14 @@ export async function createCmsSignedDataWithSignedAttrs(
 }
 
 export interface IssueChainOptions {
+	/**
+	 * Validity window shared by the root, intermediate, and leaf unless a leaf
+	 * specific window is supplied. Useful for tests with a fixed verification time.
+	 */
+	readonly validity?: {
+		readonly notBefore: Date;
+		readonly notAfter: Date;
+	};
 	readonly rootExtensions?: {
 		readonly basicConstraints: BasicConstraints;
 		readonly keyUsage: readonly ('keyCertSign' | 'cRLSign' | 'digitalSignature')[];
@@ -988,6 +996,7 @@ export interface IssueChainOptions {
 export async function issueChain(options: IssueChainOptions = {}) {
 	const root = await createSelfSignedCertificate({
 		subject: { commonName: 'Verify Root CA' },
+		...(options.validity !== undefined ? { validity: options.validity } : {}),
 		extensions: options.rootExtensions ?? {
 			basicConstraints: { ca: true, pathLength: 1 },
 			keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1000,6 +1009,7 @@ export async function issueChain(options: IssueChainOptions = {}) {
 		publicKey: intermediateKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
 		issuerCertificate: root.certificate.der,
+		...(options.validity !== undefined ? { validity: options.validity } : {}),
 		extensions: options.intermediateExtensions ?? {
 			basicConstraints: { ca: true, pathLength: 0 },
 			keyUsage: ['keyCertSign', 'cRLSign'],
@@ -1012,7 +1022,11 @@ export async function issueChain(options: IssueChainOptions = {}) {
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: options.leafSignerPrivateKey ?? intermediateKeys.privateKey,
 		issuerCertificate: options.leafIssuerCertificate ?? intermediate.der,
-		...(options.leafValidity !== undefined ? { validity: options.leafValidity } : {}),
+		...(options.leafValidity !== undefined
+			? { validity: options.leafValidity }
+			: options.validity !== undefined
+				? { validity: options.validity }
+				: {}),
 		extensions: {
 			keyUsage: ['digitalSignature'],
 			extendedKeyUsage: ['serverAuth'],

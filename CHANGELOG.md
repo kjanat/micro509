@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejects caller-listed keys, including cross-signs and trust anchors, with
   `public_key_distrusted`. The caller supplies and updates the list. No bundled
   blocklist or network lookup is used.
+- The API reference has dedicated pages for exported functions, types and
+  variables again, with stable `/api/fn/`, `/api/type/` and `/api/var/`
+  permalinks. Per-version catalogs include nested symbol-page inventory so the
+  version switcher can show only pages available in that snapshot. [#56](https://github.com/kjanat/micro509/issues/56)
+
+### Changed
+
+- Documentation deploys incrementally through the generated orphan `docs-site`
+  branch. Master builds replace only `/next/`; a stable release adds one
+  immutable `/vX.Y.Z/` snapshot and refreshes root/latest. The shared catalog
+  keeps old snapshots' navigation current without rebuilding them. Cloudflare's
+  existing deploy hook serves the prebuilt tree. See the
+  [documentation deployment guide](docs/DOCS-DEPLOYMENT.md). [#60](https://github.com/kjanat/micro509/issues/60)
 
 ### Fixed
 

@@ -163,15 +163,9 @@ jobs:
     name: Deploy docs
     needs: [validate, release]
     if: needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.is_stable == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - shell: pwsh
-        env: { HOOK: "${{ secrets.CF_DEPLOY_HOOK_URL }}" }
-        run: |
-          if (-not $env:HOOK) {
-            "::warning::CF_DEPLOY_HOOK_URL unset; the next master push refreshes the site root"
-            exit 0
-          }
-          Invoke-RestMethod -Method Post -Uri $env:HOOK | Out-Null
+    permissions: { contents: write }
+    uses: $/.github/workflows/deploy-site.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets:
+      CF_DEPLOY_HOOK_URL: ${{ secrets.CF_DEPLOY_HOOK_URL }}

@@ -26,6 +26,24 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 const siteRoot = 'site';
 const isDev = process.argv.includes('dev');
 
+/** Ordinary builds render one tree. Historical rebuilds are explicit. */
+function docsChannel(): 'preview' | 'next' | 'latest' | 'archive' | 'all' {
+	const channel = process.env.DOCS_CHANNEL ?? 'preview';
+	if (
+		channel === 'preview' ||
+		channel === 'next' ||
+		channel === 'latest' ||
+		channel === 'archive' ||
+		channel === 'all'
+	)
+		return channel;
+	throw new Error(`Unknown DOCS_CHANNEL: ${channel}`);
+}
+const channel = docsChannel();
+const targetVersion = process.env.DOCS_VERSION;
+const sourceRoot = process.env.DOCS_SOURCE_ROOT;
+const developmentBase = channel === 'next' ? '/next/' : '/';
+
 /** HTTPS so non-localhost origins keep a secure context; WebCrypto needs one. */
 const devHttps = isDev
 	? await devServerCertificate(path.join(import.meta.dirname, 'cache/dev-cert'))
@@ -95,6 +113,7 @@ function envOf(...names: readonly string[]): string | undefined {
  * - Local / manual (git branch or MICRO509_GIT_BRANCH override)
  */
 const gitRef =
+	targetVersion ??
 	envOf('MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME') ??
 	git('branch', '--show-current') ??
 	'master';
@@ -124,7 +143,7 @@ function releasedSha(): string | undefined {
 	return git('ls-remote', repoUrl.href, `refs/tags/v${repo.version}^{}`)?.split('\t')[0];
 }
 
-const released = releasedSha();
+const released = channel === 'all' ? releasedSha() : undefined;
 const omitNext = treeSha !== undefined && treeSha === released;
 
 console.log(`[versions] tree ${treeSha}, release v${repo.version} ${released ?? 'unresolved'}`);
@@ -223,6 +242,15 @@ function versionPackageReferences(markdown: string): string {
 
 const docs = await versionedDocs({
 	repoRoot,
+	...(channel === 'all'
+		? {}
+		: {
+				target: {
+					channel,
+					...(targetVersion === undefined ? {} : { version: targetVersion }),
+					...(sourceRoot === undefined ? {} : { sourceRoot }),
+				},
+			}),
 	siteRoot,
 	versionsDir: path.join(repoRoot, siteRoot, 'versions'),
 	cacheDir: path.join(import.meta.dirname, 'cache/versions'),
@@ -254,25 +282,12 @@ const docs = await versionedDocs({
 			}
 			return isDev
 				? `/@fs${repoRoot}/dist${subpath === '.' ? '/index' : tail}.js`
-				: `/_library/@${nextRef}${subpath === '.' ? '/index' : tail}.js`;
+				: `${developmentBase}_library/@${nextRef}${subpath === '.' ? '/index' : tail}.js`;
 		},
 	},
 	generateApi,
 	fileGuardrail: 19_500,
 });
-
-const versionPrefixes = docs.versions
-	.map((version) => version.prefix)
-	.sort((left, right) => right.length - left.length);
-
-function versionPrefixOfPath(pathname: string): string {
-	const path = pathname.replace(/^\//, '');
-	return (
-		versionPrefixes.find(
-			(prefix) => prefix === '' || path === prefix.slice(0, -1) || path.startsWith(prefix),
-		) ?? ''
-	);
-}
 
 /** Reading order within each section. Unlisted pages append to the last group. */
 const ORDER: SidebarOrder = {
@@ -304,6 +319,7 @@ const ORDER: SidebarOrder = {
 };
 
 export default defineConfig<DocsThemeConfig>({
+	base: docs.base,
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
 		...(devHttps === undefined ? {} : { server: { https: devHttps } }),
@@ -337,6 +353,7 @@ export default defineConfig<DocsThemeConfig>({
 		'**/CLAUDE.md',
 		'**/README.md',
 		'**/_*.md',
+		'.publish/**',
 		'.claude/**',
 		'.opencode/**',
 		'CONTRIBUTING.md',
@@ -351,10 +368,14 @@ export default defineConfig<DocsThemeConfig>({
 	ignoreDeadLinks: [/test\/fixtures\//],
 
 	rewrites: docs.rewrites,
-	sitemap: {
-		hostname: repo.homepage,
-		transformItems: (items) => items.filter((item) => docs.isIndexable(item.url)),
-	},
+	...(channel === 'latest' || channel === 'all'
+		? {
+				sitemap: {
+					hostname: repo.homepage,
+					transformItems: (items) => items.filter((item) => docs.isIndexable(item.url)),
+				},
+			}
+		: {}),
 
 	markdown: {
 		config(md) {
@@ -379,6 +400,7 @@ export default defineConfig<DocsThemeConfig>({
 	transformHtml: (html, _id, context) => docs.html(html, context.page),
 	buildEnd: async (config) => {
 		await docs.buildEnd(config);
+		if (channel === 'archive' || channel === 'latest') return;
 		await bundleLibrary({
 			config: false,
 			entry: Object.fromEntries(
@@ -454,15 +476,20 @@ export default defineConfig<DocsThemeConfig>({
 					 * @default
 					 * { fuzzy: 0.2, prefix: true, boost: {title: 4, text: 2, titles: 1}}
 					 */
-					searchOptions: {
-						filter: (result) => {
-							const pathname = globalThis.location?.pathname;
-							return (
-								pathname === undefined ||
-								versionPrefixOfPath(String(result.id)) === versionPrefixOfPath(pathname)
-							);
-						},
-					},
+					searchOptions:
+						channel === 'all'
+							? {
+									filter: (result) => {
+										// VitePress serializes this function without its module closure.
+										const prefixOf = (value: string) =>
+											/^\/?(next|v\d+\.\d+\.\d+)(?:\/|$)/.exec(value)?.[1] ?? '';
+										const pathname = globalThis.location?.pathname;
+										return (
+											pathname === undefined || prefixOf(String(result.id)) === prefixOf(pathname)
+										);
+									},
+								}
+							: {},
 				},
 			},
 		},

@@ -31,7 +31,10 @@ import { findExamplePages } from './site-live-examples-helpers.mjs';
  * }} Result
  */
 
-const DIST = path.resolve(import.meta.dirname, '..', 'site/.vitepress/dist');
+const DIST =
+	process.env.SITE_DIST === undefined
+		? path.resolve(import.meta.dirname, '..', 'site/.vitepress/dist')
+		: path.resolve(process.env.SITE_DIST);
 const HOST = '127.0.0.1';
 const EXAMPLE_TIMEOUT_MS = 60_000;
 
@@ -384,17 +387,16 @@ async function closeServer(server) {
 }
 
 /**
- * The scoped import map resolves by the URL of the page an example runs on. A reader
- * who lands on the root docs and clicks through to an archived version never reloads,
- * so the run after that client-side navigation must import the archive's library.
+ * Switching to an immutable snapshot loads its own document and import map.
+ * Exercise the real switcher and check that its example imports that release.
  *
  * @param {import('playwright').Browser} browser
  * @param {string} baseUrl
  * @param {Version} target
  * @returns {Promise<Result>}
  */
-async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
-	const label = `spa:${version}`;
+async function runAfterVersionSwitch(browser, baseUrl, { version, route }) {
+	const label = `switch:${version}`;
 	const context = await browser.newContext({
 		baseURL: baseUrl,
 		serviceWorkers: 'block',
@@ -410,20 +412,17 @@ async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
 	let started;
 
 	try {
-		await page.goto('/', { waitUntil: 'networkidle' });
+		await page.goto('/guide/getting-started', { waitUntil: 'networkidle' });
 		await page.waitForFunction(() => {
 			const app = document.querySelector('#app');
 			return app !== null && '__vue_app__' in app;
 		});
 
-		await page.evaluate((href) => {
+		await page.evaluate(() => {
 			/** @type {Window & { __liveExamplesSpa?: boolean }} */ (window).__liveExamplesSpa = true;
-			const anchor = document.createElement('a');
-			anchor.href = href;
-			anchor.textContent = href;
-			document.body.append(anchor);
-			anchor.click();
-		}, route);
+		});
+		await page.locator('.version-switcher').hover();
+		await page.locator(`.vs-link[href="${route}"]`).click();
 		await page.waitForURL(`**${route}`);
 		await page.locator('.live-code').first().waitFor({ state: 'visible' });
 
@@ -431,8 +430,8 @@ async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
 			() =>
 				/** @type {Window & { __liveExamplesSpa?: boolean }} */ (window).__liveExamplesSpa === true,
 		);
-		if (!survived) {
-			throw new Error('navigation reloaded the page; the client-side route was never exercised');
+		if (survived) {
+			throw new Error('version switch did not load the snapshot document and its import map');
 		}
 
 		const block = page.locator('.live-code').first();
@@ -458,7 +457,7 @@ async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
 
 		let why = '';
 		if (misdirected.length > 0)
-			why = `after client-side navigation to ${route}, the example imported ${misdirected.join(', ')}`;
+			why = `after switching to ${route}, the example imported ${misdirected.join(', ')}`;
 		else if (imported.length === 0) why = 'the example imported nothing external';
 		else why = resultFailure(failures, await block.locator('.live-code-err').count(), output);
 
@@ -530,6 +529,35 @@ async function verifyBlockerInterception(browser, baseUrl) {
 			failures.some((failure) => failure.includes(`${blockedUrl} (matches /fingerprint.js^`)),
 		);
 		console.log('[live-examples] content-blocker interception verified');
+	} finally {
+		await context.close();
+	}
+}
+
+/** Exercise generated symbol links and the serialized client-side search callback.
+ * @param {import('playwright').Browser} browser
+ * @param {string} baseUrl
+ * @param {string} prefix
+ */
+async function verifyApiNavigation(browser, baseUrl, prefix) {
+	const context = await browser.newContext({ baseURL: baseUrl });
+	try {
+		const page = await context.newPage();
+		/** @type {string[]} */
+		const errors = [];
+		page.on('pageerror', (error) => errors.push(error.message));
+		await page.goto(`${prefix}api/x509`, { waitUntil: 'networkidle' });
+		await page.locator(`.vp-doc a[href="${prefix}api/type/SubjectAltName"]`).first().click();
+		await page.waitForURL(`**${prefix}api/type/SubjectAltName`);
+		await page.locator('.vp-doc h1').filter({ hasText: 'SubjectAltName' }).waitFor();
+		await page.locator('.VPNavBarSearch button').click();
+		await page.locator('.VPLocalSearchBox input').fill('createCertificate');
+		const result = page.locator('.VPLocalSearchBox .result').first();
+		await result.waitFor({ state: 'visible' });
+		const href = await result.getAttribute('href');
+		assert.ok(href?.startsWith(prefix), `search result escaped ${prefix}: ${href}`);
+		assert.deepEqual(errors, []);
+		console.log(`[live-examples] symbol navigation and search verified at ${prefix}`);
 	} finally {
 		await context.close();
 	}
@@ -627,13 +655,17 @@ async function main() {
 
 	try {
 		await verifyBlockerInterception(browser, baseUrl);
+		if (routes.has('/next/api/x509')) await verifyApiNavigation(browser, baseUrl, '/next/');
+		else if (routes.has('/api/x509')) await verifyApiNavigation(browser, baseUrl, '/');
 		for (const pageInfo of pages) {
 			for (const result of await runAllBlocks(browser, baseUrl, pageInfo)) report(result);
 		}
 
-		const navigable = pages.find(({ version }) => /^v\d/.test(version));
-		if (navigable !== undefined) {
-			report(await runAfterClientNavigation(browser, baseUrl, navigable));
+		const navigable = pages.find(
+			({ version, route }) => /^v\d/.test(version) && route.endsWith('/guide/getting-started'),
+		);
+		if (navigable !== undefined && routes.has('/guide/getting-started')) {
+			report(await runAfterVersionSwitch(browser, baseUrl, navigable));
 		}
 
 		const count = results.length;
@@ -649,7 +681,8 @@ async function main() {
 
 	printSuccessfulOutputs(
 		results.filter(
-			({ version }) => version.startsWith('spa:') || version.endsWith('/guide/getting-started#0'),
+			({ version }) =>
+				version.startsWith('switch:') || version.endsWith('/guide/getting-started#0'),
 		),
 		baseUrl,
 	);

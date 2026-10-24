@@ -30,7 +30,7 @@ function rewriteExampleSource(code: string): string {
 			(_match, subpath: string | undefined) => `from '#micro509${subpath ?? ''}'`,
 		)
 		.replaceAll(
-			/new URL\('\/fixtures\/([^']*)',\s*import\.meta\.url\)/g,
+			/new URL\('(?:\/|\.\.\/)fixtures\/([^']*)',\s*import\.meta\.url\)/g,
 			(_match, relativePath: string) =>
 				`new URL(${JSON.stringify(new URL(relativePath, fixtures).href)})`,
 		);

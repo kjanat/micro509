@@ -1,35 +1,47 @@
 <!--
-	VersionSwitcher — navbar dropdown between the versions this site serves.
+	VersionSwitcher — links between independently built version snapshots.
 
-	Every version is part of one app, so the entries come from themeConfig at
-	build time (no fetch, no manifest, nothing frozen into an old artifact) and
-	switching versions is ordinary SPA routing: the reader stays on the same
-	page, in a different version, without a document reload.
-
-	Order is the timeline, newest first: next (the unreleased tree), then the
-	release the root serves, then superseded releases. The plugin hands them over
-	in that order — this renders them as given.
+	The embedded theme config keeps the preview usable immediately. At runtime,
+	/versions.json supplies the published version catalog and page inventories.
+	Version links use full document navigation because each version has its own
+	VitePress app under a distinct base path.
 -->
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
-import { computed, ref } from 'vue';
-
-interface VersionEntry {
-  /** Dropdown text: 'next', 'v0.9.0', … */
-  readonly label: string;
-  /** URL prefix without the leading slash: '', 'next/', 'v0.8.0/'. */
-  readonly prefix: string;
-  /** External destination when this label identifies a pull request. */
-  readonly labelUrl?: string;
-}
+import { computed, onMounted, ref } from 'vue';
+import {
+  hrefFor as hrefForVersion,
+  mergeVersions,
+  parseCatalog,
+  type VersionEntry,
+} from './version-catalog';
 
 const { theme } = useData();
 const route = useRoute();
 const open = ref(false);
-
-const versions = computed<readonly VersionEntry[]>(
+const embeddedVersions = computed<readonly VersionEntry[]>(
   () => theme.value.versions ?? [],
 );
+const catalogVersions = ref<readonly VersionEntry[] | undefined>();
+
+const versions = computed<readonly VersionEntry[]>(
+  () => {
+    const catalog = catalogVersions.value;
+    if (catalog === undefined) return embeddedVersions.value;
+    return mergeVersions(catalog, embeddedVersions.value);
+  },
+);
+
+onMounted(async () => {
+  try {
+    const response = await fetch('/versions.json', { headers: { accept: 'application/json' } });
+    if (!response.ok) return;
+    const parsed = parseCatalog(await response.json());
+    if (parsed !== undefined) catalogVersions.value = parsed;
+  } catch {
+    // The build-time theme config remains a usable offline and preview fallback.
+  }
+});
 
 /** Path within the current version, e.g. 'guide/keys' on /v0.8.0/guide/keys. */
 const current = computed(() => {
@@ -58,13 +70,11 @@ const labelUrl = computed(() =>
 );
 
 /**
- * The same page in another version. Every version serves the same guide and
- * reference tree, so the reader lands where they were; a page that a version
- * doesn't have (an API module added later) falls through to the 404, which is
- * the honest answer — that page did not exist in that version.
+ * The matching page in another version, including its query and symbol hash.
+ * If its page inventory lacks that page, use that section's landing page.
  */
 function hrefFor(entry: VersionEntry): string {
-  return `/${entry.prefix}${current.value.page}`;
+  return hrefForVersion(entry, current.value.page, `${route.query}${route.hash}`);
 }
 </script>
 
@@ -80,7 +90,7 @@ function hrefFor(entry: VersionEntry): string {
       :href="labelUrl"
       target="_blank"
       rel="noreferrer"
-      :aria-label="`Open pull request ${label}`"
+      :aria-label="`Open details for ${label}`"
     >
       {{ label }}
     </a>
@@ -90,7 +100,7 @@ function hrefFor(entry: VersionEntry): string {
       class="vs-button"
       aria-haspopup="true"
       :aria-expanded="open"
-      @click="open = !open"
+      @click="open = true"
     >
       {{ label }}
       <span
@@ -102,9 +112,10 @@ function hrefFor(entry: VersionEntry): string {
     </button>
     <ul v-if="open && versions.length > 1" class="vs-menu">
       <li v-for="entry in versions" :key="entry.prefix">
-        <!-- In-app routing: versions are pages of one site, not separate apps. -->
+        <!-- `target` skips VitePress SPA routing across separately deployed snapshots. -->
         <a
           class="vs-link"
+          target="_self"
           :class="{
             'vs-active':
               entry.prefix === current.version?.prefix,

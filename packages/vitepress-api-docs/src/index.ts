@@ -4,13 +4,11 @@
  * Given a tree, the entrypoints to document and the name to document them under,
  * writes reference pages into `outDir`:
  *   - `<module>.md` per-module pages (sidebar-visible)
+ *   - `fn/<name>.md`, `type/<name>.md`, `var/<name>.md` per-symbol pages
  *   - `index.md`    the overview landing page
  *
- * Every exported symbol is a `##` section on its module page, anchored so
- * `{@link}` references resolve to it. There are no per-symbol pages: they
- * duplicate the module page's content and cost the consuming site 3 build
- * artifacts each (html + 2 route chunks), which is what a site documenting many
- * versions at once cannot afford.
+ * Module pages are compact categorized indexes; full declarations and
+ * documentation live on stable per-symbol pages.
  *
  * Nothing about the host project is assumed — not its manifest filenames, not
  * where its sources live, not what it is called. The caller reads its own
@@ -124,7 +122,7 @@ function withTitle(title: string, markdown: string): string {
 export function generateApiDocs(target: ApiDocsTarget): void {
 	const render: RenderOptions = { packageName: target.name, apiBase: target.apiBase ?? '/api/' };
 	const nodes = loadNodes(target);
-	const { pages } = renderModulePages(nodes, render);
+	const { pages, symbolPages } = renderModulePages(nodes, render);
 
 	// Wipe first: a module dropped from the entrypoints would otherwise linger as
 	// an orphan route — a page nobody links to, that crawlers still find.
@@ -138,6 +136,11 @@ export function generateApiDocs(target: ApiDocsTarget): void {
 			file,
 			withTitle(page.root ? target.name : `${target.name}/${page.pkg}`, page.markdown),
 		);
+	}
+	for (const page of symbolPages) {
+		const file = pageFile(target.outDir, `${page.bucket}/${page.name}`);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(file, withTitle(page.name, page.markdown));
 	}
 	fs.writeFileSync(
 		path.join(target.outDir, 'index.md'),
