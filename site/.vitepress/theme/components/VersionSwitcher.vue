@@ -5,10 +5,17 @@
 	/versions.json supplies the published version catalog and page inventories.
 	Version links use full document navigation because each version has its own
 	VitePress app under a distinct base path.
+
+	VitePress renders a nav component in three contexts and flags each one:
+	the navbar (no flag), the mobile screen menu (`screen-menu`), and the
+	navbar's `⋯` overflow panel (`menu`). Only the navbar has room to float a
+	flyout; the other two are vertical list panels, so the version list renders
+	in flow there — as an accordion on the screen menu and as a flat group in
+	the overflow panel, matching VitePress's own nav items in each.
 -->
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, useId } from 'vue';
 import {
   hrefFor as hrefForVersion,
   mergeVersions,
@@ -19,11 +26,15 @@ import {
 } from './version-catalog';
 
 const { theme } = useData();
-const props = defineProps<{ readonly screenMenu?: boolean }>();
+const props = defineProps<{
+  readonly screenMenu?: boolean;
+  readonly menu?: boolean;
+}>();
 const route = useRoute();
 const open = ref(false);
 const switcher = ref<HTMLElement>();
 const trigger = ref<HTMLButtonElement>();
+const listId = useId();
 const embeddedVersions = computed<readonly VersionEntry[]>(
   () => theme.value.versions ?? [],
 );
@@ -37,8 +48,16 @@ const versions = computed<readonly VersionEntry[]>(
   },
 );
 
+/** A list panel holds the versions in flow; only the navbar floats them. */
+const inPanel = computed(() => props.screenMenu === true || props.menu === true);
+
+/** The overflow panel is already a disclosure, so it lists versions directly. */
+const expanded = computed(
+  () => versions.value.length > 1 && (props.menu === true || open.value),
+);
+
 function setHoverOpen(event: PointerEvent, value: boolean): void {
-  if (event.pointerType === 'mouse' && !props.screenMenu) open.value = value;
+  if (event.pointerType === 'mouse' && !inPanel.value) open.value = value;
 }
 
 function closeOutside(event: PointerEvent): void {
@@ -106,7 +125,11 @@ function hrefFor(entry: VersionEntry): string {
   <div
     ref="switcher"
     class="version-switcher"
-    :class="{ 'screen-menu': props.screenMenu }"
+    :class="{
+      'screen-menu': props.screenMenu,
+      'menu-panel': props.menu,
+      open: expanded,
+    }"
     @pointerenter="setHoverOpen($event, true)"
     @pointerleave="setHoverOpen($event, false)"
     @keydown="onKeydown"
@@ -121,24 +144,33 @@ function hrefFor(entry: VersionEntry): string {
     >
       {{ label }}
     </a>
+    <!-- The overflow panel lists versions unconditionally; its label is a heading. -->
+    <p v-else-if="props.menu" class="vs-title">{{ label }}</p>
     <button
       v-else
       ref="trigger"
       type="button"
       class="vs-button"
-      aria-haspopup="true"
+      :aria-haspopup="props.screenMenu ? undefined : true"
       :aria-expanded="open"
+      :aria-controls="expanded ? listId : undefined"
       @click="open = !open"
     >
       {{ label }}
+      <!-- The screen menu uses VitePress's accordion plus, the navbar a caret. -->
       <span
-        v-if="versions.length > 1"
+        v-if="versions.length > 1 && props.screenMenu"
+        class="vs-plus vpi-plus"
+        aria-hidden="true"
+      />
+      <span
+        v-else-if="versions.length > 1"
         class="vs-caret"
         aria-hidden="true"
         >▾</span
       >
     </button>
-    <ul v-if="open && versions.length > 1" class="vs-menu">
+    <ul v-if="expanded" :id="listId" class="vs-menu">
       <li v-for="entry in versions" :key="versionKey(entry)">
         <!-- `target` skips VitePress SPA routing across separately deployed snapshots. -->
         <a
@@ -227,29 +259,88 @@ function hrefFor(entry: VersionEntry): string {
   font-weight: 600;
 }
 
+/* A list panel owns the scrolling, so the version list drops the floating shell. */
+.screen-menu .vs-menu,
+.menu-panel .vs-menu {
+  position: static;
+  min-width: 0;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .screen-menu {
   display: block;
   height: auto;
   border-bottom: 1px solid var(--vp-c-divider);
+  transition: border-color 0.5s;
+}
+
+.screen-menu.open {
+  padding-bottom: 10px;
 }
 
 .screen-menu .vs-button {
   width: 100%;
   justify-content: space-between;
-  padding: 12px 0 11px;
+  padding: 12px 4px 11px 0;
   font-size: 14px;
   line-height: 24px;
 }
 
-.screen-menu .vs-menu {
-  position: static;
-  max-height: min(50dvh, 384px);
-  margin-bottom: 12px;
-  box-shadow: none;
+.screen-menu.open .vs-button {
+  padding-bottom: 6px;
+  color: var(--vp-c-brand-1);
+}
+
+.vs-plus {
+  transition: transform 0.25s;
+}
+
+.screen-menu.open .vs-plus {
+  transform: rotate(45deg);
 }
 
 .screen-menu .vs-link {
-  padding: 8px 16px;
-  line-height: 24px;
+  margin-left: 12px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 32px;
+  white-space: normal;
+}
+
+.screen-menu .vs-link:hover {
+  background: transparent;
+}
+
+.menu-panel {
+  display: block;
+  height: auto;
+}
+
+.menu-panel .vs-title {
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 32px;
+  color: var(--vp-c-text-2);
+  white-space: nowrap;
+}
+
+.menu-panel .vs-button {
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 32px;
+}
+
+.menu-panel .vs-link {
+  border-radius: 6px;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 32px;
 }
 </style>

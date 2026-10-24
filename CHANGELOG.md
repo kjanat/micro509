@@ -21,9 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Mobile navigation uses compact rows and an inline, scrollable version list.
-  The version button toggles the list, and Escape or an outside click closes it.
-  Desktop version lists also scroll within the viewport.
+- Mobile navigation uses compact rows and an inline version list that expands
+  like VitePress's own screen-menu groups, scrolling with the menu instead of
+  inside a nested box. The version button toggles the list, and Escape or an
+  outside click closes it. Desktop version lists scroll within the viewport,
+  and the navbar's overflow menu renders both as flat panel rows.
   [#188](https://github.com/kjanat/micro509/issues/188)
 - PR previews have a separate version entry alongside production's `next` and
   release entries. Switching from a preview opens the matching production page.

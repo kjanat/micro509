@@ -7,7 +7,9 @@
 	not at the root's. The prefix comes from the current route, so a reader
 	never falls out of the version they are in by clicking the navbar.
 
-	Rendered by both VPNavBarMenu (desktop) and VPNavScreenMenu (mobile).
+	Rendered in the navbar, in the mobile screen menu (`screen-menu`), and in
+	the navbar's `⋯` overflow panel (`menu`). Each context sizes its rows
+	differently, so the links follow VitePress's own nav links in each.
 -->
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
@@ -15,7 +17,10 @@ import { computed } from 'vue';
 import type { VersionEntry } from './version-catalog';
 import { versionForPath } from './version-catalog';
 
-const props = defineProps<{ readonly screenMenu?: boolean }>();
+const props = defineProps<{
+  readonly screenMenu?: boolean;
+  readonly menu?: boolean;
+}>();
 
 const SECTIONS = [
   {
@@ -53,15 +58,19 @@ const links = computed(() =>
 </script>
 
 <template>
-  <div class="versioned-nav" :class="{ 'screen-menu': props.screenMenu }">
+  <div
+    class="versioned-nav"
+    :class="{ 'screen-menu': props.screenMenu, 'menu-panel': props.menu }"
+  >
     <a
       v-for="link in links"
       :key="link.text"
       class="VPLink link vp-external-link-icon-none versioned-nav-link"
       :class="{
         active: link.active,
-        VPNavBarMenuLink: !props.screenMenu,
+        VPNavBarMenuLink: !props.screenMenu && !props.menu,
         VPNavScreenMenuLink: props.screenMenu,
+        'menu-panel-link': props.menu,
       }"
       :href="link.link"
     >
@@ -75,8 +84,9 @@ const links = computed(() =>
   display: flex;
 }
 
-.screen-menu {
-  flex-direction: column;
+.screen-menu,
+.menu-panel {
+  display: block;
 }
 
 .versioned-nav-link {
@@ -98,6 +108,18 @@ const links = computed(() =>
   border-bottom: 1px solid var(--vp-c-divider);
   padding: 12px 0 11px;
   line-height: 24px;
+}
+
+.menu-panel-link {
+  display: block;
+  border-radius: 6px;
+  padding: 0 12px;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.menu-panel-link:hover {
+  background: var(--vp-c-default-soft);
 }
 
 .versioned-nav-link.active {
