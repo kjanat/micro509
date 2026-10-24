@@ -19,46 +19,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-24
+
+Block a compromised public key across every certificate that carries it,
+including certificates cross-signed by different CAs. This release adds
+SPKI-based distrust to chain verification, tightens indirect CRL issuer
+matching, and reports the certificate responsible for a revocation failure.
+
+It also adds explicit SHA-1 RSA-OAEP imports for legacy Bitwarden envelopes
+and restores individual API reference pages with versioned documentation.
+
 ### Added
 
-- Explicit RSA-OAEP key imports accept `hash: 'SHA-1'` for legacy envelopes,
-  including Bitwarden type 4 organization keys. SHA-256 is the default.
-  RSA signature import and key generation types accept SHA-2 hashes only.
-  [#180](https://github.com/kjanat/micro509/issues/180)
-
-- `subjectPublicKeyInfoFingerprint` returns the SHA-256 fingerprint of a
-  certificate's DER SubjectPublicKeyInfo as bytes, lowercase hex and colon
-  hex. `distrustedSpkiSha256` on path verification and validation profiles
-  rejects caller-listed keys, including cross-signs and trust anchors, with
-  `public_key_distrusted`. The caller supplies and updates the list. No bundled
-  blocklist or network lookup is used.
-- The API reference has dedicated pages for exported functions, types and
-  variables again, with stable `/api/fn/`, `/api/type/` and `/api/var/`
-  permalinks. Per-version catalogs include nested symbol-page inventory so the
-  version switcher can show only pages available in that snapshot. [#56](https://github.com/kjanat/micro509/issues/56)
+- **Distrust compromised keys across certificate paths.** Supply SHA-256 SPKI
+  fingerprints through `distrustedSpkiSha256` to reject a key in a leaf,
+  intermediate, or trust anchor with `public_key_distrusted`. The same entry
+  covers certificates sharing that key across alternative cross-signed paths.
+  `subjectPublicKeyInfoFingerprint` computes the fingerprint from a
+  certificate and returns bytes, lowercase hex, and colon-separated hex.
+  Applications supply their own distrust list. [#178](https://github.com/kjanat/micro509/pull/178)
+- **Import legacy RSA-OAEP keys.** Explicit RSA-OAEP imports accept
+  `hash: 'SHA-1'`, including keys for Bitwarden type 4 organization envelopes.
+  SHA-256 is the default. RSA signature imports and key generation accept
+  SHA-2 hashes. [#180](https://github.com/kjanat/micro509/issues/180)
 
 ### Changed
 
-- Documentation deploys incrementally through the generated orphan `docs-site`
-  branch. Master builds replace only `/next/`; a stable release adds one
-  immutable `/vX.Y.Z/` snapshot and refreshes root/latest. The shared catalog
-  keeps old snapshots' navigation current without rebuilding them. Cloudflare's
-  existing deploy hook serves the prebuilt tree. See the
-  [documentation deployment guide](docs/DOCS-DEPLOYMENT.md). [#60](https://github.com/kjanat/micro509/issues/60)
+- **Browse API documentation by symbol and version.** Functions, types, and
+  variables have dedicated pages at `/api/fn/`, `/api/type/`, and `/api/var/`.
+  The version switcher links to pages available in each snapshot. Algorithm
+  documentation distinguishes certificate parsing, key import, generation,
+  and signature verification support.
+  [#56](https://github.com/kjanat/micro509/issues/56),
+  [#179](https://github.com/kjanat/micro509/pull/179)
+- **Read released and development docs separately.** The site root serves the
+  latest release, `/next/` follows master, and `/vX.Y.Z/` provides release
+  snapshots. Publishing updates the affected version without rebuilding every
+  archive. [#60](https://github.com/kjanat/micro509/issues/60)
 
 ### Fixed
 
-- Indirect CRL issuer selection rejects mixed GeneralName forms and requires
-  the exact DER encoding of the CRL issuer distinguished name, as specified
-  by RFC 5280 §4.2.1.13. [#13](https://github.com/kjanat/micro509/issues/13)
-
-- Chain verification reports the certificate index for revoked and indeterminate
-  revocation failures, including revoked intermediates.
-
-- Both documentation build entrypoints select the published version history
-  for production. Deployment rejects preview-only output and checks the live
-  publication identifier, catalog, and documentation routes after the Cloudflare
-  deploy hook.
+- **Reject incorrect indirect CRL issuer identities.** Every `cRLIssuer` entry
+  must be a `directoryName` with the exact DER encoding of the CRL issuer,
+  as required by RFC 5280 §4.2.1.13. A matching name alongside a URI or another
+  issuer no longer makes the CRL applicable. Equivalent names with different
+  DER encodings are also rejected. [#13](https://github.com/kjanat/micro509/issues/13)
+- **Identify the certificate behind revocation failures.** Chain verification
+  reports the certificate index for revoked and indeterminate results,
+  including failures on intermediate certificates.
+- **Serve the published docs tree in production.** Both build entrypoints
+  select the versioned publication. Deployment rejects preview-only output
+  and waits for the exact publication identifier and its documentation routes
+  to appear on the live site. An older deployment with an identical version
+  catalog cannot satisfy that check. [#185](https://github.com/kjanat/micro509/pull/185)
 
 ## [0.15.0] - 2026-10-23
 
@@ -1942,7 +1955,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/kjanat/micro509/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kjanat/micro509/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kjanat/micro509/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kjanat/micro509/compare/v0.12.0...v0.13.0
