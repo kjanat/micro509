@@ -4,6 +4,7 @@ import { cp, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkPublishedTree } from './check-docs-deployment.mjs';
 
 const REPOSITORY = 'https://github.com/kjanat/micro509.git';
 const PUBLISHED_BRANCH = 'docs-site';
@@ -17,6 +18,7 @@ export function usePublishedDocsTree(env = process.env) {
 /** Copy the generated branch tree, leaving Git metadata out of the deploy root. */
 /** @param {string} source @param {string} destination @returns {Promise<void>} */
 export async function copyPublishedDocsTree(source, destination) {
+	await checkPublishedTree(source);
 	await rm(destination, { recursive: true, force: true });
 	await cp(source, destination, {
 		recursive: true,
@@ -42,7 +44,7 @@ async function deployPublishedTree() {
 }
 
 function runLocalSiteBuild() {
-	const result = spawnSync('run', ['-s', 'build', 'micro509-site:build'], {
+	const result = spawnSync('run', ['-s', 'build', 'micro509-site:render'], {
 		cwd: root,
 		stdio: 'inherit',
 		env: process.env,

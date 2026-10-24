@@ -1718,25 +1718,18 @@ function checkDeltaCrlCompatibility(
 	return undefined;
 }
 
-/** Checks whether any `crlIssuer` GeneralName matches the CRL's issuer via directoryName DER comparison. */
+/** RFC 5280 §4.2.1.13 requires only the CRL issuer DN, with identical DER encoding. */
 function matchesIndirectCrlIssuer(
 	crlIssuerNames: readonly GeneralName[] | undefined,
 	crl: ParsedCertificateRevocationList,
 ): boolean | 'unsupported' {
-	if (crlIssuerNames === undefined) {
-		return false;
-	}
-	let sawUnsupportedName = false;
-	for (const generalName of crlIssuerNames) {
-		if (generalName.type === 'directoryName') {
-			if (directoryNameDerHexMatchesParsedName(generalName.derHex, crl.issuer)) {
-				return true;
-			}
-			continue;
-		}
-		sawUnsupportedName = true;
-	}
-	return sawUnsupportedName ? 'unsupported' : false;
+	if (crlIssuerNames === undefined || crlIssuerNames.length === 0) return false;
+	if (crlIssuerNames.some((name) => name.type !== 'directoryName')) return 'unsupported';
+	return crlIssuerNames.every(
+		(name) =>
+			name.type === 'directoryName' &&
+			name.derHex.toLowerCase() === crl.issuer.derHex.toLowerCase(),
+	);
 }
 
 /** Determines whether a revoked entry's effective issuer matches the certificate's issuer. */

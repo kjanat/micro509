@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Both documentation build entrypoints select the published version history
+  for production. Deployment rejects preview-only output and verifies the live
+  catalog and documentation routes after the Cloudflare deploy hook.
+
+- Indirect CRL issuer selection rejects mixed GeneralName forms and requires
+  the exact DER encoding of the CRL issuer distinguished name, as specified
+  by RFC 5280 §4.2.1.13. [#13](https://github.com/kjanat/micro509/issues/13)
+
 - Chain verification reports the certificate index for revoked and indeterminate
   revocation failures, including revoked intermediates.
 

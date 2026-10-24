@@ -70,9 +70,16 @@ and cross-version library imports with:
 SITE_DIST=.publish bun run site:live-examples
 ```
 
-On Cloudflare's master build, `scripts/site-build.mjs` clones `docs-site` and
-copies its files into the configured assets directory. The workflow's deploy
-job calls the existing Cloudflare deploy hook after publishing the branch. If
+Both `site:build` and `micro509-site:build` route through `scripts/site-build.mjs`.
+The internal `micro509-site:render` command invokes VitePress for source builds.
+On Cloudflare's master build, the shared build driver clones `docs-site` and
+copies its files into the configured assets directory. The copy and production
+deploy command require a stable root, `/next/`, and the release archive, with
+files for every cataloged version. A preview-only build fails before deployment. The workflow's deploy
+job calls the existing Cloudflare deploy hook after publishing the branch. It then
+checks the live catalog against the published snapshot and probes the root and
+`/next/` pages, waiting up to ten minutes for deployment. A successful hook
+response alone does not pass the deployment job. If
 publishing succeeds but the hook fails, rerun the failed deploy job to retry
 the hook without rebuilding or republishing the tree.
 
