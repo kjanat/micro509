@@ -13,6 +13,8 @@
 import { useData, useRoute } from 'vitepress';
 import { computed } from 'vue';
 
+const props = defineProps<{ readonly screenMenu?: boolean }>();
+
 interface VersionEntry {
   readonly prefix: string;
 }
@@ -59,12 +61,16 @@ const links = computed(() =>
 </script>
 
 <template>
-  <div class="versioned-nav">
+  <div class="versioned-nav" :class="{ 'screen-menu': props.screenMenu }">
     <a
       v-for="link in links"
       :key="link.text"
-      class="VPLink link vp-external-link-icon-none VPNavBarMenuLink"
-      :class="{ active: link.active }"
+      class="VPLink link vp-external-link-icon-none versioned-nav-link"
+      :class="{
+        active: link.active,
+        VPNavBarMenuLink: !props.screenMenu,
+        VPNavScreenMenuLink: props.screenMenu,
+      }"
       :href="link.link"
     >
       {{ link.text }}
@@ -75,13 +81,17 @@ const links = computed(() =>
 <style scoped>
 .versioned-nav {
   display: flex;
+}
+
+.screen-menu {
   flex-direction: column;
 }
 
-@media (min-width: 768px) {
-  .versioned-nav {
-    flex-direction: row;
-  }
+.versioned-nav-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  transition: color 0.25s;
 }
 
 .VPNavBarMenuLink {
@@ -89,17 +99,20 @@ const links = computed(() =>
   align-items: center;
   padding: 0 12px;
   line-height: var(--vp-nav-height);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vp-c-text-1);
-  transition: color 0.25s;
 }
 
-.VPNavBarMenuLink.active {
+.VPNavScreenMenuLink {
+  display: block;
+  border-bottom: 1px solid var(--vp-c-divider);
+  padding: 12px 0 11px;
+  line-height: 24px;
+}
+
+.versioned-nav-link.active {
   color: var(--vp-c-brand-1);
 }
 
-.VPNavBarMenuLink:hover {
+.versioned-nav-link:hover {
   color: var(--vp-c-brand-1);
 }
 </style>

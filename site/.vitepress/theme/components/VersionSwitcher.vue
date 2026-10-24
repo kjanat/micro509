@@ -8,7 +8,7 @@
 -->
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   hrefFor as hrefForVersion,
   mergeVersions,
@@ -17,8 +17,11 @@ import {
 } from './version-catalog';
 
 const { theme } = useData();
+const props = defineProps<{ readonly screenMenu?: boolean }>();
 const route = useRoute();
 const open = ref(false);
+const switcher = ref<HTMLElement>();
+const trigger = ref<HTMLButtonElement>();
 const embeddedVersions = computed<readonly VersionEntry[]>(
   () => theme.value.versions ?? [],
 );
@@ -32,7 +35,24 @@ const versions = computed<readonly VersionEntry[]>(
   },
 );
 
+function setHoverOpen(event: PointerEvent, value: boolean): void {
+  if (event.pointerType === 'mouse' && !props.screenMenu) open.value = value;
+}
+
+function closeOutside(event: PointerEvent): void {
+  if (event.target instanceof Node && !switcher.value?.contains(event.target)) open.value = false;
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !open.value) return;
+  event.stopPropagation();
+  event.preventDefault();
+  open.value = false;
+  trigger.value?.focus();
+}
+
 onMounted(async () => {
+  document.addEventListener('pointerdown', closeOutside);
   try {
     const response = await fetch('/versions.json', { headers: { accept: 'application/json' } });
     if (!response.ok) return;
@@ -42,6 +62,8 @@ onMounted(async () => {
     // The build-time theme config remains a usable offline and preview fallback.
   }
 });
+
+onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
 
 /** Path within the current version, e.g. 'guide/keys' on /v0.8.0/guide/keys. */
 const current = computed(() => {
@@ -80,9 +102,12 @@ function hrefFor(entry: VersionEntry): string {
 
 <template>
   <div
+    ref="switcher"
     class="version-switcher"
-    @mouseenter="open = true"
-    @mouseleave="open = false"
+    :class="{ 'screen-menu': props.screenMenu }"
+    @pointerenter="setHoverOpen($event, true)"
+    @pointerleave="setHoverOpen($event, false)"
+    @keydown="onKeydown"
   >
     <a
       v-if="labelUrl !== undefined"
@@ -96,11 +121,12 @@ function hrefFor(entry: VersionEntry): string {
     </a>
     <button
       v-else
+      ref="trigger"
       type="button"
       class="vs-button"
       aria-haspopup="true"
       :aria-expanded="open"
-      @click="open = true"
+      @click="open = !open"
     >
       {{ label }}
       <span
@@ -165,6 +191,9 @@ function hrefFor(entry: VersionEntry): string {
   top: calc(var(--vp-nav-height) - 8px);
   right: 0;
   min-width: 128px;
+  max-height: min(480px, calc(100dvh - var(--vp-nav-height) - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0;
   padding: 8px 0;
   list-style: none;
@@ -194,5 +223,31 @@ function hrefFor(entry: VersionEntry): string {
 .vs-active {
   color: var(--vp-c-brand-1);
   font-weight: 600;
+}
+
+.screen-menu {
+  display: block;
+  height: auto;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.screen-menu .vs-button {
+  width: 100%;
+  justify-content: space-between;
+  padding: 12px 0 11px;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.screen-menu .vs-menu {
+  position: static;
+  max-height: min(50dvh, 384px);
+  margin-bottom: 12px;
+  box-shadow: none;
+}
+
+.screen-menu .vs-link {
+  padding: 8px 16px;
+  line-height: 24px;
 }
 </style>
