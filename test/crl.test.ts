@@ -2217,6 +2217,69 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
+	it('requires exclusively byte-identical cRLIssuer names for indirect CRLs', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'CRL Signer' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Leaf Issuer' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const dn = unwrap(parseCertificatePem(crlIssuer.certificate.pem)).subject.derHex;
+		// The same ASCII CN encoded as PrintableString instead of UTF8String.
+		const differentEncoding = dn.replace('0c0a43524c205369676e6572', '130a43524c205369676e6572');
+		expect(differentEncoding).not.toBe(dn);
+		const wrongDn = unwrap(parseCertificatePem(issuer.certificate.pem)).subject.derHex;
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'CRL Signer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerCertificate: crlIssuer.certificate.der,
+			issuingDistributionPoint: { indirectCrl: true },
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const correct = { type: 'directoryName', derHex: dn } as const;
+		const uri = { type: 'uri', value: 'https://example.test/crl' } as const;
+		const cases = [
+			{ names: [correct], accepted: true },
+			{ names: [uri], accepted: false },
+			{ names: [correct, uri], accepted: false },
+			{ names: [uri, correct], accepted: false },
+			{ names: [{ type: 'directoryName', derHex: differentEncoding }], accepted: false },
+			{ names: [{ type: 'directoryName', derHex: wrongDn }], accepted: false },
+			{ names: [correct, { type: 'directoryName', derHex: wrongDn }], accepted: false },
+		] as const;
+		for (const item of cases) {
+			const leaf = await createCertificateWithRawExtensions({
+				issuer: { commonName: 'Leaf Issuer' },
+				subject: { commonName: 'example.test' },
+				publicKey: keys.publicKey,
+				signerPrivateKey: issuer.keyPair.privateKey,
+				issuerCertificate: issuer.certificate.der,
+				extensions: {
+					customExtensions: [
+						{
+							oid: OIDS.cRLDistributionPoints,
+							value: encodeUncheckedCrlDistributionPoints([
+								{ fullNameUri: 'https://example.test/crl', crlIssuer: item.names },
+							]),
+						},
+					],
+				},
+			});
+			const result = await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: crl.der,
+			});
+			expect(result.ok).toBe(item.accepted);
+			if (item.accepted) expect(result).toMatchObject({ ok: true, value: { status: 'good' } });
+			else expect(result).toMatchObject({ ok: false, code: 'non_applicable' });
+		}
+	});
+
 	it('rejects indirect CRLs without matching cRLIssuer distribution points', async () => {
 		const crlIssuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Indirect Applicability CRL Issuer' },

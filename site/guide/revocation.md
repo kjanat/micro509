@@ -65,6 +65,14 @@ console.log(crl.pem);
 
 </LiveCode>
 
+### CRL location and issuer identity
+
+A URI in `distributionPoint.fullName` identifies where a CRL can be retrieved.
+The separate `cRLIssuer` field identifies its signer. Under RFC 5280 §4.2.1.13,
+that field may contain only the CRL issuer's `directoryName`, encoded exactly
+as the CRL's issuer Name. A semantically equivalent name with different DER
+encoding, or a list mixing a directory name with a URI, cannot authorize the CRL.
+
 ### Parse and validate a CRL
 
 <LiveCode>
