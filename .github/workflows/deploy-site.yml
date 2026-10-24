@@ -92,6 +92,7 @@ jobs:
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           set -euo pipefail
+          printf '%s:%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > .publish/publication-id.txt
           export GIT_INDEX_FILE="$RUNNER_TEMP/docs-publish.index"
           git --work-tree=.publish add --all --force -- .
           tree=$(git write-tree)
@@ -101,8 +102,13 @@ jobs:
   deploy:
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    permissions: { contents: read }
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { persist-credentials: false }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { ref: docs-site, path: .published-docs, persist-credentials: false }
       - name: Deploy prebuilt tree to Cloudflare
         shell: bash
         env:
@@ -114,3 +120,5 @@ jobs:
             exit 1
           fi
           curl --fail --silent --show-error --request POST "$CF_DEPLOY_HOOK_URL" --output /dev/null
+      - name: Verify production serves the published versioned documentation
+        run: node scripts/check-docs-deployment.mjs .published-docs --live
