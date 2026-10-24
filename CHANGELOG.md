@@ -48,13 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Chain verification reports the certificate index for revoked and indeterminate
+  revocation failures, including revoked intermediates.
+
 - Both documentation build entrypoints select the published version history
   for production. Deployment rejects preview-only output and checks the live
   publication identifier, catalog, and documentation routes after the Cloudflare
   deploy hook.
-
-- Chain verification reports the certificate index for revoked and indeterminate
-  revocation failures, including revoked intermediates.
 
 ## [0.15.0] - 2026-10-23
 
