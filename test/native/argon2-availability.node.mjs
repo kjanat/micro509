@@ -31,3 +31,21 @@ for (const { input, expected } of rfc9106Vectors) {
 		}
 	});
 }
+
+test('portable limits reject short salts and oversized memory without changing input', async () => {
+	const vector = rfc9106Vectors[1];
+	assert.ok(vector);
+	for (const input of [
+		{ ...vector.input, salt: new Uint8Array(7) },
+		{ ...vector.input, memoryKiB: 0x200000 },
+	]) {
+		const original = structuredClone(input);
+		const result = await deriveArgon2(input, {
+			backend: 'portable',
+			limits: { maxMemoryKiB: 0x200000 },
+		});
+		assert.equal(result.ok, false);
+		assert.equal(result.error.code, 'unsupported');
+		assert.deepEqual(input, original);
+	}
+});
