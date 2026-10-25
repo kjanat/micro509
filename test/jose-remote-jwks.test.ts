@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'bun:test';
 import type { JwksRequestInit, RemoteJwksConfig, VerifiedJws } from '#micro509/jose';
 import { createRemoteJwksKeyResolver, signCompactJws, verifyCompactJws } from '#micro509/jose';
-import { expectBuildErrorCode, joseTestKeys, rsaJwkEntry } from '#test/helpers';
+import { expectBuildErrorCode, joseTestKeys, rsaJwkEntry, signRawRs256Token } from '#test/helpers';
 
 const [primary, secondary] = await joseTestKeys();
 const payload = new TextEncoder().encode('{}');
@@ -162,14 +162,26 @@ describe('opt-in and caching', () => {
 	});
 
 	it('does not touch the network when verifying with a local key', async () => {
-		const before = new Map(primaryServer.hits);
-		const result = await verifyCompactJws(await token('a'), {
-			algorithms: ['RS256'],
-			key: primary.publicKey,
-			tokenType: { unchecked: true },
-		});
-		expect(result.ok).toBe(true);
-		expect(primaryServer.hits).toEqual(before);
+		const isolated = startFixture();
+		try {
+			const url = isolated.route('/token-keys', async () =>
+				jsonResponse(await jwksJson(await keyB())),
+			);
+			const signed = await signRawRs256Token(
+				primary.privateKey,
+				JSON.stringify({ alg: 'RS256', kid: 'a', jku: url, x5u: url }),
+				'{}',
+			);
+			const result = await verifyCompactJws(signed, {
+				algorithms: ['RS256'],
+				key: primary.publicKey,
+				tokenType: { unchecked: true },
+			});
+			expect(result.ok).toBe(true);
+			expect(isolated.hits.size).toBe(0);
+		} finally {
+			await isolated.server.stop(true);
+		}
 	});
 
 	it('reuses a fresh set and one imported key across verifications', async () => {
