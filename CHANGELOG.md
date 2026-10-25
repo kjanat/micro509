@@ -38,6 +38,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compatible runtimes. An explicit backend callback supports separately
   installed implementations, including legacy `0x10` handling.
   [#189](https://github.com/kjanat/micro509/issues/189)
+- **Verify JWTs with `micro509/jose`.** The optional entrypoint signs and
+  verifies compact JWS and JWT with RS256 and returns typed failures. Callers
+  state the algorithm list, token type, issuer and audience; `exp` is required
+  by default, and `iat`, `nbf`, maximum age and clock tolerance are checked
+  against a caller-supplied clock. Parsing rejects non-canonical base64url,
+  invalid UTF-8, duplicate members, `crit`, `b64: false` and nested JWTs, and
+  bounds token, header, payload and JSON size. `VerifiedJwt` and `UnverifiedJwt`
+  are separate types. [#148](https://github.com/kjanat/micro509/issues/148)
+- **Select keys from a JWK Set.** `parseJwks`, `selectJwk` and
+  `createJwksKeyResolver` match `kid`, key type, `use`, `key_ops` and `alg`, and
+  reject ambiguous matches.
+- **Read a JWK Set from a trusted URL.** `createRemoteJwksKeyResolver` is
+  opt-in and keeps a cache per source. It bounds timeout, streamed bytes, key
+  count and redirects, shares concurrent fetches, refreshes at most once per
+  cooldown, enforces its deadline even when a transport ignores cancellation,
+  and never reuses an expired set after a failed refresh.
 
 ### Fixed
 

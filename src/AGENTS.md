@@ -7,7 +7,7 @@ Public domain entrypoints are one-level buckets, implementation details stay in
 
 `src/` is the library boundary. High-level workflow ownership is in the domain
 barrels `x509.ts`, `verify.ts`, `revocation.ts`, `keys.ts`, `crypto.ts`,
-`der.ts`, `pem.ts`, `pkcs.ts`, `ssh.ts` and `result.ts`, one per published subpath. Each
+`der.ts`, `pem.ts`, `pkcs.ts`, `ssh.ts`, `jose.ts` and `result.ts`, one per published subpath. Each
 domain's modules live in the directory of the same name.
 
 ## WHERE TO LOOK
@@ -21,6 +21,7 @@ domain's modules live in the directory of the same name.
 | PEM boundary       | `pem/`                                  | encode/decode, block classification, RFC 1421 headers |
 | PKCS workflows     | `pkcs/`                                 | PFX and PKCS#7 data lifecycles                        |
 | SSH keys           | `ssh/`                                  | OpenSSH public lines, `openssh-key-v1`, fingerprints  |
+| JOSE               | `jose/`                                 | compact JWS/JWT (RS256), JWKS, opt-in remote JWKS     |
 | Result model       | `result/`                               | shared typed `Result` and error constructors          |
 | Internal spine     | `internal/`                             | ASN.1, crypto, shared helpers, verification engines   |
 

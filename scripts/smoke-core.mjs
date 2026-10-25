@@ -4,6 +4,7 @@
  */
 
 import { rfc9106Vectors } from '../test/fixtures/argon2.mjs';
+import { forgeExponentOneJwt } from '../test/fixtures/jose-exponent-one.mjs';
 import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
 
 /**
@@ -11,8 +12,9 @@ import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
  * @param {typeof import('#micro509/crypto')} cryptoApi
  * @param {typeof import('#micro509/kdf')} kdfApi
  * @param {typeof import('#micro509/ssh')} sshApi
+ * @param {typeof import('#micro509/jose')} joseApi
  */
-export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi) {
+export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi, joseApi) {
 	const { signData, verifySignatureWithKey } = cryptoApi;
 	const { certificate, keyPair } = await micro509.createSelfSignedCertificate({
 		subject: { commonName: 'smoke.example' },
@@ -70,6 +72,7 @@ export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi) {
 
 	await runArgon2Smoke(kdfApi);
 	await runSshSmoke(micro509, sshApi);
+	await runJoseSmoke(micro509, joseApi);
 	return 'smoke OK';
 }
 
@@ -135,5 +138,122 @@ async function runSshSmoke(micro509, sshApi) {
 		if (invalid.ok || invalid.error.code !== 'invalid_options') {
 			throw new Error('smoke: SSH accepted an invalid policy');
 		}
+	}
+}
+
+/**
+ * Signs and verifies a JWT, resolves its key from a local JWK Set, and proves none of it uses the network.
+ * @param {typeof import('#micro509')} micro509
+ * @param {typeof import('#micro509/jose')} joseApi
+ */
+async function runJoseSmoke(micro509, joseApi) {
+	const originalFetch = globalThis.fetch;
+	let requests = 0;
+	const guarded = Reflect.set(globalThis, 'fetch', () => {
+		requests += 1;
+		throw new Error('smoke: JOSE used the network');
+	});
+	try {
+		const keys = await micro509.generateKeyPair({ kind: 'rsa' });
+		const now = Math.floor(Date.now() / 1000);
+		const token = await joseApi.signJwt({
+			privateKey: keys.privateKey,
+			algorithm: 'RS256',
+			header: { kid: 'smoke-1' },
+			claims: { iss: 'https://smoke.example', aud: 'smoke', exp: now + 60 },
+		});
+		const policy = { issuer: 'https://smoke.example', audience: 'smoke' };
+		const direct = await joseApi.verifyJwt(token, {
+			algorithms: ['RS256'],
+			key: keys.publicKey,
+			tokenType: 'JWT',
+			claims: policy,
+		});
+		if (!direct.ok || direct.value.registered.iss !== 'https://smoke.example') {
+			throw new Error('smoke: JWT verification failed');
+		}
+
+		const jwks = joseApi.parseJwks(
+			JSON.stringify({ keys: [{ ...(await keys.exportPublicJwk()), kid: 'smoke-1', use: 'sig' }] }),
+		);
+		if (!jwks.ok) throw new Error(`smoke: parseJwks failed: ${jwks.code}`);
+		const viaJwks = await joseApi.verifyJwt(token, {
+			algorithms: ['RS256'],
+			key: joseApi.createJwksKeyResolver(jwks.value),
+			tokenType: 'JWT',
+			claims: policy,
+		});
+		if (!viaJwks.ok) throw new Error('smoke: JWKS verification failed');
+		await runExponentOneSmoke(joseApi, keys.publicKey, now);
+
+		const [header, body, signature] = token.split('.');
+		const forged = `${header}.${body}.${signature?.slice(0, -4)}AAAA`;
+		const refused = await joseApi.verifyJwt(forged, {
+			algorithms: ['RS256'],
+			key: keys.publicKey,
+			tokenType: 'JWT',
+			claims: policy,
+		});
+		if (refused.ok || refused.code !== 'invalid_signature') {
+			throw new Error('smoke: a forged JWT was not refused');
+		}
+
+		joseApi.createRemoteJwksKeyResolver({ url: 'https://smoke.example/jwks.json' });
+		if (requests !== 0) throw new Error('smoke: JOSE made a request before it was needed');
+	} finally {
+		if (guarded) Reflect.set(globalThis, 'fetch', originalFetch);
+	}
+}
+
+/**
+ * @param {typeof import('#micro509/jose')} joseApi
+ * @param {CryptoKey} publicKey
+ * @param {number} now
+ */
+async function runExponentOneSmoke(joseApi, publicKey, now) {
+	const forged = await forgeExponentOneJwt(publicKey, {
+		iss: 'https://smoke.example',
+		aud: 'smoke',
+		exp: now + 60,
+	});
+	const parsed = joseApi.parseJwks(JSON.stringify({ keys: [forged.jwk] }));
+	if (!parsed.ok) throw new Error(`smoke: exponent-one JWKS did not parse: ${parsed.code}`);
+	const policy = {
+		algorithms: /** @type {const} */ (['RS256']),
+		tokenType: 'JWT',
+		claims: { issuer: 'https://smoke.example', audience: 'smoke' },
+	};
+	const resolved = await joseApi.verifyJwt(forged.token, {
+		...policy,
+		key: joseApi.createJwksKeyResolver(parsed.value),
+	});
+	if (resolved.ok || resolved.code !== 'key_unsuitable') {
+		throw new Error('smoke: local JWKS accepted a public-material-only exponent-one forgery');
+	}
+	let key;
+	try {
+		key = await crypto.subtle.importKey(
+			'jwk',
+			forged.jwk,
+			{
+				name: 'RSASSA-PKCS1-v1_5',
+				hash: 'SHA-256',
+			},
+			false,
+			['verify'],
+		);
+	} catch (error) {
+		// Some runtimes reject the invalid RSA key before JOSE receives a CryptoKey.
+		if (
+			error instanceof Error &&
+			['DataError', 'OperationError', 'NotSupportedError'].includes(error.name)
+		)
+			return;
+		throw error;
+	}
+	if (key.extractable) throw new Error('smoke: exponent-one key must be non-extractable');
+	const direct = await joseApi.verifyJwt(forged.token, { ...policy, key });
+	if (direct.ok || direct.code !== 'key_unsuitable') {
+		throw new Error('smoke: CryptoKey accepted a public-material-only exponent-one forgery');
 	}
 }

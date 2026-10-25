@@ -6,6 +6,7 @@
 		".": "./src/index.ts",
 		"./crypto": "./src/crypto.ts",
 		"./der": "./src/der.ts",
+		"./jose": "./src/jose.ts",
 		"./kdf": "./src/kdf.ts",
 		"./keys": "./src/keys.ts",
 		"./pem": "./src/pem.ts",

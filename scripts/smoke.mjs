@@ -46,6 +46,13 @@ const resolvedSshExport = new URL(pkg.exports['./ssh'].default, import.meta.reso
 /** @type {typeof import('#micro509/ssh')} */
 const sshApi = await import(resolvedSshExport.href);
 
+const resolvedJoseExport = new URL(
+	pkg['exports']['./jose']['default'],
+	import.meta.resolve('#pkg'),
+);
+/** @type {typeof import('#micro509/jose')} */
+const joseApi = await import(resolvedJoseExport.href);
+
 const whichVersion =
 	typeof Deno !== 'undefined'
 		? Deno.version.deno
@@ -53,4 +60,4 @@ const whichVersion =
 			? Bun.version
 			: process.version;
 
-console.log(`${await runSmoke(micro509, cryptoApi, kdfApi, sshApi)} (${whichVersion})`);
+console.log(`${await runSmoke(micro509, cryptoApi, kdfApi, sshApi, joseApi)} (${whichVersion})`);
