@@ -3,7 +3,7 @@ import { argon2, createHash } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
 import type { Argon2Backend, Argon2Input, Argon2Limits, Argon2Result } from '#micro509/kdf';
 import { deriveArgon2 } from '#micro509/kdf';
-import { rfc9106Vectors } from './fixtures/argon2.mjs';
+import { changingInput, inputRepresentations, rfc9106Vectors } from './fixtures/argon2.mjs';
 
 // A real optional backend exercises the extension boundary on Bun, whose native
 // WebCrypto currently lacks Argon2. node:crypto is confined to this test.
@@ -397,4 +397,49 @@ describe('Argon2 key derivation', () => {
 			});
 		},
 	);
+});
+
+describe('Argon2 JavaScript input snapshots', () => {
+	it('returns a typed failure when an input getter throws', async () => {
+		const request = Object.defineProperty(input(), 'algorithm', {
+			get() {
+				throw new Error('unreadable property');
+			},
+		});
+		expect(await deriveArgon2(request, { backend: nodeBackend })).toMatchObject({
+			ok: false,
+			error: { code: 'invalid_parameters' },
+		});
+	});
+
+	it('derives the same key from inherited fields, non-enumerable fields, and getters', async () => {
+		const vector = rfc9106Vectors[1];
+		if (vector === undefined) throw new Error('Missing Argon2id vector');
+		for (const representation of inputRepresentations(vector.input)) {
+			const result: unknown = await Reflect.apply(deriveArgon2, undefined, [
+				representation.input,
+				{ backend: nodeBackend },
+			]);
+			expect(result).toEqual({
+				ok: true,
+				value: new Uint8Array(Buffer.from(vector.expected, 'hex')),
+			});
+		}
+	});
+
+	it('reads each declared field once before validation and derivation', async () => {
+		const vector = rfc9106Vectors[1];
+		if (vector === undefined) throw new Error('Missing Argon2id vector');
+		const changing = changingInput(vector.input);
+		const result: unknown = await Reflect.apply(deriveArgon2, undefined, [
+			changing.input,
+			{ backend: nodeBackend },
+		]);
+		expect(result).toEqual({
+			ok: true,
+			value: new Uint8Array(Buffer.from(vector.expected, 'hex')),
+		});
+		expect(changing.reads.size).toBe(Object.keys(vector.input).length);
+		expect([...changing.reads.values()].every((count) => count === 1)).toBe(true);
+	});
 });

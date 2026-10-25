@@ -3,7 +3,7 @@ import { argon2 } from 'node:crypto';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { deriveArgon2 } from '#micro509/kdf';
-import { rfc9106Vectors } from '../fixtures/argon2.mjs';
+import { changingInput, inputRepresentations, rfc9106Vectors } from '../fixtures/argon2.mjs';
 
 // This suite requires native WebCrypto Argon2. Bun exercises the unsupported
 // runtime path separately. Node reports source coverage without a transpiler.
@@ -73,4 +73,25 @@ test('native boundary rejects invalid requests before allocating native memory',
 	const detached = new Uint8Array(16);
 	structuredClone(detached, { transfer: [detached.buffer] });
 	assert.equal((await deriveArgon2({ ...vector.input, password: detached })).ok, false);
+});
+
+test('native Argon2id snapshots inherited, non-enumerable and accessor fields', async () => {
+	const vector = rfc9106Vectors[1];
+	assert.ok(vector);
+	for (const representation of inputRepresentations(vector.input)) {
+		const result = await Reflect.apply(deriveArgon2, undefined, [representation.input]);
+		assert.deepEqual(
+			result,
+			{ ok: true, value: new Uint8Array(Buffer.from(vector.expected, 'hex')) },
+			representation.name,
+		);
+	}
+	const changing = changingInput(vector.input);
+	const result = await Reflect.apply(deriveArgon2, undefined, [changing.input]);
+	assert.deepEqual(result, {
+		ok: true,
+		value: new Uint8Array(Buffer.from(vector.expected, 'hex')),
+	});
+	assert.equal(changing.reads.size, Object.keys(vector.input).length);
+	assert.ok([...changing.reads.values()].every((count) => count === 1));
 });

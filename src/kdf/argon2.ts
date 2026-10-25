@@ -141,9 +141,43 @@ function validate(input: Argon2Input, limits: Argon2Limits): Argon2Result | unde
 	return undefined;
 }
 
+function snapshotInput(input: Argon2Input): Argon2Input {
+	// Read declared properties once, including inherited and non-enumerable ones.
+	// Byte arrays remain references until validation has enforced resource bounds.
+	const {
+		algorithm,
+		version,
+		password,
+		salt,
+		memoryKiB,
+		passes,
+		parallelism,
+		outputBytes,
+		secret,
+		associatedData,
+	} = input;
+	return {
+		algorithm,
+		version,
+		password,
+		salt,
+		memoryKiB,
+		passes,
+		parallelism,
+		outputBytes,
+		...(secret === undefined ? {} : { secret }),
+		...(associatedData === undefined ? {} : { associatedData }),
+	};
+}
+
 function copyInput(input: Argon2Input): Argon2Input {
 	return {
-		...input,
+		algorithm: input.algorithm,
+		version: input.version,
+		memoryKiB: input.memoryKiB,
+		passes: input.passes,
+		parallelism: input.parallelism,
+		outputBytes: input.outputBytes,
 		password: new Uint8Array(input.password),
 		salt: new Uint8Array(input.salt),
 		...(input.secret === undefined ? {} : { secret: new Uint8Array(input.secret) }),
@@ -173,7 +207,17 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 		return failure('unsupported', 'Native WebCrypto is unavailable');
 	}
 	const subtle = globalThis.crypto.subtle;
-	const name = input.algorithm === 'argon2id' ? 'Argon2id' : 'Argon2d';
+	let name: 'Argon2id' | 'Argon2d';
+	switch (input.algorithm) {
+		case 'argon2id':
+			name = 'Argon2id';
+			break;
+		case 'argon2d':
+			name = 'Argon2d';
+			break;
+		default:
+			return failure('unsupported', 'Unsupported Argon2 variant');
+	}
 	try {
 		// raw-secret is a runtime WebCrypto extension not present in every DOM
 		// declaration. The result is narrowed rather than asserted or globally
@@ -236,9 +280,15 @@ export async function deriveArgon2(
 	if (input === null || typeof input !== 'object') {
 		return failure('invalid_parameters', 'Argon2 input must be an object');
 	}
-	const invalid = validate(input, options.limits ?? {});
+	let snapshot: Argon2Input;
+	try {
+		snapshot = snapshotInput(input);
+	} catch {
+		return failure('invalid_parameters', 'Argon2 input properties could not be read');
+	}
+	const invalid = validate(snapshot, options.limits ?? {});
 	if (invalid !== undefined) return invalid;
-	const owned = copyInput(input);
+	const owned = copyInput(snapshot);
 	try {
 		const result = await (options.backend ?? nativeArgon2)(owned);
 		if (!result.ok) {
