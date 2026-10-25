@@ -85,7 +85,7 @@ try {
       iv: Array.from(iv),
       ciphertext: Array.from(new Uint8Array(ciphertext)),
     };
-    console.log('Save this record:', JSON.stringify(record, null, 2));
+    console.log('Save this record:\n' + JSON.stringify(record, null, 2));
 
     // Later: use the saved salt and parameters with the same password bytes.
     const restored = await deriveArgon2(

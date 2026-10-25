@@ -76,7 +76,7 @@ const publicJwks = {
   ],
 };
 console.log('JWT:', token);
-console.log('Public JWKS:', JSON.stringify(publicJwks, null, 2));
+console.log('Public JWKS:\n' + JSON.stringify(publicJwks, null, 2));
 
 const parsed = parseJwks(JSON.stringify(publicJwks));
 if (!parsed.ok) throw new Error(parsed.code);

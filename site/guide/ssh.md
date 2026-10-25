@@ -34,7 +34,7 @@ console.log('Public line:', publicLine);
 console.log('Key type:', result.value.keyType);
 console.log('Comment:', result.value.comment);
 console.log('Fingerprint:', result.value.fingerprint);
-console.log('SPKI PEM:', await exportSpkiPem(result.value.publicKey));
+console.log('SPKI PEM:\n' + (await exportSpkiPem(result.value.publicKey)));
 ```
 
 </LiveCode>
@@ -89,12 +89,14 @@ console.log(
     comment: imported.comment,
   }),
 );
-console.log('PKCS#8 private key:', await exportPkcs8Pem(imported.privateKey));
 console.log(
-  'OpenSSH private key:',
-  await exportOpenSshPrivateKey(imported.privateKey, {
-    comment: imported.comment,
-  }),
+  'PKCS#8 private key:\n' + (await exportPkcs8Pem(imported.privateKey)),
+);
+console.log(
+  'OpenSSH private key:\n' +
+    (await exportOpenSshPrivateKey(imported.privateKey, {
+      comment: imported.comment,
+    })),
 );
 ```
 
