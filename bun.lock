@@ -10,8 +10,6 @@
         "@dprint/biome": "catalog:dprint",
         "@dprint/formatter": "catalog:dprint",
         "@dprint/json": "catalog:dprint",
-        "@dprint/markdown": "catalog:dprint",
-        "@dprint/typescript": "catalog:dprint",
         "@gorhill/ubo-core": "0.1.30",
         "@kjanat/tsc-bridge": "workspace:*",
         "@micro509/doc-render": "workspace:*",
@@ -22,9 +20,6 @@
         "biome": "catalog:",
         "deno": "catalog:deno",
         "dprint": "catalog:",
-        "dprint-plugin-malva": "catalog:dprint",
-        "dprint-plugin-markup": "catalog:dprint",
-        "dprint-plugin-yaml": "catalog:dprint",
         "dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
         "importmapify": "catalog:deno",
         "jose": "^6.2.13",
@@ -45,6 +40,16 @@
       "version": "0.0.0",
       "devDependencies": {
         "@deno/doc": "catalog:deno",
+      },
+    },
+    "packages/tsdown-plugin-argon2": {
+      "name": "@micro509/tsdown-plugin-argon2",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@kjanat/dreamcli": "catalog:",
+      },
+      "peerDependencies": {
+        "tsdown": "catalog:build",
       },
     },
     "packages/vitepress-api-docs": {
@@ -211,11 +216,6 @@
       "@dprint/biome": "^0.15.0",
       "@dprint/formatter": "^0.6.0",
       "@dprint/json": "^0.25.0",
-      "@dprint/markdown": "^0.28.0",
-      "@dprint/typescript": "^0.96.1",
-      "dprint-plugin-malva": "^0.16.0",
-      "dprint-plugin-markup": "^0.27.5",
-      "dprint-plugin-yaml": "^0.6.0",
     },
     "site": {
       "markdown-it-task-lists": "^2.1.1",
@@ -353,10 +353,6 @@
     "@dprint/linux-x64-glibc": ["@dprint/linux-x64-glibc@0.64.3", "", { "os": "linux", "cpu": "x64", "libc": "glibc" }, "sha512-wKVnD6eO8S4U8LbVcZy0l0ioJKfLbsL1OYUr0f4M99lrBv30RA385sii5Fq/NSM8O/sh9gII8zRvdtTMUWbImg=="],
 
     "@dprint/linux-x64-musl": ["@dprint/linux-x64-musl@0.64.3", "", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-AhhAyhd4gG7UrP9NmV60fWf6EFHqZE3X9QW0B2LeoX9vt+rcWv3ejbGOFD8V4Wkg6LyPl49RyGgeltn9KTwD1g=="],
-
-    "@dprint/markdown": ["@dprint/markdown@0.28.0", "", {}, "sha512-JK8RPPd1ie+iTgO10faxk1kbzmulhkQxgf9tZjOiyngLA/6PZWmV+HAgruLL3f+P12P3MPkMRIqIr3/jL9+l/g=="],
-
-    "@dprint/typescript": ["@dprint/typescript@0.96.1", "", {}, "sha512-mz/nINSFQh1R5i2Qy90SWOCCK4SgNGRkNhCZba7LYmUkE4Zi8/45p8l8pqc9yN1fb4XY5Muhrzdh5Q3jFsYimw=="],
 
     "@dprint/win32-arm64": ["@dprint/win32-arm64@0.64.3", "", { "os": "win32", "cpu": "arm64" }, "sha512-noAymd7nZiKB4pGEW4YbS01647n4pbBYv5GzXlFWYu408xuVWc5+b76Gua4IVO1gkiPtkBRIcmRBStXblfrRyw=="],
 
@@ -519,6 +515,8 @@
     "@loaderkit/resolve": ["@loaderkit/resolve@1.0.6", "", { "dependencies": { "@braidai/lang": "^1.0.0" } }, "sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg=="],
 
     "@micro509/doc-render": ["@micro509/doc-render@workspace:packages/doc-render"],
+
+    "@micro509/tsdown-plugin-argon2": ["@micro509/tsdown-plugin-argon2@workspace:packages/tsdown-plugin-argon2"],
 
     "@micro509/vitepress-api-docs": ["@micro509/vitepress-api-docs@workspace:packages/vitepress-api-docs"],
 
@@ -845,12 +843,6 @@
     "devlop": ["devlop@1.1.0", "", { "dependencies": { "dequal": "^2.0.0" } }, "sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA=="],
 
     "dprint": ["dprint@0.64.3", "", { "optionalDependencies": { "@dprint/android-arm64": "0.64.3", "@dprint/android-x64": "0.64.3", "@dprint/darwin-arm64": "0.64.3", "@dprint/darwin-x64": "0.64.3", "@dprint/freebsd-arm64": "0.64.3", "@dprint/freebsd-x64": "0.64.3", "@dprint/linux-arm64-glibc": "0.64.3", "@dprint/linux-arm64-musl": "0.64.3", "@dprint/linux-loong64-glibc": "0.64.3", "@dprint/linux-loong64-musl": "0.64.3", "@dprint/linux-ppc64-glibc": "0.64.3", "@dprint/linux-ppc64-musl": "0.64.3", "@dprint/linux-riscv64-glibc": "0.64.3", "@dprint/linux-riscv64-musl": "0.64.3", "@dprint/linux-s390x-glibc": "0.64.3", "@dprint/linux-x64-glibc": "0.64.3", "@dprint/linux-x64-musl": "0.64.3", "@dprint/win32-arm64": "0.64.3", "@dprint/win32-x64": "0.64.3" }, "hasInstallScript": true, "bin": { "dprint": "bin.cjs" } }, "sha512-/ENhr1iBM1ZfDBdLRCwSuOZ6SCv6cN6Tl3xvtJDHJbFJYjiYy6AHrzPtU/FSCvEG16YTcCNqkO/xDBxaDHIh8w=="],
-
-    "dprint-plugin-malva": ["dprint-plugin-malva@0.16.0", "", {}, "sha512-cHisdhrNcBHfvTG/jgHUkVyL6zeY+C5yLO+E/UyiTbp6wzauB3d25YyPZeMlsd7M/PDT8W4Yre8jKJ/xMwthiw=="],
-
-    "dprint-plugin-markup": ["dprint-plugin-markup@0.27.6", "", {}, "sha512-UpPigVuQjvOO+JUwdPSygWC6ktE3Tm3BrZkahLCX3o20N9iFfHp0XwFVJne43jZmKm8im6uj1xjrCtKvc7varQ=="],
-
-    "dprint-plugin-yaml": ["dprint-plugin-yaml@0.6.0", "", {}, "sha512-jFCM6LxutTjfiSR7BtDhbZA2OvuqYY9xksULg0vdu0nZV1hiaupvRfJHGZSiQS9aLmqMNc+5WcHpOBSwxCK7qQ=="],
 
     "dreamcli": ["@kjanat/dreamcli@5.0.0", "", { "dependencies": { "ansispeck": "^0.4.3" } }, "sha512-pKQJu6KDnW8U4EQI2vZTwZz2v+H/z9uwfK4jnOV9BLrn2LDnmVNM91/iNxsxpZaFMZyhOU8AggMA6OhD5dqhdQ=="],
 

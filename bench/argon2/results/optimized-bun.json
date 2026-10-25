@@ -1,0 +1,221 @@
+{
+	"environment": {
+		"runtime": "Bun 1.4.4",
+		"cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+		"platform": "linux",
+		"arch": "x64",
+		"date": "2026-10-25T21:48:49.064Z",
+		"packageVersion": "0.17.0",
+		"implementation": [
+			{
+				"path": "dist/kdf/argon2.js",
+				"sha256": "8b81c336d91509f9b6d7d286bf2d9858a1d23fa2b6ba635a5f9c7f5e72bb51a6"
+			},
+			{
+				"path": "dist/kdf/argon2-core.js",
+				"sha256": "708b524ffb9ab391c52d06f1a846211e15a558027adc61d9dcc99d9a95987086"
+			},
+			{
+				"path": "dist/kdf/argon2-arithmetic.js",
+				"sha256": "bd8df538637bf41d5e8ce8134d2ece5926aec4591c225b87b42d6c6a0b23a573"
+			},
+			{
+				"path": "dist/kdf/argon2-portable.js",
+				"sha256": "4108b9dbe4606d1b024e27fda03ee71dde238d8efad17d5fa0fe4fff03aa320e"
+			}
+		],
+		"warmups": 2,
+		"samples": 5,
+		"concurrency": 1
+	},
+	"parameters": {
+		"version": 19,
+		"memoryKiB": 65536,
+		"passes": 3,
+		"parallelism": 4,
+		"outputBytes": 32
+	},
+	"results": [
+		{
+			"algorithm": "argon2id",
+			"backend": "typescript",
+			"supported": true,
+			"firstBatchMs": 924.452643,
+			"medianMs": 911.5847440000002,
+			"minMs": 906.498294,
+			"maxMs": 921.8280019999993,
+			"samplesMs": [
+				906.498294, 914.0363090000001, 911.5847440000002, 921.8280019999993, 906.8661810000003
+			],
+			"batchMs": [
+				906.5220089999998, 914.044895, 911.5929800000004, 921.8366169999999, 906.8739249999999
+			],
+			"derivationsPerSecond": 1.0962819665949441,
+			"maxTimerDelayMs": 18.751210999999785
+		},
+		{
+			"algorithm": "argon2id",
+			"backend": "wasm",
+			"supported": true,
+			"firstBatchMs": 210.43939499999942,
+			"medianMs": 173.4991460000001,
+			"minMs": 171.2411920000004,
+			"maxMs": 176.1299280000003,
+			"samplesMs": [
+				176.1299280000003, 174.17537300000004, 173.4991460000001, 173.3754140000001,
+				171.2411920000004
+			],
+			"batchMs": [
+				176.138825, 174.1806829999996, 173.50830300000052, 173.39176399999997, 171.24694199999976
+			],
+			"derivationsPerSecond": 5.7572743475152315,
+			"maxTimerDelayMs": 12.50557200000003
+		},
+		{
+			"algorithm": "argon2id",
+			"backend": "native",
+			"supported": false
+		},
+		{
+			"algorithm": "argon2id",
+			"backend": "node",
+			"supported": true,
+			"firstBatchMs": 172.31319199999962,
+			"medianMs": 146.3843969999998,
+			"minMs": 144.9244609999987,
+			"maxMs": 147.088839,
+			"samplesMs": [
+				146.3843969999998, 147.088839, 146.93153300000085, 144.9244609999987, 145.95119700000032
+			],
+			"batchMs": [
+				146.39660100000037, 147.1001899999992, 146.93752499999937, 144.930151999999,
+				145.95786900000166
+			],
+			"derivationsPerSecond": 6.836930512078702,
+			"maxTimerDelayMs": 0.583227999999508
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "typescript",
+			"supported": true,
+			"firstBatchMs": 903.8134340000015,
+			"medianMs": 923.5845850000005,
+			"minMs": 921.5401099999999,
+			"maxMs": 930.7196789999998,
+			"samplesMs": [
+				922.706021, 923.790105, 930.7196789999998, 921.5401099999999, 923.5845850000005
+			],
+			"batchMs": [
+				922.7116609999994, 923.7968369999999, 930.7251790000009, 921.5457009999991,
+				923.5901549999999
+			],
+			"derivationsPerSecond": 1.0816962954398222,
+			"maxTimerDelayMs": 19.329916000000594
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "wasm",
+			"supported": true,
+			"firstBatchMs": 209.68007600000055,
+			"medianMs": 171.46955399999933,
+			"minMs": 169.40636500000255,
+			"maxMs": 175.40851900000052,
+			"samplesMs": [
+				171.58171399999992, 170.79487900000095, 171.46955399999933, 169.40636500000255,
+				175.40851900000052
+			],
+			"batchMs": [
+				171.58845699999983, 170.7999889999992, 171.47757900000215, 169.41178600000057,
+				175.41456999999718
+			],
+			"derivationsPerSecond": 5.822806991925559,
+			"maxTimerDelayMs": 11.812823000000208
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "native",
+			"supported": false
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "node",
+			"supported": true,
+			"firstBatchMs": 175.86881200000062,
+			"medianMs": 147.12916699999914,
+			"minMs": 146.85800899999958,
+			"maxMs": 149.1708949999993,
+			"samplesMs": [
+				146.85800899999958, 147.0493580000002, 149.1708949999993, 147.12916699999914,
+				147.63130900000033
+			],
+			"batchMs": [
+				146.8640400000004, 147.05425699999978, 149.17709699999978, 147.13550000000032,
+				147.63654999999926
+			],
+			"derivationsPerSecond": 6.7762848742788595,
+			"maxTimerDelayMs": 0.7546000000002095
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "typescript",
+			"supported": true,
+			"firstBatchMs": 894.5527790000015,
+			"medianMs": 908.5686459999997,
+			"minMs": 900.8078710000009,
+			"maxMs": 917.3463670000019,
+			"samplesMs": [
+				900.8078710000009, 904.4518749999988, 908.5686459999997, 912.5650299999979,
+				917.3463670000019
+			],
+			"batchMs": [
+				900.8141829999986, 904.4602709999999, 908.5748469999999, 912.5708310000009,
+				917.3571870000014
+			],
+			"derivationsPerSecond": 1.1004060386261194,
+			"maxTimerDelayMs": 19.117338000000018
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "wasm",
+			"supported": true,
+			"firstBatchMs": 205.455748999997,
+			"medianMs": 174.6907969999993,
+			"minMs": 170.26830500000142,
+			"maxMs": 177.6736090000013,
+			"samplesMs": [
+				174.00015200000053, 177.6736090000013, 174.6907969999993, 170.26830500000142,
+				177.00226100000145
+			],
+			"batchMs": [
+				174.0099999999984, 177.67980999999781, 174.69626699999935, 170.27333400000134,
+				177.0079310000001
+			],
+			"derivationsPerSecond": 5.7230020622655,
+			"maxTimerDelayMs": 15.135361999997258
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "native",
+			"supported": false
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "node",
+			"supported": true,
+			"firstBatchMs": 172.41785500000333,
+			"medianMs": 145.35856000000058,
+			"minMs": 143.8976909999983,
+			"maxMs": 149.21350900000107,
+			"samplesMs": [
+				143.8976909999983, 144.4158830000015, 145.35856000000058, 146.20896500000163,
+				149.21350900000107
+			],
+			"batchMs": [
+				143.9027509999978, 144.4207009999991, 145.36366999999882, 146.21585799999957,
+				149.2202010000001
+			],
+			"derivationsPerSecond": 6.857551824291857,
+			"maxTimerDelayMs": 0.683125999999902
+		}
+	]
+}

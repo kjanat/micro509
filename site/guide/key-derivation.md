@@ -5,21 +5,16 @@ outline: [2, 3]
 
 # Derive encryption keys with Argon2
 
-Use `micro509/kdf` to turn a password into key bytes with Argon2id or Argon2d.
+Use `micro509/kdf` to turn a password into key bytes with Argon2id, Argon2i, or Argon2d.
 This guide derives an AES key, encrypts a message, saves the derivation parameters,
 and derives the key again to decrypt it.
 
 For a new application, use Argon2id. When opening an existing format, use its
 recorded variant, version and parameters exactly.
 
-## Before you run
-
-The default backend needs native Argon2 support in WebCrypto. On a runtime without
-it, `deriveArgon2` returns `unsupported`. This includes browsers without an Argon2
-implementation: the live example prints that result and stops before encryption.
-Run the same code in a supported Node or Deno runtime, or supply an
-[external backend](#use-another-backend). See [runtime support](../reference/runtimes.md)
-for the project's runtime coverage.
+The same `deriveArgon2` API works in Node, Bun, Deno, browsers, and Cloudflare
+Workers. All three variants support versions `0x10` and `0x13`; an unsupported
+native operation runs through the TypeScript implementation.
 
 ## Encrypt and decrypt a message
 
@@ -28,9 +23,10 @@ parameter set. `memoryKiB` is measured in **KiB**, `passes` is the number of pas
 through that memory, and `parallelism` is the number of lanes. The 32-byte output
 becomes an AES-256-GCM key.
 
-Each run prints its derivation inputs. On a supported runtime, it also prints a
-JSON record containing the salt, derivation parameters, IV and ciphertext. It then derives the key again from that record and prints the recovered
-message. The password and derived key are separate from the saved record.
+Each run prints a compact encrypted record with base64url-encoded binary fields.
+It serializes and reloads that JSON, validates its fields, derives the key again,
+and verifies the recovered message. It also modifies the ciphertext to demonstrate
+AES-GCM authentication. Neither the password nor derived key is printed or saved.
 
 <LiveCode>
 
@@ -46,74 +42,163 @@ const parameters = {
   parallelism: 4,
   outputBytes: 32,
 } as const;
-const salt = crypto.getRandomValues(new Uint8Array(16));
-const limits = { maxMemoryKiB: 64 * 1024, maxPasses: 3, maxParallelism: 4 };
-console.log('Derivation inputs:', { ...parameters, salt: Array.from(salt) });
+const limits = {
+  maxMemoryKiB: 64 * 1024,
+  maxPasses: 3,
+  maxParallelism: 4,
+  maxOutputBytes: 32,
+};
+const message = 'A message recovered from the saved parameters.';
 
 try {
+  console.log('Argon2id v0x13: 64 MiB, 3 passes, 4 lanes');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const start = performance.now();
   const derived = await deriveArgon2(
     { ...parameters, password, salt },
     { limits },
   );
-  if (!derived.ok) {
-    console.log('Derivation:', derived.error);
-  } else {
-    // Print disposable demo material so this derivation can be reproduced.
-    console.log('Derived key bytes:', Array.from(derived.value));
-    const key = await crypto.subtle.importKey(
-      'raw',
-      derived.value.slice(),
-      'AES-GCM',
-      false,
-      ['encrypt'],
-    );
-    derived.value.fill(0);
+  if (!derived.ok) throw new Error(derived.error.code);
+  console.log('Derived key: ' + derived.value.length + ' bytes');
+  console.log(
+    'Derivation time: ' + Math.round(performance.now() - start) + ' ms',
+  );
+  const key = await crypto.subtle
+    .importKey('raw', derived.value.slice(), 'AES-GCM', false, ['encrypt'])
+    .finally(() => derived.value.fill(0));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(message),
+  );
+  const saved = JSON.stringify({
+    format: 1,
+    kdf: parameters,
+    passwordEncoding: 'UTF-8',
+    salt: encode(salt),
+    cipher: 'AES-256-GCM',
+    iv: encode(iv),
+    ciphertext: encode(new Uint8Array(ciphertext)),
+  });
+  console.log('Saved record:', saved);
 
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      new TextEncoder().encode(
-        'A message recovered from the saved parameters.',
-      ),
-    );
-    const record = {
-      kdf: parameters,
-      passwordEncoding: 'UTF-8',
-      salt: Array.from(salt),
-      cipher: 'AES-256-GCM',
-      iv: Array.from(iv),
-      ciphertext: Array.from(new Uint8Array(ciphertext)),
-    };
-    console.log('Save this record:\n' + JSON.stringify(record, null, 2));
+  // Later: reload the saved JSON and use the same password.
+  const record = loadRecord(saved);
+  const restored = await deriveArgon2(
+    { ...record.kdf, password, salt: record.salt },
+    { limits },
+  );
+  if (!restored.ok) throw new Error(restored.error.code);
+  const decryptionKey = await crypto.subtle
+    .importKey('raw', restored.value.slice(), 'AES-GCM', false, ['decrypt'])
+    .finally(() => restored.value.fill(0));
+  console.log('Record serialized, reloaded and validated.');
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: record.iv },
+    decryptionKey,
+    record.ciphertext,
+  );
+  const recovered = new TextDecoder().decode(plaintext);
+  if (recovered !== message) throw new Error('Round trip failed');
+  console.log('Recovered message:', recovered);
+  console.log('Round trip: PASS');
 
-    // Later: use the saved salt and parameters with the same password bytes.
-    const restored = await deriveArgon2(
-      {
-        ...record.kdf,
-        password,
-        salt: new Uint8Array(record.salt),
-      },
-      { limits },
-    );
-    if (!restored.ok) throw new Error(restored.error.code);
-    const decryptionKey = await crypto.subtle.importKey(
-      'raw',
-      restored.value.slice(),
-      'AES-GCM',
-      false,
-      ['decrypt'],
-    );
-    restored.value.fill(0);
-    const plaintext = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: new Uint8Array(record.iv) },
+  const modified = record.ciphertext.slice();
+  modified[0] = (modified[0] ?? 0) ^ 1;
+  let rejected = false;
+  try {
+    await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: record.iv },
       decryptionKey,
-      new Uint8Array(record.ciphertext),
+      modified,
     );
-    console.log('Recovered message:', new TextDecoder().decode(plaintext));
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== 'OperationError')
+      throw error;
+    rejected = true;
   }
+  if (!rejected) throw new Error('Modified ciphertext was accepted');
+  console.log('Modified ciphertext: REJECTED');
 } finally {
   password.fill(0);
+}
+
+// Encoding and saved-record validation helpers.
+function encode(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
+
+function decode(value: string): Uint8Array<ArrayBuffer> {
+  if (!/^[A-Za-z0-9_-]*$/.test(value)) {
+    throw new Error('Invalid base64url');
+  }
+  return Uint8Array.from(
+    atob(value.replaceAll('-', '+').replaceAll('_', '/')),
+    (char) => char.charCodeAt(0),
+  );
+}
+
+function loadRecord(json: string) {
+  const record: unknown = JSON.parse(json);
+  if (
+    typeof record !== 'object' ||
+    record === null ||
+    !('format' in record) ||
+    record.format !== 1 ||
+    !('cipher' in record) ||
+    record.cipher !== 'AES-256-GCM' ||
+    !('passwordEncoding' in record) ||
+    record.passwordEncoding !== 'UTF-8' ||
+    !('salt' in record) ||
+    typeof record.salt !== 'string' ||
+    !('iv' in record) ||
+    typeof record.iv !== 'string' ||
+    !('ciphertext' in record) ||
+    typeof record.ciphertext !== 'string' ||
+    !('kdf' in record) ||
+    typeof record.kdf !== 'object' ||
+    record.kdf === null
+  )
+    throw new Error('Invalid encrypted record');
+  const kdf = record.kdf;
+  if (
+    !('algorithm' in kdf) ||
+    kdf.algorithm !== 'argon2id' ||
+    !('version' in kdf) ||
+    kdf.version !== 0x13 ||
+    !('memoryKiB' in kdf) ||
+    typeof kdf.memoryKiB !== 'number' ||
+    !('passes' in kdf) ||
+    typeof kdf.passes !== 'number' ||
+    !('parallelism' in kdf) ||
+    typeof kdf.parallelism !== 'number' ||
+    !('outputBytes' in kdf) ||
+    kdf.outputBytes !== 32
+  )
+    throw new Error('Invalid derivation parameters');
+  const salt = decode(record.salt);
+  const iv = decode(record.iv);
+  const ciphertext = decode(record.ciphertext);
+  if (salt.length !== 16 || iv.length !== 12 || ciphertext.length < 16) {
+    throw new Error('Invalid binary field lengths');
+  }
+  return {
+    kdf: {
+      algorithm: kdf.algorithm,
+      version: kdf.version,
+      memoryKiB: kdf.memoryKiB,
+      passes: kdf.passes,
+      parallelism: kdf.parallelism,
+      outputBytes: kdf.outputBytes,
+    },
+    salt,
+    iv,
+    ciphertext,
+  } as const;
 }
 ```
 
@@ -124,11 +209,9 @@ reuse its salt and every KDF parameter. A new salt, a different password encodin
 or different parameters produces a different key. AES-GCM decryption rejects a
 wrong key or modified ciphertext.
 
-The JSON above illustrates an application-owned record. When loading one from
-storage, validate its fields and apply your own resource limits before deriving.
-Salt and parameters can be stored with ciphertext. Production applications should
-omit the demo's derived-key logging. Argon2 derives bytes here, so this API does
-not create a password-verifier string or an encrypted-file format for you.
+Store the salt and derivation parameters with the ciphertext. Validate the record
+and apply your resource limits when loading it. Your application owns the record
+format.
 
 ## Bound work from stored parameters
 
@@ -162,7 +245,7 @@ parameters to an existing file will derive a different key.
 | Format                  | Inputs to prepare                                                                                                                                                                                            |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Bitwarden / Vaultwarden | Apply the format's account-identifier normalization and SHA-256 salt preprocessing. Convert its memory setting from MiB to KiB.                                                                              |
-| KDBX                    | Supply the precomputed composite key as `password`, the recorded salt and Argon2 version, and convert its memory value from bytes to KiB. Version `0x10` needs an external backend.                          |
+| KDBX                    | Supply the precomputed composite key as `password`, the recorded salt and Argon2 version, and convert its memory value from bytes to KiB. Both recorded versions are supported.                              |
 | PKCS#8 / PFX            | Use the existing [encrypted-key](./keys.md#encrypted-pkcs8) and [PKCS](./pkcs.md) APIs for their container-specific KDFs and encryption. `deriveArgon2` does not add an Argon2 encoding to those containers. |
 
 For format vectors and preprocessing examples, see the
@@ -170,11 +253,21 @@ For format vectors and preprocessing examples, see the
 
 ## Use another backend
 
-Pass an [`Argon2Backend`](../api/kdf.md) as `options.backend` to use a separately
-installed implementation. The default WebCrypto backend supports version `0x13`.
-An external backend can also implement `0x10` or run on a platform without native
-Argon2. It must honor the requested variant and version and return an owned byte
-array of exactly `outputBytes` length.
+Choose an implementation with `options.backend`:
+
+| Value        | Implementation                                        |
+| ------------ | ----------------------------------------------------- |
+| Omitted      | Automatic selection                                   |
+| `'native'`   | Native WebCrypto, version `0x13`                      |
+| `'portable'` | TypeScript implementation, versions `0x10` and `0x13` |
+| Callback     | Your [`Argon2Backend`](../api/kdf.md) implementation  |
+
+Automatic selection tries native WebCrypto and uses the TypeScript implementation
+for `unsupported` requests. Other errors are returned directly. An explicit
+selection uses only the chosen implementation.
+
+A callback receives the exact requested variant and version and returns an owned
+byte array of `outputBytes` length.
 
 <details>
 <summary>Backend buffer ownership and execution</summary>
@@ -190,9 +283,12 @@ you have finished with them. JavaScript cannot erase copies inside the runtime o
 native key storage. Native WebCrypto calls cannot be cancelled once dispatched.
 An external backend determines its own scheduling and cancellation behavior.
 
-The native backend requires at least eight salt bytes. Its output length must fit
-a WebCrypto unsigned 32-bit bit count. Requests beyond those capabilities return
-`unsupported`.
+The native backend requires at least eight salt bytes. The portable backend
+uses a private TypeScript memory matrix, wipes its memory and working buffers on
+success and failure, and yields while filling blocks. Its memory matrix must fit
+below 2 GiB.
+Native output lengths must fit a WebCrypto unsigned 32-bit bit count. Requests
+beyond these limits return `unsupported`.
 
 </details>
 

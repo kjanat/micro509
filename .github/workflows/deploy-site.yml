@@ -22,6 +22,8 @@ on:
 permissions: {}
 concurrency: { group: docs-site, cancel-in-progress: false }
 
+defaults: { run: { shell: "bash -euo pipefail {0}" } }
+
 jobs:
   publish:
     if: github.repository == 'kjanat/micro509'
@@ -43,47 +45,44 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || inputs.version || github.sha }}
-      - uses: $/.github/actions/setup-ts
+      - uses: $/.github/actions/setup
         with: { install-bun: true, install-deno: true }
       - name: Install build dependencies
         run: bun install --frozen-lockfile
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - name: Restore published snapshots
         id: published
-        shell: bash
         run: |
-          set -euo pipefail
           gh auth setup-git
           mkdir -p .publish
           previous=$(git ls-remote origin refs/heads/docs-site | cut -f1)
-          echo "previous=$previous" >> "$GITHUB_OUTPUT"
-          if [[ -n "$previous" ]]; then
-            git fetch --depth=1 origin "$previous"
+          echo "previous=${previous}" >> "${GITHUB_OUTPUT}"
+          if [[ -n "${previous}" ]]; then
+            git fetch --depth=1 origin "${previous}"
             git archive FETCH_HEAD | tar -x -C .publish
           fi
       - name: Build selected documentation
-        shell: bash
         env:
           PREVIOUS: ${{ steps.published.outputs.previous }}
         run: |
-          set -euo pipefail
-          if [[ -z "$PREVIOUS" ]]; then
-            if [[ -n "$RELEASE_VERSION" || "$REQUESTED_CHANNEL" == repair ]]; then
+          if [[ -z "${PREVIOUS}" ]]; then
+            if [[ -n "${RELEASE_VERSION}" || "${REQUESTED_CHANNEL}" == repair ]]; then
               echo "::error::Initialize docs-site with a bootstrap run on master before releasing or repairing an archive."
               exit 1
             fi
             node scripts/docs-build.mjs --channel bootstrap --output .publish
-          elif [[ "$REQUESTED_CHANNEL" == repair ]]; then
-            node scripts/docs-build.mjs --channel repair --version "$RELEASE_VERSION" --output .publish
-          elif [[ "$REQUESTED_CHANNEL" == bootstrap ]]; then
+          elif [[ "${REQUESTED_CHANNEL}" == repair ]]; then
+            node scripts/docs-build.mjs --channel repair --version "${RELEASE_VERSION}" --output .publish
+          elif [[ "${REQUESTED_CHANNEL}" == bootstrap ]]; then
             echo "::error::docs-site already exists. Use repair for a selected archive."
             exit 1
-          elif [[ -n "$RELEASE_VERSION" ]]; then
-            node scripts/docs-build.mjs --channel release --version "$RELEASE_VERSION" --output .publish
+          elif [[ -n "${RELEASE_VERSION}" ]]; then
+            node scripts/docs-build.mjs --channel release --version "${RELEASE_VERSION}" --output .publish
           else
             node scripts/docs-build.mjs --channel next --output .publish
           fi
       - name: Publish generated tree
-        shell: bash
         env:
           PREVIOUS: ${{ steps.published.outputs.previous }}
           GIT_AUTHOR_NAME: github-actions[bot]
@@ -91,13 +90,12 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          set -euo pipefail
-          printf '%s:%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > .publish/publication-id.txt
-          export GIT_INDEX_FILE="$RUNNER_TEMP/docs-publish.index"
+          printf '%s:%s\n' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" > .publish/publication-id.txt
+          export GIT_INDEX_FILE="${RUNNER_TEMP}/docs-publish.index"
           git --work-tree=.publish add --all --force -- .
           tree=$(git write-tree)
-          commit=$(printf 'Publish documentation for %s\n' "$GITHUB_SHA" | git -c commit.gpgsign=false commit-tree "$tree")
-          git push --force-with-lease="refs/heads/docs-site:$PREVIOUS" origin "$commit:refs/heads/docs-site"
+          commit=$(printf 'Publish documentation for %s\n' "${GITHUB_SHA}" | git -c commit.gpgsign=false commit-tree "${tree}")
+          git push --force-with-lease="refs/heads/docs-site:${PREVIOUS}" origin "${commit}:refs/heads/docs-site"
 
   deploy:
     needs: publish
@@ -110,15 +108,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { ref: docs-site, path: .published-docs, persist-credentials: false }
       - name: Deploy prebuilt tree to Cloudflare
-        shell: bash
         env:
           CF_DEPLOY_HOOK_URL: ${{ secrets.CF_DEPLOY_HOOK_URL }}
         run: |
-          set -euo pipefail
-          if [[ -z "$CF_DEPLOY_HOOK_URL" ]]; then
+          if [[ -z "${CF_DEPLOY_HOOK_URL}" ]]; then
             echo "::error::CF_DEPLOY_HOOK_URL is required to deploy docs-site"
             exit 1
           fi
-          curl --fail --silent --show-error --request POST "$CF_DEPLOY_HOOK_URL" --output /dev/null
+          curl --fail --silent --show-error --request POST "${CF_DEPLOY_HOOK_URL}" --output /dev/null
       - name: Verify production serves the published versioned documentation
         run: node scripts/check-docs-deployment.mjs .published-docs --live

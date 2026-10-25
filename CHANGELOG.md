@@ -19,6 +19,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reproduce Argon2 performance comparisons with `bun run bench:argon2`, including
+  TypeScript, the WASM oracle, native WebCrypto, and Node crypto. Reports include
+  checked outputs, latency samples, throughput, event-loop delay, and baseline
+  and sampled peak RSS from a separate process for each backend and workload.
+- Derive Argon2d, Argon2i, and Argon2id keys with versions `0x10` and `0x13`
+  across Bun, Node.js, Deno, browsers, and Cloudflare Workers. The complete
+  Argon2 and BLAKE2b implementation is TypeScript. `micro509/kdf` selects
+  between native WebCrypto and TypeScript automatically; `backend: 'native'`
+  and `backend: 'portable'` select one explicitly. Resource limits apply before
+  allocation, and owned working memory is cleared after derivation. The
+  C/WASM implementation serves as a test oracle for the TypeScript port.
+  [#203](https://github.com/kjanat/micro509/issues/203)
+
+### Changed
+
+- Reuse wiped TypeScript Argon2 matrices through a bounded pool of weak references,
+  reducing temporary memory growth across repeated derivations. Concurrent calls
+  own separate matrices.
+- Sample benchmark RSS directly to avoid inherited parent-process peaks. Harden
+  compiler-cache environment writes and hash metadata and contents through one
+  open file handle.
+
+- Cache TypeScript compiler bridge artifacts across installs and CI jobs, validating
+  build inputs and outputs before reuse. Rename the shared CI action to `setup`.
+
+- The key-derivation guide demonstrates encryption, a serialized JSON record,
+  message recovery and rejection of modified ciphertext. Saved binary fields
+  use base64url for compact, readable output. The docs build checks examples
+  against the package declarations and runs the TypeScript Argon2 implementation.
+- Install Tombi in shared CI setup and resolve it through PATH for formatting.
+  Simplify the autofix workflow.
+
 ## [0.17.0] - 2026-10-25
 
 Work with OpenSSH keys, derive encryption keys with Argon2, and sign and verify

@@ -1,94 +1,57 @@
-# Argon2 adapter evidence
+# Argon2 derivation
 
-`micro509/kdf` exposes raw byte derivation with an explicit backend boundary.
-Its bundled implementation is a native WebCrypto adapter for Argon2d and
-Argon2id version `0x13`. A portable implementation and a version `0x10`
-implementation are separate work. This is not a KDBX parser or an Argon2
-PKCS#8/PFX encoding.
+`micro509/kdf` derives raw bytes with Argon2d, Argon2i, or Argon2id, versions
+`0x10` and `0x13`. The implementation is TypeScript and works in Node.js, Bun,
+Deno, browsers, and Cloudflare Workers. It has no WASM binary, native addon, or
+runtime dependency.
 
-## Governing inputs and scope
+The default backend tries native WebCrypto for version `0x13`. When WebCrypto
+reports that the requested operation is unsupported, the TypeScript core derives
+the exact requested variant, version, and parameters. Other native failures are
+returned without retrying. `backend: 'native'` and `backend: 'portable'` select
+one backend explicitly; callbacks remain supported. The portable backend uses
+the same Argon2 algorithm in every runtime.
 
-Research on 25 October 2026 used `bun spec list`, `status`, `census`, `headings`,
-and `read`. Census expressions were `Argon2`, `memory-hard`, and
-`password-based key derivation`. The expanded corpus contained 165 documents.
-RFC 9106 was fetched through `bun spec fetch rfc 9106`.
+The TypeScript core implements BLAKE2b, H′, data dependent and data independent
+address generation, reference block indexing, BlaMka compression, and Argon2's
+memory filling and finalization. It follows RFC 9106 §3 and the version 1.2
+compatibility behavior used by Argon2 version `0x10`. The memory matrix is held
+in a private `Uint32Array`; its full contents and temporary input blocks are
+cleared after success or failure. Owned password, salt, secret, and associated
+data copies are cleared by the public wrapper. As with other JavaScript memory,
+the runtime may retain inaccessible copies until garbage collection.
 
-- **Governing:** RFC 9106 §3.1 (`docs/rfc/rfc9106.txt`, lines 189–226) defines
-  parameter ranges and units. The adapter passes the specified memory value
-  exactly. Rounding memory before passing it would change the initial hash.
-  §4 lines 578–619 gives parameter-selection guidance. Salt minimum eight bytes
-  is a native implementation boundary, not a universal RFC 9106 requirement.
-- **Governing:** RFC 9106 §§5.1 and 5.3 (lines 625–689 and 753–803) supply the
-  Argon2d/id vectors with secret and associated data. Both are exercised by the
-  shared runtime smoke suite and the real optional backend in `test/kdf.test.ts`.
-- **Governing for the native adapter:** Node's
-  [Argon2Params documentation](https://nodejs.org/api/webcrypto.html#class-argon2params)
-  specifies native field names and version `0x13`. Actual Node 26.12.0 and
-  the project-installed Deno 2.9.6 produce the RFC vectors. A separate direct
-  probe with system Deno 2.9.8 also matched. Bun 1.4.3 exposes Argon2 through its
-  Node-compatible crypto module but not through WebCrypto.
-- **Format boundary:** the [KDBX format](https://keepass.info/help/kb/kdbx.html)
-  permits `0x10` and `0x13`, records memory in bytes, and requires at least an
-  eight-byte salt. Callers convert units and prepare the composite key.
-- **Analogous:** RFC 9580 §3.7.1.4 describes the OpenPGP Argon2id profile.
-  Its fixed profile values do not govern this raw KDF interface.
-- **Outside this change:** RFC 8018 §6.2 specifies PBKDF2 for its PBES2 profile.
-  RFC 9879 updates PKCS#12 password handling. These do not establish an Argon2
-  container encoding. PKITS and X.509 certificate path rules do not govern raw
-  Argon2 derivation.
+The implementation processes lanes serially and yields to the event loop while
+filling memory. Parallelism still determines the number of Argon2 lanes and is
+included unchanged in the derivation. This scheduling does not move the work to
+another thread or provide cancellation. Resource ceilings apply per call, so
+applications must also limit concurrent derivations. Requests above the
+TypeScript backend's 2 GiB address limit return `unsupported` before allocation.
 
-The live RFC status observation reported no updates or obsoletions for RFC
-9106. Verified editorial erratum 7721 concerns §3.2, outside this adapter's
-parameter-mapping implementation. RFC 8018's updates 9579 and 9879 were inspected
-for the container boundary. RFC 9580's reported updates and errata do not alter
-the raw RFC 9106 interface.
+## Reference oracle
 
-## Independent inputs
+The C/WASM test oracle lives in `test/oracles/argon2`, with
+its pinned C sources under `vendor/argon2` and its compiler plugin in
+`packages/tsdown-plugin-argon2`. Run `bun build:argon2` to rebuild stale artifacts,
+`bun build:argon2 --check` to check reproducibility, and `bun test:argon2:oracle`
+to compare the TypeScript port against the oracle. This suite covers all three
+variants and both versions, minimum and unaligned memory sizes, repeated passes,
+multiple lanes, address-block rollover, long inputs and outputs, optional secret
+and associated data, and the 64 MiB recommended profile.
 
-`test/kdf.test.ts` uses a real `node:crypto.argon2` backend under Bun rather
-than replacing global crypto. It compares outputs with:
+## Evidence
 
-- RFC 9106's Argon2d/id vectors, including secret and associated data.
-- The Bitwarden SDK vector already exercised by the separate Vaultwarden
-  client: UTF-8 `67t9b5g67$%Dh89n`, SHA-256 of `test_key` as salt, 32 MiB,
-  four passes, two lanes, and 32 output bytes. The expected hex output is
-  `cff0e1b1a213a34c626ab3afe00911f01493ed2ff6968db83ee183f23335e1f2`.
-- Independently generated raw KDBX-style key material using
-  `@noble/hashes` 2.4.0: password bytes `0..31`, salt bytes `255..224`,
-  1 MiB, three passes, two lanes, and 32 output bytes, for both variants.
-  These are raw KDF fixtures, not full KDBX files. `0x10` refusal is covered
-  separately.
+The governing specification is [RFC 9106](rfc/rfc9106.txt). Tests compare the
+implementation with all three RFC 9106 vectors, independent libargon2 vectors
+for versions `0x10` and `0x13`, Node's independent `node:crypto.argon2`
+implementation, and the Bitwarden SDK vector. The tests cover secret and
+associated data, output lengths above 64 bytes, unaligned memory parameters,
+input snapshots, resource limits, cooperative scheduling, and temporary-buffer
+cleanup.
 
-The optional-backend contract is also exercised for snapshot ownership,
-temporary-array wiping, worker transfer of input buffers, genuine runtime failure, exact limit boundaries,
-malformed numeric values, and memory values that are not multiples of `4*p`.
-
-## Sample performance
-
-Commands, each in a separate process after `bun run build`:
-
-```sh
-node scripts/benchmark-argon2.mjs native 1
-node scripts/benchmark-argon2.mjs native 4
-node scripts/benchmark-argon2.mjs node 1
-node scripts/benchmark-argon2.mjs node 4
-```
-
-Sample on Linux x86-64, Node 26.12.0, 25 October 2026. Each process performed
-three batches using 64 MiB, three passes, four lanes, and a 32-byte output.
-Other development work was active, so these are reproducibility examples,
-not a performance guarantee.
-
-| Route                     | Concurrent calls | Median call (ms) | Process peak RSS (MiB) | Largest 5 ms timer delay (ms) |
-| ------------------------- | ---------------: | ---------------: | ---------------------: | ----------------------------: |
-| micro509 native WebCrypto |                1 |             82.2 |                  118.4 |                           6.3 |
-| micro509 native WebCrypto |                4 |            140.7 |                  311.4 |                           5.9 |
-| direct `node:crypto`      |                1 |             78.0 |                  116.8 |                           0.5 |
-| direct `node:crypto`      |                4 |            148.0 |                  308.4 |                           1.4 |
-
-RSS is the whole-process high-water mark reported by `resourceUsage`, including
-roughly 51–52 MiB baseline runtime memory. It is not an isolated allocation
-measurement. Both routes may use the same native crypto implementation, so
-this comparison measures adapter overhead and scheduling. It does not compare
-native Argon2 against a portable JavaScript/WASM implementation. The timer
-probe confirms that this sample allowed event-loop progress during native work.
+RFC 9106 recommends Argon2id for general password-based applications. Its
+second recommended profile uses 64 MiB, three passes, four lanes, a 16-byte salt,
+and a 32-byte output. Use Argon2d or Argon2i when an existing format requires
+that exact variant. `memoryKiB` is passed unchanged into Argon2's initial hash;
+the implementation rounds only its internal block allocation as required by
+the algorithm.

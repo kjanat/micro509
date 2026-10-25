@@ -13,10 +13,8 @@ micro509 is ESM-only, side-effect-free, and uses only WebCrypto APIs.
 | Cloudflare Workers | supported | Full WebCrypto available                                         |
 | Edge runtimes      | supported | Any runtime with WebCrypto + TextEncoder/TextDecoder + atob/btoa |
 
-The optional [`micro509/kdf` Argon2 adapter](../guide/key-derivation.md)
-requires native WebCrypto Argon2 support or an explicitly supplied backend.
-It returns `unsupported` when the runtime lacks that algorithm. Certificate
-and key-format support does not depend on Argon2 availability.
+[`micro509/kdf`](../guide/key-derivation.md) supports Argon2d, Argon2i, and Argon2id versions
+`0x10` and `0x13` across these runtimes.
 
 ## Requirements
 
@@ -26,11 +24,17 @@ micro509 requires these global APIs:
 - `TextEncoder` / `TextDecoder`
 - `atob` / `btoa`
 
+Argon2's TypeScript implementation uses `BigInt`, typed arrays, `WeakRef`, and timers.
+Native WebCrypto is used when it supports the requested variant and version.
+An unsupported native operation uses the TypeScript implementation in the
+current thread; other native failures are returned to the caller.
+
 _No_ Node.js builtins (`crypto`, `buffer`, `fs`, etc.) are used in library code.
 
 ## Tree-shaking
 
-micro509 is fully tree-shakeable. Import from domain entrypoints to minimize bundle size:
+micro509 is fully tree-shakeable. Import from domain entrypoints to minimize bundle size. Certificate and key-format
+imports do not load Argon2:
 
 ```ts
 // Only pulls in verification code

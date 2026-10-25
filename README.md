@@ -29,6 +29,9 @@ with keys and PKCS containers using WebCrypto.
 Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs in
 Node, Bun, Deno, browsers, and Cloudflare Workers.
 
+`micro509/kdf` derives Argon2d, Argon2i, and Argon2id keys across supported runtimes,
+including versions `0x10` and `0x13`.
+
 > **Prerelease** — API may change before 1.0.
 
 ## Install

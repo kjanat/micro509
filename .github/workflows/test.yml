@@ -5,6 +5,8 @@ name: Test
 on: { push: { branches: [master] }, pull_request: null, workflow_call: null }
 permissions: {}
 
+defaults: { run: { shell: "bash -euo pipefail {0}" } }
+
 jobs:
   test:
     name: Test
@@ -16,12 +18,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - parallel:
-          - uses: &TS $/.github/actions/setup-ts
+          - uses: &TS $/.github/actions/setup
             with: { install-bun: true, install-node: true, install-deno: true }
           - uses: &SSL $/.github/actions/setup-openssl
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - run: run typecheck
+      - name: Argon2 TypeScript and WASM oracle parity
+        run: run test:argon2:oracle
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
       - run: run test:coverage
@@ -58,6 +64,8 @@ jobs:
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
         env: { GITHUB_TOKEN: "${{ github.token }}" }
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - name: Version switcher distinguishes preview and production destinations
         run: bun test ./site/.vitepress/theme/components/version-catalog.test.ts
       - name: Every version's examples import the library that version documents
@@ -70,12 +78,28 @@ jobs:
     name: Workerd + browser smoke
     runs-on: *U
     timeout-minutes: 25
-    permissions: { contents: *r }
+    permissions: { contents: *r, id-token: write }
     steps:
       - *checkout
       - uses: *TS
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -sf bd playwright:chromium smoke
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
+      - name: Setup Node without native Argon2
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "22", package-manager-cache: false }
+      - name: Argon2 fallback after native KeyFormat rejection
+        run: run test:coverage:portable
+      - name: Upload portable fallback coverage to Codecov
+        if: *OG
+        uses: *codecov
+        with:
+          flags: node22
+          fail_ci_if_error: true
+          use_oidc: true
+          report_type: coverage
+          files: coverage/portable.lcov
 
   tsc:
     name: TypeScript compiler bridges
@@ -89,7 +113,9 @@ jobs:
             with: { install-bun: true, install-node: true }
           - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
             with: { go-version-file: go.work, cache-dependency-path: tsc/*/go.sum }
-      - run: runner install -sf @kjanat/tsc-bridge:build @kjanat/tsc-wasm:build @kjanat/tsc-compat:build
+      - run: runner install -f
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - run: run -s @kjanat/tsc-protocol:test @kjanat/tsc-bridge:test @kjanat/tsc-wasm:test @kjanat/tsc-compat:test @kjanat/tsc-vue-mapper:test
 
   differential:
@@ -104,3 +130,5 @@ jobs:
           - { uses: *TS, with: { install-bun: "true" } }
           - { uses: *SSL }
       - run: runner install -f test:differential
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }

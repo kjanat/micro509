@@ -10,6 +10,8 @@ concurrency:
 
 permissions: { contents: read }
 
+defaults: { run: { shell: "bash -euo pipefail {0}" } }
+
 jobs:
   test:
     name: Test
@@ -51,10 +53,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
+      - uses: $/.github/actions/setup
         with: { install-bun: "true" }
       - name: Install dependencies and build (tsdown regenerates jsr.json)
         run: runner install -f build fmt
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |
@@ -80,9 +84,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
+      - uses: $/.github/actions/setup
         with: { install-bun: true, install-node: true, update-npm: true, node-registry-url: https://registry.npmjs.org }
       - run: runner install -f build
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |
@@ -109,7 +115,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
+      - uses: $/.github/actions/setup
         with: { install-node: true, update-npm: true }
       - shell: pwsh
         env:

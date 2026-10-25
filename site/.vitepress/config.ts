@@ -238,8 +238,8 @@ const examples: DocExamplesOptions = {
 	/** Compile runnable examples and explicitly marked copyable recipes. */
 	block: /(?:<LiveCode[^>]*>|<!-- typecheck -->)\s*\n\n```ts\n([\s\S]*?)```/g,
 	paths: {
-		[repo.name]: [path.join(repoRoot, 'src/index.ts')],
-		[`${repo.name}/*`]: [path.join(repoRoot, 'src/*.ts')],
+		[repo.name]: [path.join(repoRoot, 'dist/index.d.ts')],
+		[`${repo.name}/*`]: [path.join(repoRoot, 'dist/*.d.ts')],
 	},
 };
 
@@ -433,6 +433,7 @@ export default defineConfig<DocsThemeConfig>({
 			),
 			outDir: path.join(config.outDir, '_library', `@${nextRef}`),
 			platform: 'browser',
+			failOnWarn: true,
 			format: 'esm',
 			dts: false,
 			outExtensions: () => ({ js: '.js' }),

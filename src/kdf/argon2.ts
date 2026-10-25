@@ -1,14 +1,14 @@
 /**
- * Argon2 adapter and resource-policy boundary. The default backend uses native
- * WebCrypto, with no algorithm fallback or portable implementation bundled.
+ * Argon2 derivation and resource-policy boundary. The default backend prefers
+ * native WebCrypto and uses the TypeScript implementation when unsupported.
  *
  * @module
  */
 
 import type { Micro509Error, Result } from '#micro509/result/result';
 
-/** Argon2id for new uses, or Argon2d for compatibility with existing formats. */
-export type Argon2Algorithm = 'argon2id' | 'argon2d';
+/** RFC 9106 Argon2 variants. Use Argon2id for new password-based applications. */
+export type Argon2Algorithm = 'argon2d' | 'argon2i' | 'argon2id';
 
 /** Argon2 versions used by KDBX. The native backend supports only 0x13. */
 export type Argon2Version = 0x10 | 0x13;
@@ -21,7 +21,7 @@ export interface Argon2Input {
 	readonly version: Argon2Version;
 	/** Password or format-preprocessed input bytes. */
 	readonly password: Uint8Array;
-	/** Salt bytes. The native backend requires at least eight bytes. */
+	/** Salt bytes. RFC 9106 recommends 16 bytes; the native backend requires at least eight. */
 	readonly salt: Uint8Array;
 	/** Total memory in kibibytes, at least eight times parallelism. */
 	readonly memoryKiB: number;
@@ -76,8 +76,12 @@ export type Argon2Backend = (input: Argon2Input) => Promise<Argon2Result>;
 export interface Argon2Options {
 	/** Per-call ceilings. Applications must separately bound concurrent calls. */
 	readonly limits?: Argon2Limits;
-	/** Explicit trusted backend. Omit to use native WebCrypto version 0x13. */
-	readonly backend?: Argon2Backend;
+	/**
+	 * Omit to prefer native WebCrypto, then the TypeScript implementation on `unsupported` only.
+	 * Select `native` or `portable` to require that implementation, or supply a
+	 * trusted callback. Explicit selections never fall back to another backend.
+	 */
+	readonly backend?: Argon2Backend | 'native' | 'portable';
 }
 
 function failure(code: Argon2ErrorCode, message: string): Argon2Result {
@@ -89,7 +93,11 @@ function uintInRange(value: number, min: number, max: number): boolean {
 }
 
 function validate(input: Argon2Input, limits: Argon2Limits): Argon2Result | undefined {
-	if (input.algorithm !== 'argon2id' && input.algorithm !== 'argon2d') {
+	if (
+		input.algorithm !== 'argon2id' &&
+		input.algorithm !== 'argon2d' &&
+		input.algorithm !== 'argon2i'
+	) {
 		return failure('unsupported', 'Unsupported Argon2 variant');
 	}
 	if (input.version !== 0x10 && input.version !== 0x13) {
@@ -207,13 +215,16 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 		return failure('unsupported', 'Native WebCrypto is unavailable');
 	}
 	const subtle = globalThis.crypto.subtle;
-	let name: 'Argon2id' | 'Argon2d';
+	let name: 'Argon2d' | 'Argon2i' | 'Argon2id';
 	switch (input.algorithm) {
 		case 'argon2id':
 			name = 'Argon2id';
 			break;
 		case 'argon2d':
 			name = 'Argon2d';
+			break;
+		case 'argon2i':
+			name = 'Argon2i';
 			break;
 		default:
 			return failure('unsupported', 'Unsupported Argon2 variant');
@@ -222,13 +233,23 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 		// raw-secret is a runtime WebCrypto extension not present in every DOM
 		// declaration. The result is narrowed rather than asserted or globally
 		// augmenting consumers' SubtleCrypto definitions.
-		const key: unknown = await Reflect.apply(subtle.importKey, subtle, [
-			'raw-secret',
-			input.password,
-			name,
-			false,
-			['deriveBits'],
-		]);
+		let key: unknown;
+		try {
+			key = await Reflect.apply(subtle.importKey, subtle, [
+				'raw-secret',
+				input.password,
+				name,
+				false,
+				['deriveBits'],
+			]);
+		} catch (error) {
+			// Older WebCrypto KeyFormat enums reject raw-secret with TypeError.
+			// Keep this classification local to import; deriveBits failures stay failures.
+			if (error instanceof TypeError) {
+				return failure('unsupported', 'This runtime does not support the raw-secret key format');
+			}
+			throw error;
+		}
 		if (typeof CryptoKey === 'undefined' || !(key instanceof CryptoKey)) {
 			return failure('derivation_failed', 'Native Argon2 returned an invalid key');
 		}
@@ -259,18 +280,32 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 	}
 }
 
+async function builtinArgon2(
+	input: Argon2Input,
+	backend: 'native' | 'portable' | undefined,
+): Promise<Argon2Result> {
+	if (backend !== 'portable') {
+		const result = await nativeArgon2(input);
+		if (backend === 'native' || result.ok || result.error.code !== 'unsupported') return result;
+	}
+	const { portableArgon2 } = await import('#micro509/kdf/argon2-portable');
+	return portableArgon2(input);
+}
+
 /**
  * Derives raw Argon2 bytes after validating parameters and resource ceilings.
  *
- * The default native WebCrypto adapter implements version 0x13. Runtime support
- * is detected by the import/derive operations, without an extra trial derivation.
- * Supply an explicit backend for other environments or version 0x10. There is
- * no fallback between variants, versions, or implementations.
+ * Native WebCrypto is preferred for version 0x13. An unsupported request uses
+ * the TypeScript implementation for the exact variant and version, including
+ * 0x10. Other native failures are returned without retrying. Explicit
+ * backends never fall back. No algorithm, version, or parameter is substituted.
  *
  * Caller buffers are copied synchronously before the first await and never
  * modified. Owned temporary arrays are zeroed on completion. Native key storage
  * and runtime copies cannot be explicitly erased by JavaScript. The returned
  * output is caller-owned. Calls cannot cancel native work once dispatched.
+ * TypeScript work yields while filling memory blocks. Its private memory matrix
+ * is erased on completion or failure.
  * Limits apply per call, not to concurrent invocations.
  */
 export async function deriveArgon2(
@@ -290,7 +325,10 @@ export async function deriveArgon2(
 	if (invalid !== undefined) return invalid;
 	const owned = copyInput(snapshot);
 	try {
-		const result = await (options.backend ?? nativeArgon2)(owned);
+		const result =
+			typeof options.backend === 'function'
+				? await options.backend(owned)
+				: await builtinArgon2(owned, options.backend);
 		if (!result.ok) {
 			// A custom provider's diagnostic may contain secrets. Return only the
 			// recognized code and a fixed message at this public boundary.

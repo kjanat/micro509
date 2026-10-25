@@ -3,7 +3,7 @@
  * @module
  */
 
-import { rfc9106Vectors } from '../test/fixtures/argon2.mjs';
+import { libargon2Vectors, rfc9106Vectors } from '../test/fixtures/argon2.mjs';
 import { forgeExponentOneJwt } from '../test/fixtures/jose-exponent-one.mjs';
 import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
 
@@ -78,30 +78,15 @@ export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi, joseApi) {
 
 /** @param {typeof import('#micro509/kdf')} kdfApi */
 async function runArgon2Smoke(kdfApi) {
-	for (const { input, expected } of rfc9106Vectors) {
-		let available = true;
-		try {
-			await Reflect.apply(crypto.subtle.importKey, crypto.subtle, [
-				'raw-secret',
-				input.password,
-				input.algorithm === 'argon2id' ? 'Argon2id' : 'Argon2d',
-				false,
-				['deriveBits'],
-			]);
-		} catch (error) {
-			if (!(error instanceof Error) || error.name !== 'NotSupportedError') throw error;
-			available = false;
-		}
-		const derived = await kdfApi.deriveArgon2(input);
-		if (available) {
-			if (!derived.ok) throw new Error(`smoke: native Argon2 failed: ${derived.error.code}`);
+	for (const { input, expected } of [...rfc9106Vectors, ...libargon2Vectors]) {
+		for (const backend of /** @type {const} */ ([undefined, 'portable'])) {
+			const derived = await kdfApi.deriveArgon2(input, { backend });
+			if (!derived.ok) throw new Error(`smoke: Argon2 failed: ${derived.error.code}`);
 			const actual = Array.from(derived.value, (byte) => byte.toString(16).padStart(2, '0')).join(
 				'',
 			);
-			if (actual !== expected) throw new Error('smoke: Argon2 RFC 9106 vector mismatch');
+			if (actual !== expected) throw new Error('smoke: Argon2 independent vector mismatch');
 			derived.value.fill(0);
-		} else if (derived.ok || derived.error.code !== 'unsupported') {
-			throw new Error('smoke: unavailable native Argon2 must report unsupported');
 		}
 	}
 }

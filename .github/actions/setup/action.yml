@@ -1,5 +1,5 @@
-name: Setup Js Runtime
-description: Setup Deno, Node.js, and/or Bun runtimes
+name: Setup
+description: Set up runtimes, repository tools, and compiler artifact caching
 
 # pretty-yaml-ignore
 inputs:
@@ -30,6 +30,9 @@ runs:
       if: ${{ inputs.install-runner == 'true' }}
       uses: kjanat/runner@b32ea932a1813ae0be44e755c16df9f9f5ca86a4 # v0.28.0
 
+    - name: Setup tombi
+      uses: kjanat/setup-tombi@94a6834e289046705b32e6b8dc977c8b939e8b35 # v1
+
     - name: Setup dprint
       uses: kjanat/dprint-check@29c42153a7346f4d7315883ff7722cfe22cd510c # v3.1.0
       with: { install-only: true }
@@ -59,5 +62,12 @@ runs:
     - name: Update npm
       id: update-npm
       if: ${{ inputs.install-node == 'true' && inputs.update-npm == 'true' }}
-      shell: bash
-      run: npm install -g npm@11 && echo "npm-version=$(npm --version)" >> "${GITHUB_OUTPUT}"
+      shell: "bash -euo pipefail {0}"
+      run: |
+        npm install -g npm@11
+        npm_version=$(npm --version)
+        echo "npm-version=${npm_version}" >> "${GITHUB_OUTPUT}"
+
+    - name: Restore compiler artifacts
+      if: inputs.install-bun == 'true' && inputs.install-node == 'true'
+      uses: $/.github/actions/cache-tsc
