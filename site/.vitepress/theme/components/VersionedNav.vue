@@ -7,15 +7,20 @@
 	not at the root's. The prefix comes from the current route, so a reader
 	never falls out of the version they are in by clicking the navbar.
 
-	Rendered by both VPNavBarMenu (desktop) and VPNavScreenMenu (mobile).
+	Rendered in the navbar, in the mobile screen menu (`screen-menu`), and in
+	the navbar's `⋯` overflow panel (`menu`). Each context sizes its rows
+	differently, so the links follow VitePress's own nav links in each.
 -->
 <script setup lang="ts">
 import { useData, useRoute } from 'vitepress';
 import { computed } from 'vue';
+import type { VersionEntry } from './version-catalog';
+import { versionForPath } from './version-catalog';
 
-interface VersionEntry {
-  readonly prefix: string;
-}
+const props = defineProps<{
+  readonly screenMenu?: boolean;
+  readonly menu?: boolean;
+}>();
 
 const SECTIONS = [
   {
@@ -38,13 +43,7 @@ const route = useRoute();
 const prefix = computed(() => {
   const versions: readonly VersionEntry[] =
     theme.value.versions ?? [];
-  const path = route.path.replace(/^\//, '');
-  return (
-    [...versions]
-      .sort((a, b) => b.prefix.length - a.prefix.length)
-      .find((version) => path.startsWith(version.prefix))
-      ?.prefix ?? ''
-  );
+  return versionForPath(versions, route.path)?.prefix ?? '';
 });
 
 const links = computed(() =>
@@ -59,12 +58,20 @@ const links = computed(() =>
 </script>
 
 <template>
-  <div class="versioned-nav">
+  <div
+    class="versioned-nav"
+    :class="{ 'screen-menu': props.screenMenu, 'menu-panel': props.menu }"
+  >
     <a
       v-for="link in links"
       :key="link.text"
-      class="VPLink link vp-external-link-icon-none VPNavBarMenuLink"
-      :class="{ active: link.active }"
+      class="VPLink link vp-external-link-icon-none versioned-nav-link"
+      :class="{
+        active: link.active,
+        VPNavBarMenuLink: !props.screenMenu && !props.menu,
+        VPNavScreenMenuLink: props.screenMenu,
+        'menu-panel-link': props.menu,
+      }"
       :href="link.link"
     >
       {{ link.text }}
@@ -75,13 +82,18 @@ const links = computed(() =>
 <style scoped>
 .versioned-nav {
   display: flex;
-  flex-direction: column;
 }
 
-@media (min-width: 768px) {
-  .versioned-nav {
-    flex-direction: row;
-  }
+.screen-menu,
+.menu-panel {
+  display: block;
+}
+
+.versioned-nav-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  transition: color 0.25s;
 }
 
 .VPNavBarMenuLink {
@@ -89,17 +101,32 @@ const links = computed(() =>
   align-items: center;
   padding: 0 12px;
   line-height: var(--vp-nav-height);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vp-c-text-1);
-  transition: color 0.25s;
 }
 
-.VPNavBarMenuLink.active {
+.VPNavScreenMenuLink {
+  display: block;
+  border-bottom: 1px solid var(--vp-c-divider);
+  padding: 12px 0 11px;
+  line-height: 24px;
+}
+
+.menu-panel-link {
+  display: block;
+  border-radius: 6px;
+  padding: 0 12px;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.menu-panel-link:hover {
+  background: var(--vp-c-default-soft);
+}
+
+.versioned-nav-link.active {
   color: var(--vp-c-brand-1);
 }
 
-.VPNavBarMenuLink:hover {
+.versioned-nav-link:hover {
   color: var(--vp-c-brand-1);
 }
 </style>

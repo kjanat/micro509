@@ -16,7 +16,10 @@ every archived version.
 ## Build one tree locally
 
 With no channel set, `site:build` builds a PR-style preview of the checked-out
-tree, offline from release discovery:
+tree. The preview embeds the production version catalog for navigation, with
+its own entry alongside `next` and released versions. Production entries link
+to the production site. Only the checked-out tree's pages are rendered.
+`DOCS_OFFLINE=1` skips fetching the catalog and builds navigation for that tree alone:
 
 ```sh
 bun run site:build
@@ -54,6 +57,11 @@ Archive builds refuse to replace an existing version. The root and `/next/`
 builds preserve every archived directory. The global `versions.json` includes
 each version's page inventory, so the version switcher can use current
 navigation metadata without rebuilding old snapshots.
+
+`versions.json` is an inventory of published bases, not a menu: a release is
+served both at `/` and at its immutable `/vX.Y.Z/`, so it holds an entry for
+each. The version switcher derives its own list from it, one entry per
+release and in reading order.
 
 The build driver can apply those same updates to a local tree. `--output`
 selects the persistent publish directory:

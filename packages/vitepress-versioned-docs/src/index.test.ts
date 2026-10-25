@@ -81,7 +81,7 @@ describe('single-target docs builds', () => {
 				await Reflect.apply(docs.buildEnd, undefined, [{ outDir }]);
 				const catalog = JSON.parse(readFileSync(path.join(outDir, 'versions.json'), 'utf8'));
 				assert.equal(catalog.versions[0].base, expectedBase);
-				assert.equal(catalog.versions[0].channel, channel === 'preview' ? 'latest' : channel);
+				assert.equal(catalog.versions[0].channel, channel);
 				assert.ok('sections' in catalog.versions[0]);
 				assert.equal(catalog.versions[0].sections.guide[0].slug, 'index');
 				assert.equal(catalog.versions[0].sections.api[0].slug, 'fn/Name');

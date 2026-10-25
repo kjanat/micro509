@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Mobile navigation uses compact rows and an inline version list that expands
+  like VitePress's own screen-menu groups, scrolling with the menu instead of
+  inside a nested box. The version button toggles the list, and Escape or an
+  outside click closes it. Desktop version lists scroll within the viewport,
+  and the navbar's overflow menu renders both as flat panel rows.
+  [#188](https://github.com/kjanat/micro509/issues/188)
+- PR previews have a separate version entry alongside production's `next` and
+  release entries. Switching from a preview opens the matching production page.
+- The version list shows one entry per release instead of one per published
+  base, so the latest release no longer appears twice, and it reads in
+  timeline order: this preview, `next`, the latest release, then the archives.
+  Entries without a version number say which channel they are.
+
 ## [0.16.0] - 2026-10-24
 
 Block a compromised public key across every certificate that carries it,

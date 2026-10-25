@@ -51,6 +51,8 @@ jobs:
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
         env: { GITHUB_TOKEN: "${{ github.token }}" }
+      - name: Version switcher distinguishes preview and production destinations
+        run: bun test ./site/.vitepress/theme/components/version-catalog.test.ts
       - name: Every version's examples import the library that version documents
         run: run site:import-maps
       - run: run playwright:chromium
