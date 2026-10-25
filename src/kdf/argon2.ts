@@ -226,13 +226,23 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 		// raw-secret is a runtime WebCrypto extension not present in every DOM
 		// declaration. The result is narrowed rather than asserted or globally
 		// augmenting consumers' SubtleCrypto definitions.
-		const key: unknown = await Reflect.apply(subtle.importKey, subtle, [
-			'raw-secret',
-			input.password,
-			name,
-			false,
-			['deriveBits'],
-		]);
+		let key: unknown;
+		try {
+			key = await Reflect.apply(subtle.importKey, subtle, [
+				'raw-secret',
+				input.password,
+				name,
+				false,
+				['deriveBits'],
+			]);
+		} catch (error) {
+			// Older WebCrypto KeyFormat enums reject raw-secret with TypeError.
+			// Keep this classification local to import; deriveBits failures stay failures.
+			if (error instanceof TypeError) {
+				return failure('unsupported', 'This runtime does not support the raw-secret key format');
+			}
+			throw error;
+		}
 		if (typeof CryptoKey === 'undefined' || !(key instanceof CryptoKey)) {
 			return failure('derivation_failed', 'Native Argon2 returned an invalid key');
 		}

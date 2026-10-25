@@ -76,6 +76,11 @@ jobs:
       - uses: *TS
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -sf bd playwright:chromium smoke
+      - name: Setup Node without native Argon2
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "22", package-manager-cache: false }
+      - name: Argon2 fallback after native KeyFormat rejection
+        run: node --test test/native/argon2-availability.node.mjs
 
   tsc:
     name: TypeScript compiler bridges
