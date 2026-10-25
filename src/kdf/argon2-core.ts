@@ -4,6 +4,7 @@
  * 32-bit words. Each derivation owns its state and clears mutable work buffers.
  */
 import type { Argon2Input } from '#micro509/kdf/argon2';
+import { multiplyHigh } from '#micro509/kdf/argon2-arithmetic';
 
 const MASK_64 = 0xffff_ffff_ffff_ffffn;
 const IV = [
@@ -235,17 +236,6 @@ function initialHash(input: Argon2Input, type: number): Uint8Array {
 	}
 }
 
-// High 32 bits of an unsigned 32×32 product. Every intermediate is below
-// 2^32, so these 16-bit partial products stay exact in JavaScript numbers.
-function multiplyHigh(a: number, b: number): number {
-	const aLow = a & 0xffff;
-	const aHigh = a >>> 16;
-	const bLow = b & 0xffff;
-	const bHigh = b >>> 16;
-	const middle = aHigh * bLow + ((aLow * bLow) >>> 16);
-	return (aHigh * bHigh + (middle >>> 16) + (((middle & 0xffff) + aLow * bHigh) >>> 16)) >>> 0;
-}
-
 // Keep the four 64-bit registers local throughout the quarter round. The
 // scratch block is read once and written once, instead of at each add/rotate.
 // Low words stay unsigned for carry calculation; high words stay signed so
@@ -269,7 +259,7 @@ function argonMix(words: Uint32Array, a: number, b: number, c: number, d: number
 	aHigh =
 		(aHigh +
 			bHigh +
-			((multiplyHigh(aLow, bLow) << 1) | (product >>> 31)) +
+			((multiplyHigh(aLow, bLow, product) << 1) | (product >>> 31)) +
 			((sum / 0x1_0000_0000) | 0)) |
 		0;
 	aLow = sum >>> 0;
@@ -283,7 +273,7 @@ function argonMix(words: Uint32Array, a: number, b: number, c: number, d: number
 	cHigh =
 		(cHigh +
 			dHigh +
-			((multiplyHigh(cLow, dLow) << 1) | (product >>> 31)) +
+			((multiplyHigh(cLow, dLow, product) << 1) | (product >>> 31)) +
 			((sum / 0x1_0000_0000) | 0)) |
 		0;
 	cLow = sum >>> 0;
@@ -297,7 +287,7 @@ function argonMix(words: Uint32Array, a: number, b: number, c: number, d: number
 	aHigh =
 		(aHigh +
 			bHigh +
-			((multiplyHigh(aLow, bLow) << 1) | (product >>> 31)) +
+			((multiplyHigh(aLow, bLow, product) << 1) | (product >>> 31)) +
 			((sum / 0x1_0000_0000) | 0)) |
 		0;
 	aLow = sum >>> 0;
@@ -311,7 +301,7 @@ function argonMix(words: Uint32Array, a: number, b: number, c: number, d: number
 	cHigh =
 		(cHigh +
 			dHigh +
-			((multiplyHigh(cLow, dLow) << 1) | (product >>> 31)) +
+			((multiplyHigh(cLow, dLow, product) << 1) | (product >>> 31)) +
 			((sum / 0x1_0000_0000) | 0)) |
 		0;
 	cLow = sum >>> 0;
@@ -428,8 +418,13 @@ function indexAlpha(
 	} else {
 		areaSize = laneLength - segmentLength + (sameLane ? index - 1 : index === 0 ? -1 : 0);
 	}
-	const squareHigh = multiplyHigh(pseudoRandom, pseudoRandom);
-	const relative = areaSize - 1 - multiplyHigh(areaSize, squareHigh);
+	const squareHigh = multiplyHigh(
+		pseudoRandom,
+		pseudoRandom,
+		Math.imul(pseudoRandom, pseudoRandom),
+	);
+	const relative =
+		areaSize - 1 - multiplyHigh(areaSize, squareHigh, Math.imul(areaSize, squareHigh));
 	const start = pass === 0 ? 0 : slice === 3 ? 0 : (slice + 1) * segmentLength;
 	return (start + relative) % laneLength;
 }

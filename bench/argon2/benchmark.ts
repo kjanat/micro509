@@ -16,6 +16,20 @@ const backends = ['typescript', 'wasm', 'native', 'node'] as const;
 const nodeArgon2 = promisify(argon2);
 const root = new URL('../../', import.meta.url);
 
+async function implementationHashes(source = false) {
+	return Promise.all(
+		['argon2', 'argon2-core', 'argon2-arithmetic', 'argon2-portable'].map(async (name) => {
+			const path = source ? `src/kdf/${name}.ts` : `dist/kdf/${name}.js`;
+			return {
+				path,
+				sha256: createHash('sha256')
+					.update(await readFile(new URL(path, root)))
+					.digest('hex'),
+			};
+		}),
+	);
+}
+
 function nativeParameters(input: Argon2Input) {
 	return {
 		message: input.password,
@@ -145,7 +159,7 @@ const run = command('run')
 		const { deriveArgon2 } = flags.source
 			? await import('#micro509/kdf')
 			: await import('micro509/kdf');
-		const core = new URL(flags.source ? 'src/kdf/argon2-core.ts' : 'dist/kdf/argon2-core.js', root);
+		const implementation = await implementationHashes(flags.source);
 		const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
 		const parameters = {
 			version: 0x13,
@@ -161,10 +175,7 @@ const run = command('run')
 			arch: process.arch,
 			date: new Date().toISOString(),
 			packageVersion: pkg.version,
-			core: core.pathname.slice(root.pathname.length),
-			coreSha256: createHash('sha256')
-				.update(await readFile(core))
-				.digest('hex'),
+			implementation,
 			warmups: flags.warmups,
 			samples: flags.samples,
 			concurrency: flags.concurrency,

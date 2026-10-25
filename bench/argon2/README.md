@@ -28,7 +28,7 @@ All workload controls are explicit: `--memory-kib`, `--passes`, `--lanes`,
 their ranges. `--json` prints the complete report; `--output` saves it while
 retaining the readable progress lines.
 
-Reports record the runtime, CPU, platform, workload, measured core's SHA-256,
+Reports record the runtime, CPU, platform, workload, SHA-256 hashes of the Argon2 modules,
 every latency sample, median and range, batch throughput, and the maximum lateness
 of a 5 ms timer. Call latency includes the normal API boundary, cooperative
 scheduling, and memory cleanup. Correctness checks and the final timer observation
@@ -52,11 +52,11 @@ warm-ups. The ratio is TypeScript time divided by WASM time.
 
 | Runtime       | Variant  | TypeScript |   WASM | TS / WASM |
 | ------------- | -------- | ---------: | -----: | --------: |
-| Node v26.12.0 | argon2id |    1213 ms | 182 ms |     6.66× |
-| Node v26.12.0 | argon2i  |    1227 ms | 183 ms |     6.72× |
-| Node v26.12.0 | argon2d  |    1208 ms | 181 ms |     6.68× |
-| Bun 1.4.4     | argon2id |    1011 ms | 171 ms |     5.93× |
-| Bun 1.4.4     | argon2i  |    1025 ms | 175 ms |     5.86× |
-| Bun 1.4.4     | argon2d  |    1009 ms | 171 ms |     5.89× |
+| Node v26.12.0 | argon2id |    1233 ms | 181 ms |     6.80× |
+| Node v26.12.0 | argon2i  |    1249 ms | 182 ms |     6.86× |
+| Node v26.12.0 | argon2d  |    1235 ms | 184 ms |     6.73× |
+| Bun 1.4.4     | argon2id |     912 ms | 173 ms |     5.25× |
+| Bun 1.4.4     | argon2i  |     924 ms | 171 ms |     5.39× |
+| Bun 1.4.4     | argon2d  |     909 ms | 175 ms |     5.20× |
 
 Reports: [Node](results/optimized-node.json) and [Bun](results/optimized-bun.json).
