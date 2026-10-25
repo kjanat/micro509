@@ -1,12 +1,23 @@
-import { base64Decode } from '#micro509/internal/shared/base64';
-import { wasmBase64 } from '#micro509/kdf/argon2-wasm';
-
 // Share compiled code only; each call gets private linear memory and state.
 let compiled: WebAssembly.Module | undefined;
 
 export async function moduleFor(): Promise<WebAssembly.Module> {
 	// Cache successful compilation only. Failed compilation can be retried;
 	// concurrent first calls may compile the same small, immutable module.
-	compiled ??= await WebAssembly.compile(new Uint8Array(base64Decode(wasmBase64)));
+	compiled ??= await compileModule(new URL('./argon2.wasm', import.meta.url));
 	return compiled;
+}
+
+/** Load a packaged WASM asset from a filesystem or HTTP module URL. */
+export async function compileModule(url: URL): Promise<WebAssembly.Module> {
+	let bytes: Uint8Array<ArrayBuffer>;
+	if (url.protocol === 'file:') {
+		const { readFile } = await import('node:fs/promises');
+		bytes = new Uint8Array(await readFile(url));
+	} else {
+		const response = await fetch(url);
+		if (!response.ok) throw new Error('Could not load the Argon2 WASM asset');
+		bytes = new Uint8Array(await response.arrayBuffer());
+	}
+	return WebAssembly.compile(bytes);
 }

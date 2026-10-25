@@ -3,20 +3,27 @@ import { rejects } from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'tsdown';
-import { buildArgon2 } from '../src/build.ts';
+import { argon2Artifacts } from '../src/artifacts.ts';
+import { buildArgon2, compilerVersion } from '../src/build.ts';
 import { argon2Plugin } from '../src/index.ts';
 
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
 const emcc = spawnSync('emcc', ['--version'], { encoding: 'utf8' });
-const compilerAvailable = emcc.status === 0 && emcc.stdout.includes(' 5.0.2 ');
-const outputs = ['src/kdf/argon2.wasm', 'src/kdf/argon2-wasm.ts', 'vendor/argon2/build.json'];
+const compilerAvailable = emcc.status === 0 && emcc.stdout.includes(` ${compilerVersion} `);
+const outputs = [argon2Artifacts.wasm, argon2Artifacts.manifest];
+const bridgeFile = `${argon2Artifacts.vendor}/bridge.c`;
+const headerFile = `${argon2Artifacts.vendor}/src/core.h`;
 
 async function fixture(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), 'micro509-argon2-plugin-'));
-	for (const path of ['vendor/argon2', 'src/kdf', 'packages/tsdown-plugin-argon2/src']) {
+	for (const path of [
+		argon2Artifacts.vendor,
+		dirname(argon2Artifacts.wasm),
+		argon2Artifacts.tooling,
+	]) {
 		await cp(join(repository, path), join(root, path), { recursive: true });
 	}
 	await writeFile(join(root, 'package.json'), '{"name":"argon2-fixture","type":"module"}');
@@ -27,7 +34,7 @@ test('fresh artifacts work without a compiler and touching a source does not reb
 	const root = await fixture();
 	try {
 		const before = await Promise.all(outputs.map((path) => stat(join(root, path))));
-		await utimes(join(root, 'vendor/argon2/bridge.c'), new Date(), new Date());
+		await utimes(join(root, bridgeFile), new Date(), new Date());
 		const result = await buildArgon2(root, { compiler: join(root, 'absent-emcc') });
 		expect(result.rebuilt).toBe(false);
 		const after = await Promise.all(outputs.map((path) => stat(join(root, path))));
@@ -43,8 +50,9 @@ test.skipIf(!compilerAvailable)(
 		const root = await fixture();
 		try {
 			for (const path of [
-				'vendor/argon2/src/core.h',
-				'packages/tsdown-plugin-argon2/src/build.ts',
+				headerFile,
+				`${argon2Artifacts.tooling}/build.ts`,
+				`${argon2Artifacts.tooling}/artifacts.ts`,
 			]) {
 				await writeFile(
 					join(root, path),
@@ -75,13 +83,13 @@ test.skipIf(!compilerAvailable)(
 				expect((await buildArgon2(root)).rebuilt).toBe(true);
 				expect(await readFile(join(root, output))).toEqual(expected);
 			}
-			const bridge = join(root, 'vendor/argon2/bridge.c');
+			const bridge = join(root, bridgeFile);
 			const original = await readFile(bridge, 'utf8');
 			const before = await Promise.all(outputs.map((path) => readFile(join(root, path))));
 			await writeFile(bridge, `${original}\n#error deliberate compilation failure\n`);
 			await rejects(
 				buildArgon2(root, { compiler: join(root, 'absent-emcc') }),
-				/Install Emscripten 5.0.2/,
+				/Install Emscripten/,
 			);
 			await rejects(buildArgon2(root), /deliberate compilation failure/);
 			expect(await Promise.all(outputs.map((path) => readFile(join(root, path))))).toEqual(before);
@@ -99,11 +107,10 @@ test.skipIf(!compilerAvailable)(
 	async () => {
 		const root = await fixture();
 		try {
-			await rm(join(root, 'src/kdf/argon2-wasm.ts'));
-			await rm(join(root, 'src/kdf/argon2.wasm'));
+			await rm(join(root, argon2Artifacts.wasm));
 			await writeFile(
 				join(root, 'entry.ts'),
-				"export { moduleFor } from '#micro509/kdf/argon2-module';",
+				`export { moduleFor } from '${argon2Artifacts.moduleSpecifier}';`,
 			);
 			const built = await build({
 				config: false,
@@ -115,15 +122,15 @@ test.skipIf(!compilerAvailable)(
 				logLevel: 'silent',
 				plugins: [argon2Plugin({ root, workerd: true })],
 			});
-			expect(await readFile(join(root, 'dist/kdf/argon2.wasm'))).toEqual(
-				await readFile(join(root, 'src/kdf/argon2.wasm')),
+			expect(await readFile(join(root, 'dist', argon2Artifacts.output))).toEqual(
+				await readFile(join(root, argon2Artifacts.wasm)),
 			);
 			const entry = built.bundles
 				.flatMap((bundle) => bundle.chunks)
 				.find((chunk) => chunk.type === 'chunk' && chunk.isEntry);
 			if (entry === undefined) throw new Error('Missing bundled entry');
 			expect(await readFile(join(root, 'dist', entry.fileName), 'utf8')).toContain(
-				'./kdf/argon2.wasm',
+				argon2Artifacts.assetImport,
 			);
 		} finally {
 			await rm(root, { recursive: true, force: true });
@@ -141,9 +148,9 @@ test.skipIf(!compilerAvailable)(
 			await mkdir(join(root, 'dist'), { recursive: true });
 			await writeFile(
 				join(root, 'entry.ts'),
-				"export { wasmBase64 } from './src/kdf/argon2-wasm.ts';",
+				`export { moduleFor } from './${argon2Artifacts.loader}';`,
 			);
-			const initial = await readFile(join(root, 'vendor/argon2/build.json'), 'utf8');
+			const initial = await readFile(join(root, argon2Artifacts.manifest), 'utf8');
 			const rebuilt = Promise.withResolvers<void>();
 			handle = await build({
 				config: false,
@@ -157,12 +164,12 @@ test.skipIf(!compilerAvailable)(
 				plugins: [argon2Plugin({ root })],
 				hooks: {
 					'build:done': async () => {
-						if ((await readFile(join(root, 'vendor/argon2/build.json'), 'utf8')) !== initial)
+						if ((await readFile(join(root, argon2Artifacts.manifest), 'utf8')) !== initial)
 							rebuilt.resolve();
 					},
 				},
 			});
-			const header = join(root, 'vendor/argon2/src/core.h');
+			const header = join(root, headerFile);
 			await writeFile(header, `${await readFile(header, 'utf8')}\n/* watch change */\n`);
 			await rebuilt.promise;
 			expect((await buildArgon2(root, { compiler: join(root, 'absent-emcc') })).rebuilt).toBe(
@@ -175,3 +182,39 @@ test.skipIf(!compilerAvailable)(
 	},
 	30_000,
 );
+
+test('tsdown emits a relocatable WASM asset without embedding it in JavaScript', async () => {
+	const root = await fixture();
+	try {
+		await writeFile(
+			join(root, 'entry.ts'),
+			`export { moduleFor } from './${argon2Artifacts.loader}';`,
+		);
+		const built = await build({
+			config: false,
+			cwd: root,
+			entry: ['entry.ts'],
+			dts: false,
+			exports: false,
+			outDir: 'dist',
+			logLevel: 'silent',
+			plugins: [argon2Plugin({ root })],
+		});
+		const entry = built.bundles
+			.flatMap((bundle) => bundle.chunks)
+			.find((chunk) => chunk.type === 'chunk' && chunk.isEntry);
+		if (entry === undefined) throw new Error('Missing bundled entry');
+		const source = await readFile(join(root, 'dist', entry.fileName), 'utf8');
+		expect(source).not.toContain('AGFzbQE');
+		expect(source).not.toContain('wasmBase64');
+		expect(await readFile(join(root, 'dist', argon2Artifacts.output))).toEqual(
+			await readFile(join(root, argon2Artifacts.wasm)),
+		);
+		const loaded: { moduleFor(): Promise<WebAssembly.Module> } = await import(
+			pathToFileURL(join(root, 'dist', entry.fileName)).href
+		);
+		expect(WebAssembly.Module.imports(await loaded.moduleFor())).toHaveLength(2);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

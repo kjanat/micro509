@@ -131,7 +131,7 @@
 		"test": "BIN=\"${BIN:-bun}\"; AGENT=\"${AGENT:-1}\" $BIN test --concurrent",
 		"test:35433": "PR=\"35433\"; (command -v \"bun-${PR}\" >/dev/null || bunx bun-pr \"${PR}\") && BIN=\"bun-${PR}\" bun --silent run test",
 		"test:coverage": "run -q test --coverage",
-		"test:coverage:native": "node --experimental-test-coverage --test-coverage-include='src/kdf/*.ts' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/native.lcov --test test/native/argon2.node.mjs test/native/argon2-memory.node.mjs",
+		"test:coverage:native": "node --experimental-test-coverage --test-coverage-include='src/kdf/*.ts' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/native.lcov --test test/native/argon2.node.mjs test/native/argon2-memory.node.mjs test/native/argon2-module.node.mjs",
 		"test:coverage:portable": "node --experimental-test-coverage --test-coverage-include='src/kdf/*.ts' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/portable.lcov --test test/native/argon2-availability.node.mjs",
 		"test:differential": "BIN=\"${BIN:-bun}\"; $BIN test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "BIN=\"${BIN:-bun}\"; $BIN test test/pkits.test.ts",

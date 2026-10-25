@@ -25,8 +25,9 @@ all C sources, headers, compiler settings and generated artifacts. Changes trigg
 a rebuild with **Emscripten 5.0.2**. The fingerprint is stored in `build.json`;
 current artifacts are reused without invoking the compiler.
 
-The plugin generates `src/kdf/argon2.wasm` and `src/kdf/argon2-wasm.ts`, and emits
-the Workers WASM asset into the build output. Watch mode tracks the C inputs.
+The plugin generates `src/kdf/argon2.wasm` and emits the binary asset into each
+package build. JavaScript loads that asset by URL; Workers use a static WASM
+import. Watch mode tracks the C inputs.
 The build uses the single-threaded reference implementation without SIMD, shared
 memory, filesystem, network, or host crypto imports.
 

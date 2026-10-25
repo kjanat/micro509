@@ -3,8 +3,8 @@
 `micro509/kdf` provides raw byte derivation with resource limits and a native-first
 portable default. It tries native WebCrypto and, only on `unsupported`, uses its
 bundled WASM reference implementation for the exact requested variant and version.
-Argon2d and Argon2id versions `0x10` and `0x13` are supported. No runtime dependency,
-backend callback, or external WASM download is required.
+Argon2d and Argon2id versions `0x10` and `0x13` are supported. The WASM asset is
+included in the package. No runtime dependency or backend callback is required.
 
 `backend: 'native'` and `backend: 'portable'` select one implementation explicitly;
 callbacks remain supported. Explicit backends never trigger fallback. Native
@@ -19,11 +19,11 @@ CC0 license option. Its 17,352-byte WASM artifact supports both versions, secret
 inputs and associated data. It uses the unmodified scalar reference algorithm,
 without threads, SIMD, shared memory, Node APIs, filesystem access or network I/O.
 
-Ordinary runtimes load embedded WASM bytes lazily. The `workerd` package export
+The WASM binary ships as a separate asset and is loaded lazily. The `workerd` package export
 uses a static WASM import for deployment-time compilation; consumers keep using
 `micro509/kdf`. Certificate-only entrypoints do not import or initialize either
 implementation. The workspace's `@micro509/tsdown-plugin-argon2` plugin builds
-and packages both artifacts during `bun build`. Content hashes track C sources,
+and packages the binary during `bun build`. Content hashes track C sources,
 headers, the build recipe and generated files. Recompilation uses Emscripten
 5.0.2; current artifacts are reused directly. `bun build:watch` tracks C changes.
 `bun build:argon2` builds the artifacts independently; `--force` recompiles them
