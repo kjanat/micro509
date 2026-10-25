@@ -13,6 +13,7 @@ Public barrels should stay in domain folders.
 internal/
 ├── asn1/    # DER/ASN.1 primitives, OID catalog
 ├── crypto/  # signature, hashing, encryption helpers
+├── jose/    # canonical base64url and duplicate-rejecting JSON for micro509/jose
 ├── shared/  # base64 + DN + IP + IDNA + URI host helpers with cross-domain use
 ├── verify/  # policy/path/constraint engines
 └── x509/    # extension/name metadata helpers
@@ -24,6 +25,7 @@ internal/
 | ------------------------ | --------- | -------------------------------------------------------- |
 | ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution                    |
 | Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing                   |
+| JOSE codecs              | `jose/`   | strict base64url and JSON; `jose/` owns the policy       |
 | Cross-domain utilities   | `shared/` | base64 + DN + IP + IDNA + URI host (pure, deterministic) |
 | Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding        |
 | Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic        |

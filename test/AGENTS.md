@@ -21,23 +21,24 @@ test/
 
 ## WHERE TO LOOK
 
-| Task                      | File                                                       | Notes                                                                        |
-| ------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Shared helpers            | `helpers.ts`                                               | common DER helpers and synthetic builders                                    |
-| Chain validation coverage | `verify.test.ts`                                           | largest spec-like suite                                                      |
-| CRL coverage              | `crl.test.ts`, `revocation.test.ts`                        | direct CRL semantics and orchestration                                       |
-| OCSP coverage             | `ocsp.test.ts`, `ocsp-fixtures.test.ts`                    | parser/validator plus focused fixtures                                       |
-| PKCS coverage             | `pkcs7.test.ts`, `pkcs7-signeddata.test.ts`, `pfx.test.ts` | SignedData lifecycle, signer pairing, PFX bundles                            |
-| Docs example execution    | `guide-examples.test.ts`                                   | runs twice: generated output varies, fixed-fixture output matches            |
-| README example execution  | `readme-examples.test.ts`                                  | every README ts fence executes and compiles with zero diagnostics            |
-| Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus                                        |
-| Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries                                        |
-| Decode refusal boundaries | `refusal-boundaries.test.ts`                               | `unsupported` and `limit_exceeded` through revocation, PKCS#7, keys, RSA-PSS |
-| Differential interop      | `differential.test.ts`                                     | compares normalized results to OpenSSL                                       |
-| PKITS subset              | `pkits.test.ts`                                            | fixed-time conformance subset                                                |
-| Internal-only checks      | `internals.test.ts`                                        | safe place for `#micro509/*` internals                                       |
-| Per-RFC conformance       | `rfc/*.test.ts`                                            | describes mirror RFC sections                                                |
-| Spec tooling              | `spec-reader.test.ts`, `spec-lookup-gate.test.ts`          | `bun spec` parsing and search; the spec-lookup PreToolUse gate               |
+| Task                      | File                                                       | Notes                                                                                           |
+| ------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Shared helpers            | `helpers.ts`                                               | common DER helpers and synthetic builders                                                       |
+| Chain validation coverage | `verify.test.ts`                                           | largest spec-like suite                                                                         |
+| CRL coverage              | `crl.test.ts`, `revocation.test.ts`                        | direct CRL semantics and orchestration                                                          |
+| OCSP coverage             | `ocsp.test.ts`, `ocsp-fixtures.test.ts`                    | parser/validator plus focused fixtures                                                          |
+| PKCS coverage             | `pkcs7.test.ts`, `pkcs7-signeddata.test.ts`, `pfx.test.ts` | SignedData lifecycle, signer pairing, PFX bundles                                               |
+| Docs example execution    | `guide-examples.test.ts`                                   | runs twice: generated output varies, fixed-fixture output matches                               |
+| README example execution  | `readme-examples.test.ts`                                  | every README ts fence executes and compiles with zero diagnostics                               |
+| JOSE coverage             | `jose-*.test.ts`                                           | codec, JWS, JWT claims, JWKS, remote JWKS over a local `Bun.serve` fixture, interop with `jose` |
+| Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus                                                           |
+| Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries                                                           |
+| Decode refusal boundaries | `refusal-boundaries.test.ts`                               | `unsupported` and `limit_exceeded` through revocation, PKCS#7, keys, RSA-PSS                    |
+| Differential interop      | `differential.test.ts`                                     | compares normalized results to OpenSSL                                                          |
+| PKITS subset              | `pkits.test.ts`                                            | fixed-time conformance subset                                                                   |
+| Internal-only checks      | `internals.test.ts`                                        | safe place for `#micro509/*` internals                                                          |
+| Per-RFC conformance       | `rfc/*.test.ts`                                            | describes mirror RFC sections                                                                   |
+| Spec tooling              | `spec-reader.test.ts`, `spec-lookup-gate.test.ts`          | `bun spec` parsing and search; the spec-lookup PreToolUse gate                                  |
 
 ## LOCAL CONVENTIONS
 

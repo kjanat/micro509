@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { signData } from '#micro509/crypto';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
@@ -28,6 +29,8 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
+import { base64UrlEncode } from '#micro509/internal/jose/base64url';
+import type { KeyPairMaterial } from '#micro509/keys';
 import { exportPkcs8Der, generateKeyPair, importPkcs8Der } from '#micro509/keys';
 import { isResultError, unwrap } from '#micro509/result';
 import type {
@@ -1067,4 +1070,54 @@ export function legacyMailboxNameConstraints(
 	return sequence([
 		implicitConstructedContext(kind === 'permitted' ? 0 : 1, readElement(subtrees).value),
 	]);
+}
+
+let joseKeyPairs: Promise<readonly [KeyPairMaterial, KeyPairMaterial]> | undefined;
+
+/** Two distinct memoized RSA-2048 key pairs for the JOSE suites. */
+export function joseTestKeys(): Promise<readonly [KeyPairMaterial, KeyPairMaterial]> {
+	joseKeyPairs ??= Promise.all([
+		generateKeyPair({ kind: 'rsa' }),
+		generateKeyPair({ kind: 'rsa' }),
+	]);
+	return joseKeyPairs;
+}
+
+/** Unpadded base64url of UTF-8 text. */
+export function base64UrlOfText(text: string): string {
+	return base64UrlEncode(new TextEncoder().encode(text));
+}
+
+/**
+ * Signs RS256 over header and payload text exactly as given, so a suite can build tokens whose
+ * JSON a well-behaved signer would never emit (duplicate members, odd whitespace).
+ */
+export async function signRawRs256Token(
+	privateKey: CryptoKey,
+	headerText: string,
+	payloadText: string,
+): Promise<string> {
+	const signingInput = `${base64UrlOfText(headerText)}.${base64UrlOfText(payloadText)}`;
+	const { signature } = await signData(privateKey, new TextEncoder().encode(signingInput));
+	return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+/** Public RSA JWK of a key pair, with the metadata a JWKS entry carries. */
+export async function rsaJwkEntry(
+	pair: KeyPairMaterial,
+	metadata: { readonly kid?: string; readonly [member: string]: unknown },
+): Promise<Record<string, unknown>> {
+	const { n, e } = await pair.exportPublicJwk();
+	return { kty: 'RSA', n, e, ...metadata };
+}
+
+/**
+ * Calls `fn` with arguments a JavaScript caller could pass whatever the declared parameter types
+ * say, so a suite can exercise runtime validation without a cast.
+ */
+export function callUntyped<TResult>(
+	fn: (...args: never[]) => TResult,
+	...args: unknown[]
+): TResult {
+	return Reflect.apply(fn, undefined, args);
 }

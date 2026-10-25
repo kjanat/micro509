@@ -18,9 +18,10 @@ const pageHtml = `\
     import * as cryptoApi from '/dist/crypto.js';
     import * as kdfApi from '/dist/kdf.js';
     import * as sshApi from '/dist/ssh.js';
+    import * as joseApi from '/dist/jose.js';
     import { runSmoke } from '/scripts/smoke-core.mjs';
     try {
-      globalThis.__smoke = await runSmoke(m, cryptoApi, kdfApi, sshApi);
+      globalThis.__smoke = await runSmoke(m, cryptoApi, kdfApi, sshApi, joseApi);
     } catch (err) {
       globalThis.__smoke = 'FAIL: ' + err;
     }

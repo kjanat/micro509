@@ -40,6 +40,10 @@
 			"types": "./dist/der.d.ts",
 			"default": "./dist/der.js"
 		},
+		"./jose": {
+			"types": "./dist/jose.d.ts",
+			"default": "./dist/jose.js"
+		},
 		"./kdf": {
 			"types": "./dist/kdf.d.ts",
 			"default": "./dist/kdf.js"
@@ -161,6 +165,7 @@
 		"dprint-plugin-yaml": "catalog:dprint",
 		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
+		"jose": "^6.2.13",
 		"playwright": "^1.63.0",
 		"publint": "catalog:build",
 		"rolldown-plugin-wasm": "catalog:build",

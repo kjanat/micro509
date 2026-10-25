@@ -477,6 +477,206 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 | `signer_not_found`          | No embedded certificate matches a SignerInfo                              |
 | `unsupported`               | A signer issuer value micro509 does not decode, see `ParsePkcs7ErrorCode` |
 
+## micro509/jose
+
+### JwsParseErrorCode
+
+A compact serialization is refused before any signature is checked.
+
+| Code                            | Meaning                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `duplicate_member`              | A JSON object repeats a member name                                                        |
+| `invalid_encoding`              | A segment is not canonical unpadded base64url                                              |
+| `invalid_header`                | The header is not a JSON object with a string `alg`, or a header member has the wrong type |
+| `invalid_json`                  | A segment is not valid JSON                                                                |
+| `invalid_payload`               | The payload is not a JSON object                                                           |
+| `invalid_utf8`                  | A segment is not valid UTF-8                                                               |
+| `limit_exceeded`                | A configured size, depth or node bound was exceeded                                        |
+| `malformed_token`               | The token is not three dot-separated segments                                              |
+| `token_too_large`               | The token exceeds `maxTokenLength`                                                         |
+| `unsupported_critical_header`   | The header lists `crit` extensions                                                         |
+| `unsupported_nested_jwt`        | The `cty` is `JWT`                                                                         |
+| `unsupported_unencoded_payload` | The header requests an unencoded payload (`b64: false`)                                    |
+
+### KeyResolutionErrorCode
+
+A signing key cannot be resolved for a token.
+
+| Code                    | Meaning                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `aborted`               | The caller cancelled key resolution                                               |
+| `ambiguous_key`         | More than one key matches the token                                               |
+| `jwks_malformed`        | The JWK Set is not a valid document, or its response or key count exceeds a limit |
+| `jwks_unavailable`      | The JWK Set endpoint could not be read, or is in cooldown                         |
+| `key_not_found`         | No key in the set matches the token `kid`                                         |
+| `key_resolution_failed` | The key resolver threw, or returned something that is not a key resolution        |
+| `key_unsuitable`        | The matching key cannot verify the algorithm                                      |
+
+### JwsPolicyErrorCode
+
+A well-formed token is refused by the verification policy or its signature.
+
+| Code                    | Meaning                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `algorithm_not_allowed` | The token `alg` is not in the caller's algorithm list                  |
+| `invalid_options`       | The verification options are unusable, such as an empty algorithm list |
+| `invalid_signature`     | The signature does not verify, or its length differs from the modulus  |
+| `token_type_mismatch`   | The token `typ` does not satisfy the token type policy                 |
+| `unsigned_token`        | The token `alg` is `none`                                              |
+
+### JwtClaimsErrorCode
+
+A signature-verified token fails the claims policy.
+
+| Code                | Meaning                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| `audience_mismatch` | No `aud` value is among the accepted audiences, or `aud` is absent |
+| `expired`           | The clock is at or after `exp`, less the clock tolerance           |
+| `invalid_claim`     | A registered claim has the wrong type, such as a string `exp`      |
+| `issued_in_future`  | `iat` is after the clock and `futureIssuedAt` is `reject`          |
+| `issuer_mismatch`   | `iss` is not among the accepted issuers, or is absent              |
+| `missing_claim`     | A required claim is absent                                         |
+| `not_yet_valid`     | The clock is before `nbf`, less the clock tolerance                |
+| `token_too_old`     | The age since `iat` exceeds `maxAgeSeconds`                        |
+
+### VerifyJwsErrorCode
+
+Failure codes of `verifyCompactJws`: `JwsParseErrorCode`, `KeyResolutionErrorCode` and `JwsPolicyErrorCode`.
+
+| Code                            | Meaning                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `aborted`                       | The caller cancelled key resolution                                                        |
+| `algorithm_not_allowed`         | The token `alg` is not in the caller's algorithm list                                      |
+| `ambiguous_key`                 | More than one key matches the token                                                        |
+| `duplicate_member`              | A JSON object repeats a member name                                                        |
+| `invalid_encoding`              | A segment is not canonical unpadded base64url                                              |
+| `invalid_header`                | The header is not a JSON object with a string `alg`, or a header member has the wrong type |
+| `invalid_json`                  | A segment is not valid JSON                                                                |
+| `invalid_options`               | The verification options are unusable, such as an empty algorithm list                     |
+| `invalid_payload`               | The payload is not a JSON object                                                           |
+| `invalid_signature`             | The signature does not verify, or its length differs from the modulus                      |
+| `invalid_utf8`                  | A segment is not valid UTF-8                                                               |
+| `jwks_malformed`                | The JWK Set is not a valid document, or its response or key count exceeds a limit          |
+| `jwks_unavailable`              | The JWK Set endpoint could not be read, or is in cooldown                                  |
+| `key_not_found`                 | No key in the set matches the token `kid`                                                  |
+| `key_resolution_failed`         | The key resolver threw, or returned something that is not a key resolution                 |
+| `key_unsuitable`                | The matching key cannot verify the algorithm                                               |
+| `limit_exceeded`                | A configured size, depth or node bound was exceeded                                        |
+| `malformed_token`               | The token is not three dot-separated segments                                              |
+| `token_too_large`               | The token exceeds `maxTokenLength`                                                         |
+| `token_type_mismatch`           | The token `typ` does not satisfy the token type policy                                     |
+| `unsigned_token`                | The token `alg` is `none`                                                                  |
+| `unsupported_critical_header`   | The header lists `crit` extensions                                                         |
+| `unsupported_nested_jwt`        | The `cty` is `JWT`                                                                         |
+| `unsupported_unencoded_payload` | The header requests an unencoded payload (`b64: false`)                                    |
+
+### VerifyJwtErrorCode
+
+Failure codes of `verifyJwt`: `VerifyJwsErrorCode` and `JwtClaimsErrorCode`.
+
+| Code                            | Meaning                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `aborted`                       | The caller cancelled key resolution                                                        |
+| `algorithm_not_allowed`         | The token `alg` is not in the caller's algorithm list                                      |
+| `ambiguous_key`                 | More than one key matches the token                                                        |
+| `audience_mismatch`             | No `aud` value is among the accepted audiences, or `aud` is absent                         |
+| `duplicate_member`              | A JSON object repeats a member name                                                        |
+| `expired`                       | The clock is at or after `exp`, less the clock tolerance                                   |
+| `invalid_claim`                 | A registered claim has the wrong type, such as a string `exp`                              |
+| `invalid_encoding`              | A segment is not canonical unpadded base64url                                              |
+| `invalid_header`                | The header is not a JSON object with a string `alg`, or a header member has the wrong type |
+| `invalid_json`                  | A segment is not valid JSON                                                                |
+| `invalid_options`               | The verification options are unusable, such as an empty algorithm list                     |
+| `invalid_payload`               | The payload is not a JSON object                                                           |
+| `invalid_signature`             | The signature does not verify, or its length differs from the modulus                      |
+| `invalid_utf8`                  | A segment is not valid UTF-8                                                               |
+| `issued_in_future`              | `iat` is after the clock and `futureIssuedAt` is `reject`                                  |
+| `issuer_mismatch`               | `iss` is not among the accepted issuers, or is absent                                      |
+| `jwks_malformed`                | The JWK Set is not a valid document, or its response or key count exceeds a limit          |
+| `jwks_unavailable`              | The JWK Set endpoint could not be read, or is in cooldown                                  |
+| `key_not_found`                 | No key in the set matches the token `kid`                                                  |
+| `key_resolution_failed`         | The key resolver threw, or returned something that is not a key resolution                 |
+| `key_unsuitable`                | The matching key cannot verify the algorithm                                               |
+| `limit_exceeded`                | A configured size, depth or node bound was exceeded                                        |
+| `malformed_token`               | The token is not three dot-separated segments                                              |
+| `missing_claim`                 | A required claim is absent                                                                 |
+| `not_yet_valid`                 | The clock is before `nbf`, less the clock tolerance                                        |
+| `token_too_large`               | The token exceeds `maxTokenLength`                                                         |
+| `token_too_old`                 | The age since `iat` exceeds `maxAgeSeconds`                                                |
+| `token_type_mismatch`           | The token `typ` does not satisfy the token type policy                                     |
+| `unsigned_token`                | The token `alg` is `none`                                                                  |
+| `unsupported_critical_header`   | The header lists `crit` extensions                                                         |
+| `unsupported_nested_jwt`        | The `cty` is `JWT`                                                                         |
+| `unsupported_unencoded_payload` | The header requests an unencoded payload (`b64: false`)                                    |
+
+### JoseErrorCode
+
+Every code a JOSE API reports; the same codes as `VerifyJwtErrorCode`.
+
+| Code                            | Meaning                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `aborted`                       | The caller cancelled key resolution                                                        |
+| `algorithm_not_allowed`         | The token `alg` is not in the caller's algorithm list                                      |
+| `ambiguous_key`                 | More than one key matches the token                                                        |
+| `audience_mismatch`             | No `aud` value is among the accepted audiences, or `aud` is absent                         |
+| `duplicate_member`              | A JSON object repeats a member name                                                        |
+| `expired`                       | The clock is at or after `exp`, less the clock tolerance                                   |
+| `invalid_claim`                 | A registered claim has the wrong type, such as a string `exp`                              |
+| `invalid_encoding`              | A segment is not canonical unpadded base64url                                              |
+| `invalid_header`                | The header is not a JSON object with a string `alg`, or a header member has the wrong type |
+| `invalid_json`                  | A segment is not valid JSON                                                                |
+| `invalid_options`               | The verification options are unusable, such as an empty algorithm list                     |
+| `invalid_payload`               | The payload is not a JSON object                                                           |
+| `invalid_signature`             | The signature does not verify, or its length differs from the modulus                      |
+| `invalid_utf8`                  | A segment is not valid UTF-8                                                               |
+| `issued_in_future`              | `iat` is after the clock and `futureIssuedAt` is `reject`                                  |
+| `issuer_mismatch`               | `iss` is not among the accepted issuers, or is absent                                      |
+| `jwks_malformed`                | The JWK Set is not a valid document, or its response or key count exceeds a limit          |
+| `jwks_unavailable`              | The JWK Set endpoint could not be read, or is in cooldown                                  |
+| `key_not_found`                 | No key in the set matches the token `kid`                                                  |
+| `key_resolution_failed`         | The key resolver threw, or returned something that is not a key resolution                 |
+| `key_unsuitable`                | The matching key cannot verify the algorithm                                               |
+| `limit_exceeded`                | A configured size, depth or node bound was exceeded                                        |
+| `malformed_token`               | The token is not three dot-separated segments                                              |
+| `missing_claim`                 | A required claim is absent                                                                 |
+| `not_yet_valid`                 | The clock is before `nbf`, less the clock tolerance                                        |
+| `token_too_large`               | The token exceeds `maxTokenLength`                                                         |
+| `token_too_old`                 | The age since `iat` exceeds `maxAgeSeconds`                                                |
+| `token_type_mismatch`           | The token `typ` does not satisfy the token type policy                                     |
+| `unsigned_token`                | The token `alg` is `none`                                                                  |
+| `unsupported_critical_header`   | The header lists `crit` extensions                                                         |
+| `unsupported_nested_jwt`        | The `cty` is `JWT`                                                                         |
+| `unsupported_unencoded_payload` | The header requests an unencoded payload (`b64: false`)                                    |
+
+### ParseJwksErrorCode
+
+Failure codes of `parseJwks`.
+
+| Code              | Meaning                                                                           |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `jwks_malformed`  | The JWK Set is not a valid document, or its response or key count exceeds a limit |
+| `invalid_options` | A limit is not a positive safe integer within its ceiling                         |
+| `limit_exceeded`  | A configured size, depth or node bound was exceeded                               |
+
+### SignJoseErrorCode
+
+Thrown by `signCompactJws` and `signJwt` as a `ResultError`.
+
+| Code                    | Meaning                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `incompatible_key`      | The signing key is not an RSASSA-PKCS1-v1_5 SHA-256 private key of at least 2048 bits      |
+| `invalid_claims`        | The claims are not JSON-serializable                                                       |
+| `invalid_header`        | The header is not a JSON object with a string `alg`, or a header member has the wrong type |
+| `unsupported_algorithm` | The algorithm is not supported                                                             |
+
+### RemoteJwksConfigErrorCode
+
+Thrown by `createRemoteJwksKeyResolver` as a `ResultError`.
+
+| Code                         | Meaning                                             |
+| ---------------------------- | --------------------------------------------------- |
+| `invalid_remote_jwks_config` | The URL, a limit or the redirect policy is unusable |
+
 [rfc1034-section-3.5]: https://www.rfc-editor.org/rfc/rfc1034.html#section-3.5
 [rfc2985-page-17]: https://www.rfc-editor.org/rfc/rfc2985.html#page-17
 [rfc4985]: https://www.rfc-editor.org/rfc/rfc4985.html
