@@ -6,6 +6,11 @@
 	Version links use full document navigation because each version has its own
 	VitePress app under a distinct base path.
 
+	That catalog is an inventory of published bases, not a menu: a release is
+	deployed at both `/` and `/vX.Y.Z/`. `displayVersions` turns it into one row
+	per release, ordered this preview, next, latest, archives. `next` and a
+	preview carry no version number, so each row says which channel it is.
+
 	VitePress renders a nav component in three contexts and flags each one:
 	the navbar (no flag), the mobile screen menu (`screen-menu`), and the
 	navbar's `⋯` overflow panel (`menu`). Only the navbar has room to float a
@@ -17,6 +22,7 @@
 import { useData, useRoute } from 'vitepress';
 import { computed, onMounted, onUnmounted, ref, useId } from 'vue';
 import {
+  displayVersions,
   hrefFor as hrefForVersion,
   mergeVersions,
   parseCatalog,
@@ -48,12 +54,28 @@ const versions = computed<readonly VersionEntry[]>(
   },
 );
 
+/** Path within the current version, e.g. 'guide/keys' on /v0.8.0/guide/keys. */
+const current = computed(() => {
+  const path = route.path.replace(/^\//, '');
+  const version = versionForPath(versions.value, route.path);
+  return {
+    version,
+    page:
+      version === undefined
+        ? path
+        : path.slice(version.prefix.length),
+  };
+});
+
+/** One row per release, in reading order, rather than per published base. */
+const listed = computed(() => displayVersions(versions.value, current.value.version));
+
 /** A list panel holds the versions in flow; only the navbar floats them. */
 const inPanel = computed(() => props.screenMenu === true || props.menu === true);
 
 /** The overflow panel is already a disclosure, so it lists versions directly. */
 const expanded = computed(
-  () => versions.value.length > 1 && (props.menu === true || open.value),
+  () => listed.value.length > 1 && (props.menu === true || open.value),
 );
 
 function setHoverOpen(event: PointerEvent, value: boolean): void {
@@ -89,28 +111,29 @@ onMounted(async () => {
 
 onUnmounted(() => document.removeEventListener('pointerdown', closeOutside));
 
-/** Path within the current version, e.g. 'guide/keys' on /v0.8.0/guide/keys. */
-const current = computed(() => {
-  const path = route.path.replace(/^\//, '');
-  const version = versionForPath(versions.value, route.path);
-  return {
-    version,
-    page:
-      version === undefined
-        ? path
-        : path.slice(version.prefix.length),
-  };
-});
-
 const label = computed(
   () => current.value.version?.label ?? 'dev',
 );
 
 const labelUrl = computed(() =>
-  versions.value.length === 1
+  listed.value.length === 1
     ? current.value.version?.labelUrl
     : undefined,
 );
+
+/** Only a release names itself; say what the other channels are. */
+function noteFor(entry: VersionEntry): string | undefined {
+  switch (entry.channel) {
+    case 'preview':
+      return 'this preview';
+    case 'next':
+      return 'unreleased';
+    case 'latest':
+      return 'latest';
+    default:
+      return undefined;
+  }
+}
 
 /**
  * The matching page in another version, including its query and symbol hash.
@@ -159,19 +182,19 @@ function hrefFor(entry: VersionEntry): string {
       {{ label }}
       <!-- The screen menu uses VitePress's accordion plus, the navbar a caret. -->
       <span
-        v-if="versions.length > 1 && props.screenMenu"
+        v-if="listed.length > 1 && props.screenMenu"
         class="vs-plus vpi-plus"
         aria-hidden="true"
       />
       <span
-        v-else-if="versions.length > 1"
+        v-else-if="listed.length > 1"
         class="vs-caret"
         aria-hidden="true"
         >▾</span
       >
     </button>
     <ul v-if="expanded" :id="listId" class="vs-menu">
-      <li v-for="entry in versions" :key="versionKey(entry)">
+      <li v-for="entry in listed" :key="versionKey(entry)">
         <!-- `target` skips VitePress SPA routing across separately deployed snapshots. -->
         <a
           class="vs-link"
@@ -181,8 +204,10 @@ function hrefFor(entry: VersionEntry): string {
               current.version !== undefined && versionKey(entry) === versionKey(current.version),
           }"
           :href="hrefFor(entry)"
-          >{{ entry.label }}</a
         >
+          <span>{{ entry.label }}</span>
+          <span v-if="noteFor(entry) !== undefined" class="vs-note">{{ noteFor(entry) }}</span>
+        </a>
       </li>
     </ul>
   </div>
@@ -239,7 +264,10 @@ function hrefFor(entry: VersionEntry): string {
 }
 
 .vs-link {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   padding: 4px 16px;
   font-size: 13px;
   color: var(--vp-c-text-1);
@@ -247,6 +275,12 @@ function hrefFor(entry: VersionEntry): string {
   transition:
     color 0.25s,
     background-color 0.25s;
+}
+
+/* Names the channels that carry no version number. */
+.vs-note {
+  font-size: 11px;
+  color: var(--vp-c-text-3);
 }
 
 .vs-link:hover {

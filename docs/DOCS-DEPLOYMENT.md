@@ -58,6 +58,11 @@ builds preserve every archived directory. The global `versions.json` includes
 each version's page inventory, so the version switcher can use current
 navigation metadata without rebuilding old snapshots.
 
+`versions.json` is an inventory of published bases, not a menu: a release is
+served both at `/` and at its immutable `/vX.Y.Z/`, so it holds an entry for
+each. The version switcher derives its own list from it, one entry per
+release and in reading order.
+
 The build driver can apply those same updates to a local tree. `--output`
 selects the persistent publish directory:
 

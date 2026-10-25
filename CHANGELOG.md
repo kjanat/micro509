@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [#188](https://github.com/kjanat/micro509/issues/188)
 - PR previews have a separate version entry alongside production's `next` and
   release entries. Switching from a preview opens the matching production page.
+- The version list shows one entry per release instead of one per published
+  base, so the latest release no longer appears twice, and it reads in
+  timeline order: this preview, `next`, the latest release, then the archives.
+  Entries without a version number say which channel they are.
 
 ## [0.16.0] - 2026-10-24
 

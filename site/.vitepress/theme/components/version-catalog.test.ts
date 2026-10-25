@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { VersionEntry } from './version-catalog';
 import {
+	displayVersions,
 	hrefFor,
 	mergeVersions,
 	parseCatalog,
@@ -119,6 +120,36 @@ describe('version catalog', () => {
 		expect(versionForPath(merged, '/guide/keys')).toEqual(preview);
 		expect(versionForPath(merged, '/next/guide/keys')).toEqual(preview);
 		expect(hrefFor(preview, 'guide/keys', '#import')).toBe('/guide/keys#import');
+	});
+
+	test('lists a release once and orders preview, next, latest, then archives', () => {
+		const origin = 'https://docs.example.test';
+		const published: readonly VersionEntry[] = [
+			{ label: 'v1.0.0', tag: 'v1.0.0', channel: 'latest', prefix: '', origin },
+			{ label: 'next', tag: 'master', channel: 'next', prefix: 'next/', origin },
+			{ label: 'v1.0.0', tag: 'v1.0.0', channel: 'archive', prefix: 'v1.0.0/', origin },
+			{ label: 'v0.9.0', tag: 'v0.9.0', channel: 'archive', prefix: 'v0.9.0/', origin },
+		];
+		const preview: VersionEntry = { label: '#42', tag: '#42', channel: 'preview', prefix: '' };
+		const listed = displayVersions(mergeVersions(published, [preview]), preview);
+		expect(listed.map((entry) => entry.label)).toEqual(['#42', 'next', 'v1.0.0', 'v0.9.0']);
+		expect(listed.map((entry) => entry.prefix)).toEqual(['', 'next/', '', 'v0.9.0/']);
+		expect(listed.map((entry) => entry.channel)).toEqual(['preview', 'next', 'latest', 'archive']);
+	});
+
+	test('keeps the archived copy of the latest release when the reader is on it', () => {
+		const published: readonly VersionEntry[] = [
+			{ label: 'v1.0.0', tag: 'v1.0.0', channel: 'latest', prefix: '' },
+			{ label: 'v1.0.0', tag: 'v1.0.0', channel: 'archive', prefix: 'v1.0.0/' },
+		];
+		const archived = published[1];
+		if (archived === undefined) throw new Error('catalog entry missing');
+		const listed = displayVersions(published, archived);
+		expect(listed).toEqual([
+			{ label: 'v1.0.0', tag: 'v1.0.0', channel: 'latest', prefix: 'v1.0.0/' },
+		]);
+		expect(versionKey(listed[0] ?? archived)).toBe(versionKey(archived));
+		expect(displayVersions(published)[0]?.prefix).toBe('');
 	});
 
 	test('selects the longest local prefix on production pages', () => {

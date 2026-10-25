@@ -106,6 +106,61 @@ export function versionForPath(
 		.find((entry) => path.startsWith(`/${entry.prefix}`));
 }
 
+/** `/` and `/vX.Y.Z/` serve one release; the catalog publishes both bases. */
+function releaseKey(entry: VersionEntry): string | undefined {
+	if (entry.tag === undefined || (entry.channel !== 'latest' && entry.channel !== 'archive'))
+		return undefined;
+	return `${entry.origin ?? ''}|${entry.tag}`;
+}
+
+/** This build, the unreleased tree, the latest release, then the archives. */
+const CHANNEL_ORDER = {
+	preview: 0,
+	next: 1,
+	latest: 2,
+	archive: 3,
+} as const satisfies Record<NonNullable<VersionEntry['channel']>, number>;
+
+function channelRank(entry: VersionEntry): number {
+	return CHANNEL_ORDER[entry.channel ?? 'archive'];
+}
+
+/**
+ * What the switcher lists, in reading order. The catalog is an inventory of
+ * published bases, so it carries a release twice: once at the evergreen root
+ * and once at its immutable archive. List that release once — at the copy the
+ * reader is on, otherwise at the root — and keep the `latest` marker whichever
+ * copy survives. Archives hold their catalog order, which is newest first.
+ */
+export function displayVersions(
+	versions: readonly VersionEntry[],
+	current?: VersionEntry,
+): readonly VersionEntry[] {
+	const currentKey = current === undefined ? undefined : versionKey(current);
+	const slots = new Map<string, number>();
+	const listed: VersionEntry[] = [];
+	for (const entry of versions) {
+		const release = releaseKey(entry);
+		const slot = release === undefined ? undefined : slots.get(release);
+		if (slot === undefined) {
+			if (release !== undefined) slots.set(release, listed.length);
+			listed.push(entry);
+			continue;
+		}
+		const seen = listed[slot];
+		if (seen === undefined) continue;
+		const keepSeen =
+			versionKey(seen) === currentKey ||
+			(versionKey(entry) !== currentKey && entry.channel !== 'latest');
+		const kept = keepSeen ? seen : entry;
+		listed[slot] =
+			seen.channel === 'latest' || entry.channel === 'latest'
+				? { ...kept, channel: 'latest' }
+				: kept;
+	}
+	return listed.sort((left, right) => channelRank(left) - channelRank(right));
+}
+
 export function mergeVersions(
 	catalog: readonly VersionEntry[],
 	embedded: readonly VersionEntry[],
