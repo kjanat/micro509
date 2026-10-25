@@ -42,33 +42,21 @@ node --cpu-prof --cpu-prof-dir=bench/argon2/results \
 ```
 
 Open the resulting `.cpuprofile` in a JavaScript CPU-profile viewer. Profiles are
-ignored by Git; result reports can be committed for before/after comparisons.
+ignored by Git; result reports can be committed to document backend comparisons.
 
-## Baseline
+## TypeScript versus WASM
 
-`results/baseline-2026-10-25.jsonl` preserves the initial comparison on an AMD
-Ryzen 9 3900X with Node 26.12.0 and Bun 1.4.4. At the default workload, warmed
-TypeScript medians were 2.62–2.64 seconds on Node and 2.48–2.51 seconds on Bun;
-WASM medians were 179–183 ms and 172–173 ms respectively. Those results use the
-original JSONL report layout and two warm-ups plus five samples per backend.
+Measured on an AMD Ryzen 9 3900X at the default workload: 64 MiB, three passes,
+four lanes, and 32 output bytes. Values are medians of five calls after two
+warm-ups. The ratio is TypeScript time divided by WASM time.
 
-This replaces the former `scripts/benchmark-argon2.mjs` command.
-
-## Optimized TypeScript results
-
-Same host and default workload; medians of five calls after two warm-ups.
-
-| Runtime       | Variant  | Baseline | Optimized | Less time |
-| ------------- | -------- | -------: | --------: | --------: |
-| Node v26.12.0 | argon2id |  2617 ms |   1596 ms |     39.0% |
-| Node v26.12.0 | argon2i  |  2643 ms |   1612 ms |     39.0% |
-| Node v26.12.0 | argon2d  |  2617 ms |   1592 ms |     39.2% |
-| Bun 1.4.4     | argon2id |  2493 ms |   1541 ms |     38.2% |
-| Bun 1.4.4     | argon2i  |  2512 ms |   1553 ms |     38.2% |
-| Bun 1.4.4     | argon2d  |  2483 ms |   1542 ms |     37.9% |
+| Runtime       | Variant  | TypeScript |   WASM | TS / WASM |
+| ------------- | -------- | ---------: | -----: | --------: |
+| Node v26.12.0 | argon2id |    1213 ms | 182 ms |     6.66× |
+| Node v26.12.0 | argon2i  |    1227 ms | 183 ms |     6.72× |
+| Node v26.12.0 | argon2d  |    1208 ms | 181 ms |     6.68× |
+| Bun 1.4.4     | argon2id |    1011 ms | 171 ms |     5.93× |
+| Bun 1.4.4     | argon2i  |    1025 ms | 175 ms |     5.86× |
+| Bun 1.4.4     | argon2d  |    1009 ms | 171 ms |     5.89× |
 
 Reports: [Node](results/optimized-node.json) and [Bun](results/optimized-bun.json).
-
-The core keeps mixing registers in local variables, precomputes the row/column
-mixing schedule, and uses exact 32-bit partial products for reference indexing.
-The workload, yield frequency, and buffer cleanup are unchanged.

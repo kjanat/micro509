@@ -41,16 +41,6 @@ const ROUND_INDEXES = [
 	[2, 7, 8, 13],
 	[3, 4, 9, 14],
 ] as const;
-// Precompute the RFC 9106 row/column schedule as low-word offsets. The hot
-// loop then reads four offsets per mix without nested index-table lookups.
-const ARGON_MIX_OFFSETS = Uint8Array.from(
-	Array.from({ length: 16 }, (_, round) => {
-		const indexes = Array.from({ length: 16 }, (_, index) =>
-			round < 8 ? round * 16 + index : 2 * (round - 8) + 16 * Math.floor(index / 2) + (index % 2),
-		);
-		return ROUND_INDEXES.flatMap((quarter) => quarter.map((index) => (indexes[index] ?? 0) * 2));
-	}).flat(),
-);
 type MutableWords = { length: number; [index: number]: bigint };
 
 function read32(bytes: Uint8Array, offset: number): number {
@@ -339,16 +329,58 @@ function argonMix(words: Uint32Array, a: number, b: number, c: number, d: number
 	words[d + 1] = dHigh;
 }
 
+// Each round uses fixed word strides: contiguous rows, then paired columns.
+// Spell out the eight quarter rounds to avoid schedule-array loads in the hot loop.
+function argonRound(words: Uint32Array, offset: number, stride: number, pair: number): void {
+	argonMix(words, offset, offset + 2 * stride, offset + 4 * stride, offset + 6 * stride);
+	argonMix(
+		words,
+		offset + pair,
+		offset + 2 * stride + pair,
+		offset + 4 * stride + pair,
+		offset + 6 * stride + pair,
+	);
+	argonMix(words, offset + stride, offset + 3 * stride, offset + 5 * stride, offset + 7 * stride);
+	argonMix(
+		words,
+		offset + stride + pair,
+		offset + 3 * stride + pair,
+		offset + 5 * stride + pair,
+		offset + 7 * stride + pair,
+	);
+	argonMix(
+		words,
+		offset,
+		offset + 2 * stride + pair,
+		offset + 5 * stride,
+		offset + 7 * stride + pair,
+	);
+	argonMix(
+		words,
+		offset + pair,
+		offset + 3 * stride,
+		offset + 5 * stride + pair,
+		offset + 6 * stride,
+	);
+	argonMix(
+		words,
+		offset + stride,
+		offset + 3 * stride + pair,
+		offset + 4 * stride,
+		offset + 6 * stride + pair,
+	);
+	argonMix(
+		words,
+		offset + stride + pair,
+		offset + 2 * stride,
+		offset + 4 * stride + pair,
+		offset + 7 * stride,
+	);
+}
+
 function permuteBlock(words: Uint32Array): void {
-	for (let index = 0; index < ARGON_MIX_OFFSETS.length; index += 4) {
-		argonMix(
-			words,
-			ARGON_MIX_OFFSETS[index] ?? 0,
-			ARGON_MIX_OFFSETS[index + 1] ?? 0,
-			ARGON_MIX_OFFSETS[index + 2] ?? 0,
-			ARGON_MIX_OFFSETS[index + 3] ?? 0,
-		);
-	}
+	for (let offset = 0; offset < 256; offset += 32) argonRound(words, offset, 4, 2);
+	for (let offset = 0; offset < 32; offset += 4) argonRound(words, offset, 32, 2);
 }
 
 function fillBlock(
@@ -366,11 +398,15 @@ function fillBlock(
 		permuted[index] = value;
 	}
 	permuteBlock(permuted);
-	for (let index = 0; index < 256; index += 1) {
-		memory[destinationOffset + index] =
-			(original[index] ?? 0) ^
-			(permuted[index] ?? 0) ^
-			(withXor ? (memory[destinationOffset + index] ?? 0) : 0);
+	if (withXor) {
+		for (let index = 0; index < 256; index += 1) {
+			memory[destinationOffset + index] =
+				(original[index] ?? 0) ^ (permuted[index] ?? 0) ^ (memory[destinationOffset + index] ?? 0);
+		}
+	} else {
+		for (let index = 0; index < 256; index += 1) {
+			memory[destinationOffset + index] = (original[index] ?? 0) ^ (permuted[index] ?? 0);
+		}
 	}
 }
 
@@ -453,10 +489,11 @@ interface Workspace {
 function fillIndexedBlock(
 	input: Argon2Input,
 	workspace: Workspace,
-	position: { pass: number; slice: number; lane: number; index: number },
+	position: { pass: number; slice: number; lane: number },
+	index: number,
 	addressBlock: Uint32Array | undefined,
 ): void {
-	const { pass, slice, lane, index } = position;
+	const { pass, slice, lane } = position;
 	const { memory, laneLength, segmentLength, original, permuted } = workspace;
 	const currentBlock = lane * laneLength + slice * segmentLength + index;
 	const previousBlock =
@@ -497,7 +534,6 @@ async function fillSegment(
 ): Promise<void> {
 	const { pass, slice, lane } = position;
 	const { memoryBlocks, segmentLength, original, permuted, zero, addressTemporary } = workspace;
-	let blocksSinceYield = 0;
 	const independent = dataIndependent(type, pass, slice);
 	const inputBlock = new Uint32Array(256);
 	const addressBlock = new Uint32Array(256);
@@ -514,25 +550,25 @@ async function fillSegment(
 		if (independent && startingIndex !== 0) {
 			generateAddressBlock(inputBlock, addressBlock, zero, original, permuted, addressTemporary);
 		}
-		for (let index = startingIndex; index < segmentLength; index += 1) {
-			if (independent && index % 128 === 0) {
-				generateAddressBlock(inputBlock, addressBlock, zero, original, permuted, addressTemporary);
+		for (let start = startingIndex; start < segmentLength; start += 512) {
+			// Start the timer before computing so its delay overlaps useful work.
+			// Awaiting it still yields to the event loop after at most 512 blocks.
+			const pause = new Promise<void>((resolve) => setTimeout(resolve, 0));
+			const end = Math.min(start + 512, segmentLength);
+			for (let index = start; index < end; index += 1) {
+				if (independent && index % 128 === 0) {
+					generateAddressBlock(
+						inputBlock,
+						addressBlock,
+						zero,
+						original,
+						permuted,
+						addressTemporary,
+					);
+				}
+				fillIndexedBlock(input, workspace, position, index, independent ? addressBlock : undefined);
 			}
-			fillIndexedBlock(
-				input,
-				workspace,
-				{ ...position, index },
-				independent ? addressBlock : undefined,
-			);
-			blocksSinceYield += 1;
-			if (blocksSinceYield === 512) {
-				await new Promise<void>((resolve) => setTimeout(resolve, 0));
-				blocksSinceYield = 0;
-			}
-		}
-		if (blocksSinceYield > 0) {
-			await new Promise<void>((resolve) => setTimeout(resolve, 0));
-			blocksSinceYield = 0;
+			await pause;
 		}
 	} finally {
 		inputBlock.fill(0);
