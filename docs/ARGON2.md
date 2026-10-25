@@ -1,10 +1,55 @@
-# Argon2 adapter evidence
+# Argon2 derivation evidence
 
-`micro509/kdf` exposes raw byte derivation with an explicit backend boundary.
-Its bundled implementation is a native WebCrypto adapter for Argon2d and
-Argon2id version `0x13`. A portable implementation and a version `0x10`
-implementation are separate work. This is not a KDBX parser or an Argon2
-PKCS#8/PFX encoding.
+`micro509/kdf` provides raw byte derivation with resource limits and a native-first
+portable default. It tries native WebCrypto and, only on `unsupported`, uses its
+bundled WASM reference implementation for the exact requested variant and version.
+Argon2d and Argon2id versions `0x10` and `0x13` are supported. No runtime dependency,
+backend callback, or external WASM download is required.
+
+`backend: 'native'` and `backend: 'portable'` select one implementation explicitly;
+callbacks remain supported. Explicit backends never trigger fallback. Native
+`derivation_failed`, invalid parameters, and resource-limit rejections remain
+failures. This is not a KDBX parser or an Argon2 PKCS#8/PFX encoding.
+
+## Portable implementation and packaging
+
+The source and build instructions are in `vendor/argon2/README.md`.
+The pinned reference C implementation is compiled with Emscripten 5.0.2 under its
+CC0 license option. Its 17,352-byte WASM artifact supports both versions, secret
+inputs and associated data. It uses the unmodified scalar reference algorithm,
+without threads, SIMD, shared memory, Node APIs, filesystem access or network I/O.
+
+Ordinary runtimes load embedded WASM bytes lazily. The `workerd` package export
+uses a static WASM import for deployment-time compilation; consumers keep using
+`micro509/kdf`. Certificate-only entrypoints do not import or initialize either
+implementation. The workspace's `@micro509/tsdown-plugin-argon2` plugin builds
+and packages both artifacts during `bun build`. Content hashes track C sources,
+headers, the build recipe and generated files. Recompilation uses Emscripten
+5.0.2; current artifacts are reused directly. `bun build:watch` tracks C changes.
+`bun build:argon2` builds the artifacts independently; `--force` recompiles them
+and `--check` verifies reproducibility.
+
+Each call owns a separate instance and linear memory. The requested memory cost
+is included unchanged in the initial hash; internal segment sizing follows the
+reference algorithm. Parallelism specifies lanes, which the portable backend
+executes serially. It yields between segments after an 8 ms time budget or four
+segments, whichever comes first. Initialization, one segment, finalization and
+memory wiping run synchronously; this is cooperative scheduling, not background
+execution or a hard latency guarantee. Cancellation is not currently exposed.
+
+The output is copied out and the entire linear memory is erased in `finally`,
+including partial state on failure. Up to four wiped memories are weakly referenced
+for reuse; they remain eligible for garbage collection. JS cannot force release
+of a WASM allocation. Per-call limits still require application-level concurrency
+limits. Total memory, input, output and overhead must fit below 2 GiB; larger
+portable requests return `unsupported` before allocation. Both built-in backends
+require at least eight salt bytes. Environments that disable WebAssembly cannot
+use the portable backend, and browser CSP must allow WASM compilation.
+
+The shared built-artifact smoke checks require successful derivation with both
+automatic selection and explicit portable selection, including the RFC 9106
+vectors and all four independent variant/version vectors. Verified locally on
+Node 26.12.0, Bun 1.4.4, Deno 2.9.6, Chromium 156.0.8078.4, and workerd.
 
 ## Governing inputs and scope
 
@@ -17,7 +62,7 @@ RFC 9106 was fetched through `bun spec fetch rfc 9106`.
   parameter ranges and units. The adapter passes the specified memory value
   exactly. Rounding memory before passing it would change the initial hash.
   §4 lines 578–619 gives parameter-selection guidance. Salt minimum eight bytes
-  is a native implementation boundary, not a universal RFC 9106 requirement.
+  is a bundled implementation boundary, not a universal RFC 9106 requirement.
 - **Governing:** RFC 9106 §§5.1 and 5.3 (lines 625–689 and 753–803) supply the
   Argon2d/id vectors with secret and associated data. Both are exercised by the
   shared runtime smoke suite and the real optional backend in `test/kdf.test.ts`.
@@ -56,20 +101,23 @@ than replacing global crypto. It compares outputs with:
 - Independently generated raw KDBX-style key material using
   `@noble/hashes` 2.4.0: password bytes `0..31`, salt bytes `255..224`,
   1 MiB, three passes, two lanes, and 32 output bytes, for both variants.
-  These are raw KDF fixtures, not full KDBX files. `0x10` refusal is covered
-  separately.
+  These are raw KDF fixtures, not full KDBX files. Both `0x10` and `0x13`
+  are additionally checked against the independent libargon2 vectors from issue #203.
+  Native-only `0x10` refusal remains covered separately.
 
 The optional-backend contract is also exercised for snapshot ownership,
 temporary-array wiping, worker transfer of input buffers, genuine runtime failure, exact limit boundaries,
 malformed numeric values, and memory values that are not multiples of `4*p`.
 
-## Sample performance
+## Native baseline performance
 
 Commands, each in a separate process after `bun run build`:
 
 ```sh
 node scripts/benchmark-argon2.mjs native 1
 node scripts/benchmark-argon2.mjs native 4
+node scripts/benchmark-argon2.mjs portable 1
+node scripts/benchmark-argon2.mjs portable 4
 node scripts/benchmark-argon2.mjs node 1
 node scripts/benchmark-argon2.mjs node 4
 ```
@@ -88,7 +136,24 @@ not a performance guarantee.
 
 RSS is the whole-process high-water mark reported by `resourceUsage`, including
 roughly 51–52 MiB baseline runtime memory. It is not an isolated allocation
-measurement. Both routes may use the same native crypto implementation, so
+measurement. Both native routes may use the same native crypto implementation, so
 this comparison measures adapter overhead and scheduling. It does not compare
 native Argon2 against a portable JavaScript/WASM implementation. The timer
 probe confirms that this sample allowed event-loop progress during native work.
+
+## Portable performance sample
+
+The same benchmark with the bundled portable backend on Node 26.12.0,
+25 October 2026, using 64 MiB, three passes, four lanes and three batches:
+
+| Concurrent calls | Median call (ms) | Process peak RSS (MiB) | Largest 5 ms timer delay (ms) |
+| ---------------: | ---------------: | ---------------------: | ----------------------------: |
+|                1 |            194.8 |                  126.9 |                          25.5 |
+|                4 |            893.4 |                  325.0 |                         115.2 |
+
+Baseline process RSS was about 52 MiB. Other checks were active, so these numbers
+are observations, not a throughput or latency guarantee. The portable backend
+executes on the caller's thread and cooperatively yields; concurrent derivations
+interleave rather than run their lanes on separate CPU threads. Applications with
+strict UI latency requirements can run derivation in their own worker. Native
+WebCrypto remains the preferred default when available.

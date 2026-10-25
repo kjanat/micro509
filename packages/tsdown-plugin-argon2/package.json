@@ -1,0 +1,11 @@
+{
+	"name": "@micro509/tsdown-plugin-argon2",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Builds and packages micro509's Argon2 WASM artifacts with tsdown.",
+	"type": "module",
+	"exports": { ".": "./src/index.ts", "./build": "./src/build.ts" },
+	"scripts": { "build": "bun src/cli.ts" },
+	"devDependencies": { "@kjanat/dreamcli": "catalog:" },
+	"peerDependencies": { "tsdown": "catalog:build" }
+}

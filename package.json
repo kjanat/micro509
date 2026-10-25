@@ -46,6 +46,7 @@
 		},
 		"./kdf": {
 			"types": "./dist/kdf.d.ts",
+			"workerd": "./dist/workerd/kdf.js",
 			"default": "./dist/kdf.js"
 		},
 		"./keys": {
@@ -84,11 +85,12 @@
 	},
 	"jsdelivr": "./dist/index.js",
 	"types": "./dist/index.d.ts",
-	"files": ["dist", "CHANGELOG.md"],
+	"files": ["dist", "CHANGELOG.md", "vendor/argon2/LICENSE"],
 	"workspaces": ["packages/*", "site/.vitepress", "tsc/*"],
 	"scripts": {
 		"bd": "tsdown -F micro509",
 		"build": "tsdown -F micro509",
+		"build:argon2": "bun run --filter @micro509/tsdown-plugin-argon2 build",
 		"build:tsc": "tsdown -F @kjanat/tsc-bridge -F @kjanat/tsc-compat -F @kjanat/tsc-protocol -F @kjanat/tsc-vue-mapper -F @kjanat/tsc-wasm",
 		"build:watch": "tsdown --watch",
 		"check": "run -pK check:biome check:deno typecheck",
@@ -153,6 +155,7 @@
 		"@gorhill/ubo-core": "0.1.30",
 		"@kjanat/tsc-bridge": "workspace:*",
 		"@micro509/doc-render": "workspace:*",
+		"@micro509/tsdown-plugin-argon2": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",
 		"@types/deno": "catalog:deno",

@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Derive Argon2d and Argon2id keys with versions `0x10` and `0x13` across
+  Bun, Node.js, Deno, browsers and Cloudflare Workers using the bundled
+  portable implementation. `micro509/kdf` selects a backend automatically;
+  `backend: 'native'` and `backend: 'portable'` select one explicitly.
+  Derivation preserves per-call resource limits and wipes temporary memory.
+  [#203](https://github.com/kjanat/micro509/issues/203)
+- Rebuild Argon2 WASM artifacts automatically through the workspace tsdown
+  plugin, including C source and header changes in watch mode. The standalone
+  `bun build:argon2` command uses DreamCLI and supports `--force` for
+  recompilation and `--check` for reproducibility verification.
+
+### Changed
+
+- The key-derivation guide demonstrates encryption, a serialized JSON record,
+  message recovery and rejection of modified ciphertext. Saved binary fields
+  use base64url for compact, readable output.
+- Install Tombi in shared CI setup and resolve it through PATH for formatting.
+  Simplify the autofix workflow and update the OpenSSL workflow's Docker login
+  action to v4.7.0.
+
 ## [0.17.0] - 2026-10-25
 
 Work with OpenSSH keys, derive encryption keys with Argon2, and sign and verify

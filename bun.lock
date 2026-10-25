@@ -15,6 +15,7 @@
         "@gorhill/ubo-core": "0.1.30",
         "@kjanat/tsc-bridge": "workspace:*",
         "@micro509/doc-render": "workspace:*",
+        "@micro509/tsdown-plugin-argon2": "workspace:*",
         "@tsconfig/node24": "catalog:ts",
         "@types/bun": "catalog:ts",
         "@types/deno": "catalog:deno",
@@ -45,6 +46,16 @@
       "version": "0.0.0",
       "devDependencies": {
         "@deno/doc": "catalog:deno",
+      },
+    },
+    "packages/tsdown-plugin-argon2": {
+      "name": "@micro509/tsdown-plugin-argon2",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@kjanat/dreamcli": "catalog:",
+      },
+      "peerDependencies": {
+        "tsdown": "catalog:build",
       },
     },
     "packages/vitepress-api-docs": {
@@ -519,6 +530,8 @@
     "@loaderkit/resolve": ["@loaderkit/resolve@1.0.6", "", { "dependencies": { "@braidai/lang": "^1.0.0" } }, "sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg=="],
 
     "@micro509/doc-render": ["@micro509/doc-render@workspace:packages/doc-render"],
+
+    "@micro509/tsdown-plugin-argon2": ["@micro509/tsdown-plugin-argon2@workspace:packages/tsdown-plugin-argon2"],
 
     "@micro509/vitepress-api-docs": ["@micro509/vitepress-api-docs@workspace:packages/vitepress-api-docs"],
 

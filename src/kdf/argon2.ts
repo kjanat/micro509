@@ -1,6 +1,6 @@
 /**
- * Argon2 adapter and resource-policy boundary. The default backend uses native
- * WebCrypto, with no algorithm fallback or portable implementation bundled.
+ * Argon2 derivation and resource-policy boundary. The default backend prefers
+ * native WebCrypto and loads the bundled portable implementation when unsupported.
  *
  * @module
  */
@@ -76,8 +76,12 @@ export type Argon2Backend = (input: Argon2Input) => Promise<Argon2Result>;
 export interface Argon2Options {
 	/** Per-call ceilings. Applications must separately bound concurrent calls. */
 	readonly limits?: Argon2Limits;
-	/** Explicit trusted backend. Omit to use native WebCrypto version 0x13. */
-	readonly backend?: Argon2Backend;
+	/**
+	 * Omit to prefer native WebCrypto, then bundled WASM on `unsupported` only.
+	 * Select `native` or `portable` to require that implementation, or supply a
+	 * trusted callback. Explicit selections never fall back to another backend.
+	 */
+	readonly backend?: Argon2Backend | 'native' | 'portable';
 }
 
 function failure(code: Argon2ErrorCode, message: string): Argon2Result {
@@ -259,18 +263,32 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 	}
 }
 
+async function builtinArgon2(
+	input: Argon2Input,
+	backend: 'native' | 'portable' | undefined,
+): Promise<Argon2Result> {
+	if (backend !== 'portable') {
+		const result = await nativeArgon2(input);
+		if (backend === 'native' || result.ok || result.error.code !== 'unsupported') return result;
+	}
+	const { portableArgon2 } = await import('#micro509/kdf/argon2-portable');
+	return portableArgon2(input);
+}
+
 /**
  * Derives raw Argon2 bytes after validating parameters and resource ceilings.
  *
- * The default native WebCrypto adapter implements version 0x13. Runtime support
- * is detected by the import/derive operations, without an extra trial derivation.
- * Supply an explicit backend for other environments or version 0x10. There is
- * no fallback between variants, versions, or implementations.
+ * Native WebCrypto is preferred for version 0x13. An unsupported request uses
+ * the bundled WASM reference implementation for the exact variant and version,
+ * including 0x10. Other native failures are returned without retrying. Explicit
+ * backends never fall back. No algorithm, version, or parameter is substituted.
  *
  * Caller buffers are copied synchronously before the first await and never
  * modified. Owned temporary arrays are zeroed on completion. Native key storage
  * and runtime copies cannot be explicitly erased by JavaScript. The returned
  * output is caller-owned. Calls cannot cancel native work once dispatched.
+ * Portable work yields between memory segments; a segment runs synchronously.
+ * Its complete private linear memory is erased on completion or failure.
  * Limits apply per call, not to concurrent invocations.
  */
 export async function deriveArgon2(
@@ -290,7 +308,10 @@ export async function deriveArgon2(
 	if (invalid !== undefined) return invalid;
 	const owned = copyInput(snapshot);
 	try {
-		const result = await (options.backend ?? nativeArgon2)(owned);
+		const result =
+			typeof options.backend === 'function'
+				? await options.backend(owned)
+				: await builtinArgon2(owned, options.backend);
 		if (!result.ok) {
 			// A custom provider's diagnostic may contain secrets. Return only the
 			// recognized code and a fixed message at this public boundary.

@@ -24,7 +24,7 @@ features:
     details: Typed error codes with chain index and structured failure details. Build certificate flows your code can actually reason about.
   - icon: 🌐
     title: Runs Everywhere
-    details: Pure WebCrypto, zero dependencies. Node, Bun, Deno, browsers, Cloudflare Workers.
+    details: Zero dependencies. Node, Bun, Deno, browsers, Cloudflare Workers.
   - icon: 📦
     title: Broad PKI Workflow Coverage
     details: Certificates, CSRs, chain verification, service identity, CRLs, OCSP, PFX/PKCS#12, PKCS#7, encrypted keys — with explicitly documented standards-conformance boundaries.

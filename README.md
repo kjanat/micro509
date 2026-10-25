@@ -26,8 +26,11 @@ A zero-dependency TypeScript X.509 and PKI toolkit. Create certificates and
 CSRs, verify certificate chains and identities, manage revocation, and work
 with keys and PKCS containers using WebCrypto.
 
-Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs in
+Zero dependencies. Tree-shakeable subpath entrypoints. Runs in
 Node, Bun, Deno, browsers, and Cloudflare Workers.
+
+`micro509/kdf` derives Argon2d and Argon2id keys across supported runtimes,
+including versions `0x10` and `0x13`.
 
 > **Prerelease** — API may change before 1.0.
 

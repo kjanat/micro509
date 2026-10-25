@@ -2,14 +2,15 @@
  * Cloudflare Worker entry for the workerd smoke test (see ./smoke-workerd.mjs).
  * Imports src (not dist) so typecheck passes on a clean tree;
  * wrangler bundles the TS source, and the point here is exercising workerd's own WebCrypto.
- * dist-artifact integrity is covered by the Node/Deno/browser smokes.
+ * KDF uses the published workerd export, including its static WASM asset.
+ * Other dist-artifact integrity is covered by the Node/Deno/browser smokes.
  * @module
  */
 
+import * as kdfApi from 'micro509/kdf';
 import * as micro509 from '#micro509';
 import * as cryptoApi from '#micro509/crypto';
 import * as joseApi from '#micro509/jose';
-import * as kdfApi from '#micro509/kdf';
 import * as sshApi from '#micro509/ssh';
 import { runSmoke } from '#smoke';
 

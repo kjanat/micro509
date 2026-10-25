@@ -1,0 +1,7 @@
+{
+	"schema": 1,
+	"compilerVersion": "5.0.2",
+	"inputs": "ba8ae091f773be1b02640ace246ae8d70bada385c184ec709c1d4799584f48b7",
+	"wasm": "73bd251d7dde7ad5653b6bafd3aa25e801bd6c221ef45d8e81b3151fb56a6211",
+	"typescript": "dd2838d3604a232e41f8a97edc51e92345b31e23b2f2a083ac07a2e16d6aab35"
+}

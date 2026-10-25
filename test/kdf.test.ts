@@ -3,7 +3,12 @@ import { argon2, createHash } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
 import type { Argon2Backend, Argon2Input, Argon2Limits, Argon2Result } from '#micro509/kdf';
 import { deriveArgon2 } from '#micro509/kdf';
-import { changingInput, inputRepresentations, rfc9106Vectors } from './fixtures/argon2.mjs';
+import {
+	changingInput,
+	inputRepresentations,
+	libargon2Vectors,
+	rfc9106Vectors,
+} from './fixtures/argon2.mjs';
 
 // A real optional backend exercises the extension boundary on Bun, whose native
 // WebCrypto currently lacks Argon2. node:crypto is confined to this test.
@@ -68,9 +73,8 @@ describe('Argon2 key derivation', () => {
 		'matches RFC 9106 $input.algorithm with secret and associated data',
 		async (vector) => {
 			expect(hex(await deriveArgon2(vector.input, { backend: nodeBackend }))).toBe(vector.expected);
-			const native = await deriveArgon2(vector.input);
-			if (native.ok) expect(hex(native)).toBe(vector.expected);
-			else expect(native.error.code).toBe('unsupported');
+			expect(hex(await deriveArgon2(vector.input))).toBe(vector.expected);
+			expect(hex(await deriveArgon2(vector.input, { backend: 'portable' }))).toBe(vector.expected);
 		},
 	);
 
@@ -85,7 +89,7 @@ describe('Argon2 key derivation', () => {
 			parallelism: 2,
 			outputBytes: 32,
 		};
-		expect(hex(await deriveArgon2(request, { backend: nodeBackend }))).toBe(
+		expect(hex(await deriveArgon2(request))).toBe(
 			'cff0e1b1a213a34c626ab3afe00911f01493ed2ff6968db83ee183f23335e1f2',
 		);
 	});
@@ -106,8 +110,8 @@ describe('Argon2 key derivation', () => {
 			parallelism: 2,
 			outputBytes: 32,
 		};
-		expect(hex(await deriveArgon2(request, { backend: nodeBackend }))).toBe(expected);
-		expect(await deriveArgon2({ ...request, version: 0x10 })).toMatchObject({
+		expect(hex(await deriveArgon2(request))).toBe(expected);
+		expect(await deriveArgon2({ ...request, version: 0x10 }, { backend: 'native' })).toMatchObject({
 			ok: false,
 			error: { code: 'unsupported' },
 		});
@@ -368,6 +372,7 @@ describe('Argon2 key derivation', () => {
 				{ ...input(), outputBytes: 0x20000000 },
 				{
 					limits: { maxOutputBytes: 0x20000000 },
+					backend: 'native',
 				},
 			),
 		).toMatchObject({ ok: false, error: { code: 'unsupported' } });
@@ -441,5 +446,66 @@ describe('Argon2 JavaScript input snapshots', () => {
 		});
 		expect(changing.reads.size).toBe(Object.keys(vector.input).length);
 		expect([...changing.reads.values()].every((count) => count === 1)).toBe(true);
+	});
+});
+
+describe('bundled portable Argon2', () => {
+	it.each(libargon2Vectors)(
+		'matches independent libargon2 $input.algorithm v$input.version vector',
+		async ({ input: request, expected }) => {
+			expect(hex(await deriveArgon2(request))).toBe(expected);
+			expect(hex(await deriveArgon2(request, { backend: 'portable' }))).toBe(expected);
+		},
+	);
+
+	it.each([4, 17, 32, 64, 65, 100, 1024])(
+		'matches native output at %i bytes with unaligned memory',
+		async (outputBytes) => {
+			const request = { ...input(), memoryKiB: 37, outputBytes };
+			expect(hex(await deriveArgon2(request, { backend: 'portable' }))).toBe(
+				hex(await deriveArgon2(request, { backend: nodeBackend })),
+			);
+		},
+	);
+
+	it('isolates concurrent instances and yields during realistic memory-hard work', async () => {
+		const requests = [1, 2].map((byte) => ({
+			...input(),
+			memoryKiB: 64 * 1024,
+			password: new Uint8Array(32).fill(byte),
+		}));
+		let ticks = 0;
+		const timer = setInterval(() => {
+			ticks += 1;
+		}, 1);
+		try {
+			const results = await Promise.all(
+				requests.map((request) => deriveArgon2(request, { backend: 'portable' })),
+			);
+			expect(ticks).toBeGreaterThan(0);
+			for (const [index, request] of requests.entries()) {
+				const result = results[index];
+				if (result === undefined) throw new Error('Missing concurrent result');
+				expect(hex(result)).toBe(hex(await deriveArgon2(request, { backend: nodeBackend })));
+				expect(request.password.every((byte) => byte === index + 1)).toBe(true);
+			}
+		} finally {
+			clearInterval(timer);
+		}
+	}, 30_000);
+
+	it('bounds portable allocations before entering WASM', async () => {
+		expect(
+			await deriveArgon2(
+				{ ...input(), memoryKiB: 0x200000 },
+				{
+					backend: 'portable',
+					limits: { maxMemoryKiB: 0x200000 },
+				},
+			),
+		).toMatchObject({ ok: false, error: { code: 'unsupported' } });
+		expect(
+			await deriveArgon2(input(), { backend: 'portable', limits: { maxMemoryKiB: 31 } }),
+		).toMatchObject({ ok: false, error: { code: 'limit_exceeded' } });
 	});
 });

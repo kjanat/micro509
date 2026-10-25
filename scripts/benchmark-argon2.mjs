@@ -11,12 +11,12 @@ const { deriveArgon2 } = await import(exportUrl.href);
 const [mode = 'native', concurrencyText = '1'] = process.argv.slice(2);
 const concurrency = Number(concurrencyText);
 if (
-	(mode !== 'native' && mode !== 'node') ||
+	(mode !== 'native' && mode !== 'node' && mode !== 'portable') ||
 	!Number.isInteger(concurrency) ||
 	concurrency < 1 ||
 	concurrency > 4
 ) {
-	throw new Error('Usage: node scripts/benchmark-argon2.mjs <native|node> <1..4>');
+	throw new Error('Usage: node scripts/benchmark-argon2.mjs <native|portable|node> <1..4>');
 }
 
 /** @type {import('#micro509/kdf').Argon2Input} */
@@ -32,8 +32,8 @@ const input = {
 };
 
 async function derive() {
-	if (mode === 'native') {
-		const result = await deriveArgon2(input);
+	if (mode === 'native' || mode === 'portable') {
+		const result = await deriveArgon2(input, { backend: mode });
 		if (!result.ok) throw new Error(result.error.code);
 		result.value.fill(0);
 	} else {

@@ -7,10 +7,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } }
-      - { uses: $/.github/actions/setup-ts, with: { install-bun: "true" } }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: $/.github/actions/setup-ts
+        with: { install-bun: "true" }
       - uses: kjanat/runner@b32ea932a1813ae0be44e755c16df9f9f5ca86a4 # master
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - run: run -s fmt:autofix lint:fix
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'renovate[bot]' && github.event.pull_request.head.repo.full_name == github.repository
         with: { go-version-file: go.work, cache-dependency-path: tsc/*/go.sum }
       - name: Synchronize TypeScript Go modules with the npm compiler
@@ -20,7 +23,4 @@ jobs:
       - name: Refresh Bun lockfile for Renovate
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'renovate[bot]' && github.event.pull_request.head.repo.full_name == github.repository
         run: bun install --lockfile-only --ignore-scripts
-      - run: runner i -sf fmt:autofix lint:fix
-      - run: dprint config update -yr
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && false
-      - uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a # v1.3.4
+      - uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a # v1

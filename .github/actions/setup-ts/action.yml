@@ -30,6 +30,9 @@ runs:
       if: ${{ inputs.install-runner == 'true' }}
       uses: kjanat/runner@b32ea932a1813ae0be44e755c16df9f9f5ca86a4 # v0.28.0
 
+    - name: Setup tombi
+      uses: kjanat/setup-tombi@94a6834e289046705b32e6b8dc977c8b939e8b35 # v1
+
     - name: Setup dprint
       uses: kjanat/dprint-check@29c42153a7346f4d7315883ff7722cfe22cd510c # v3.1.0
       with: { install-only: true }

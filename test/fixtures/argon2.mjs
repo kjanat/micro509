@@ -38,6 +38,26 @@ export const rfc9106Vectors = [
 	},
 ];
 
+/** Independent libargon2 vectors, also used by every built-runtime smoke. */
+export const libargon2Vectors = /** @type {const} */ ([
+	['argon2d', 0x10, 'c9da08c31fa64957a1bf63d30cc881474775ce827bc61b0128e5d07119c1e54a'],
+	['argon2id', 0x10, '190432db4cacd25d7f023c4eee4ccfa1ccd31e499daecd434e07aa005315edd1'],
+	['argon2d', 0x13, 'fa50b00aee2c79eb02a575fd1b54c8d3956b0c5ddfc6db886e2bda9e738e597d'],
+	['argon2id', 0x13, 'cb88616cdd8e3cd798580402fc2a39cccbb66568ae01f140a358d7fc5e5a210a'],
+]).map(([algorithm, version, expected]) => ({
+	input: {
+		algorithm,
+		version,
+		password: new TextEncoder().encode('password'),
+		salt: new TextEncoder().encode('salt1234'),
+		memoryKiB: 32,
+		passes: 2,
+		parallelism: 2,
+		outputBytes: 32,
+	},
+	expected,
+}));
+
 /**
  * Equivalent JavaScript representations of one declared input record.
  * @param {import('#micro509/kdf').Argon2Input} input
