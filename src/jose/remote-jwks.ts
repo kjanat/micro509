@@ -21,6 +21,8 @@ export interface JwksRequestInit {
 	readonly redirect: 'manual';
 	/** Always `omit`. */
 	readonly credentials: 'omit';
+	/** Always `no-store`: each resolver refresh must reach the issuer, bypassing the HTTP cache. */
+	readonly cache: 'no-store';
 	/** Configured request headers. Withheld from any origin other than the configured URL's. */
 	readonly headers: Readonly<Record<string, string>>;
 	/** Aborts on timeout, cancellation or when no verification still waits for the response. */
@@ -348,6 +350,7 @@ async function fetchJwks(
 			method: 'GET',
 			redirect: 'manual',
 			credentials: 'omit',
+			cache: 'no-store',
 			headers: url.origin === config.url.origin ? config.headers : {},
 			signal,
 		});

@@ -190,6 +190,8 @@ const result = await verifyJwt(token, {
 
 The URL comes from your configuration and must be `https`, or `http` on a
 loopback host. Create one resolver per issuer. Each has its own cache.
+Resolver fetches use `cache: 'no-store'` so refreshes reach the issuer even when
+the browser has a fresh HTTP cache entry. Custom transports must honor this mode.
 
 | Behaviour           | Rule                                                                                                                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

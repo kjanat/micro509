@@ -900,6 +900,7 @@ describe('transport', () => {
 			method: 'GET',
 			redirect: 'manual',
 			credentials: 'omit',
+			cache: 'no-store',
 			headers: { 'x-api-key': 'k' },
 		});
 		expect(seen[0]?.init.signal).toBeInstanceOf(AbortSignal);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import {
 	createJwksKeyResolver,
 	DEFAULT_JWKS_LIMITS,
@@ -199,6 +200,44 @@ describe('selectJwk', () => {
 				entry: JSON.stringify(entry).slice(0, 40),
 				code: 'key_unsuitable',
 			});
+		}
+	});
+
+	it('filters RSA moduli below 2048 bits even when they occupy 256 bytes', async () => {
+		// Bun rounds non-aligned RSA generation sizes, so use real Node-generated keys.
+		const weakText = execFileSync(
+			'node',
+			[
+				'--input-type=module',
+				'-e',
+				`
+			import { generateKeyPairSync } from 'node:crypto';
+			console.log(JSON.stringify([2041, 2047].map(modulusLength =>
+				generateKeyPairSync('rsa', { modulusLength }).publicKey.export({ format: 'jwk' })
+			)));
+		`,
+			],
+			{ encoding: 'utf8' },
+		);
+		const weak = parseJwks(`{"keys":${weakText}}`);
+		if (!weak.ok) throw new Error(weak.code);
+		const strong = await rsaJwkEntry(primary, { kid: 'shared' });
+		for (const candidate of weak.value.keys) {
+			if (candidate.kind !== 'rsa') throw new Error('Expected RSA fixture');
+			const modulus = Buffer.from(candidate.n, 'base64url');
+			expect(modulus.length).toBe(256);
+			expect(modulus[0]).toBeLessThan(128);
+			const small = { ...candidate.members, kid: 'shared' };
+			for (const kid of [undefined, 'shared']) {
+				const selector = { algorithm: 'RS256', ...(kid === undefined ? {} : { kid }) } as const;
+				expect(selectJwk(parsed(small), selector)).toMatchObject({
+					ok: false,
+					code: 'key_unsuitable',
+				});
+				const selected = selectJwk(parsed(small, strong), selector);
+				expect(selected).toMatchObject({ ok: true, value: { n: strong.n } });
+				expect((await verifyWith(await tokenWith(kid), parsed(small, strong))).ok).toBe(true);
+			}
 		}
 	});
 

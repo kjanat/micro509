@@ -246,7 +246,8 @@ function unsuitableReason(entry: JwkEntry, algorithm: JwsAlgorithm): string | un
 		return 'RSA parameters have leading zero octets';
 	}
 	if (modulus.length > MAX_RSA_MODULUS_BYTES) return 'RSA modulus is too large';
-	if (modulus.length * 8 < MIN_RS256_MODULUS_BITS) return 'RSA modulus is too small';
+	const modulusBits = (modulus.length - 1) * 8 + 32 - Math.clz32(modulus[0] ?? 0);
+	if (modulusBits < MIN_RS256_MODULUS_BITS) return 'RSA modulus is too small';
 	return undefined;
 }
 
