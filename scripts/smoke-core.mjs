@@ -10,8 +10,9 @@ import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
  * @param {typeof import('#micro509')} micro509
  * @param {typeof import('#micro509/crypto')} cryptoApi
  * @param {typeof import('#micro509/kdf')} kdfApi
+ * @param {typeof import('#micro509/ssh')} sshApi
  */
-export async function runSmoke(micro509, cryptoApi, kdfApi) {
+export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi) {
 	const { signData, verifySignatureWithKey } = cryptoApi;
 	const { certificate, keyPair } = await micro509.createSelfSignedCertificate({
 		subject: { commonName: 'smoke.example' },
@@ -68,6 +69,7 @@ export async function runSmoke(micro509, cryptoApi, kdfApi) {
 	}
 
 	await runArgon2Smoke(kdfApi);
+	await runSshSmoke(micro509, sshApi);
 	return 'smoke OK';
 }
 
@@ -97,6 +99,41 @@ async function runArgon2Smoke(kdfApi) {
 			derived.value.fill(0);
 		} else if (derived.ok || derived.error.code !== 'unsupported') {
 			throw new Error('smoke: unavailable native Argon2 must report unsupported');
+		}
+	}
+}
+
+/**
+ * @param {typeof import('#micro509')} micro509
+ * @param {typeof import('#micro509/ssh')} sshApi
+ */
+async function runSshSmoke(micro509, sshApi) {
+	/** @type {readonly import('#micro509/keys').KeyAlgorithmInput[]} */
+	const algorithms = [
+		{ kind: 'rsa', modulusLength: 2048 },
+		{ kind: 'ed25519' },
+		{ kind: 'ecdsa', curve: 'P-256' },
+		{ kind: 'ecdsa', curve: 'P-384' },
+		{ kind: 'ecdsa', curve: 'P-521' },
+	];
+	for (const algorithm of algorithms) {
+		const pair = await micro509.generateKeyPair(algorithm);
+		const comment = '\ufeffsmoke@host';
+		const line = await sshApi.exportSshPublicKey(pair.publicKey, { comment });
+		const file = await sshApi.exportOpenSshPrivateKey(pair.privateKey, { comment });
+		const pub = micro509.unwrap(await sshApi.importSshPublicKey(line));
+		const priv = micro509.unwrap(await sshApi.importOpenSshPrivateKey(file));
+		if (
+			pub.comment !== comment ||
+			priv.comment !== comment ||
+			pub.fingerprint !== priv.fingerprint ||
+			pub.fingerprint !== (await sshApi.sshFingerprintSha256(pair.publicKey))
+		) {
+			throw new Error(`smoke: SSH ${algorithm.kind} round-trip failed`);
+		}
+		const invalid = await sshApi.importSshPublicKey(line, { minRsaModulusBits: NaN });
+		if (invalid.ok || invalid.error.code !== 'invalid_options') {
+			throw new Error('smoke: SSH accepted an invalid policy');
 		}
 	}
 }

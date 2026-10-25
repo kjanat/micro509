@@ -21,7 +21,7 @@ and structured `details`.
 
 - Untrusted runtime input returns `Result<T, Micro509Error>` with a stable error
   code. This covers parse (`src/x509/parse.ts`), verify, key import
-  (`src/keys/keys.ts`), PEM/PKCS boundaries, and revocation.
+  (`src/keys/keys.ts`), SSH key files (`src/ssh/ssh.ts`), PEM/PKCS boundaries, and revocation.
 - Builder construction input is developer-supplied. `createCertificate`,
   `createSelfSignedCertificate`, and the `encode*` extension helpers return their
   material directly and throw on invalid config (empty `keyUsage`, duplicate
@@ -69,6 +69,7 @@ micro509/
 │   ├── der/           # public DER encode/decode surface (micro509/der)
 │   ├── pem/           # PEM encode/decode boundary
 │   ├── pkcs/          # PKCS-7 and PKCS#12 workflows
+│   ├── ssh/           # optional OpenSSH key lines, openssh-key-v1 files, SHA256 fingerprints
 │   ├── result/        # shared result/error algebra
 │   └── internal/      # implementation-only modules
 │       ├── asn1/
@@ -100,6 +101,7 @@ micro509/
 | Certificate/CSR parsing           | `src/x509/parse.ts`                                                                 | DER/PEM parse boundary + extension decoding          |
 | Revocation                        | `src/revocation/crl.ts`, `src/revocation/ocsp.ts`                                   | CRL + OCSP creation, parse, validate, verify         |
 | Key import/export                 | `src/keys/keys.ts`                                                                  | PKCS#1/8, SEC1, SPKI, JWK flows                      |
+| SSH keys                          | `src/ssh/ssh.ts`, `src/ssh/wire.ts`                                                 | optional `micro509/ssh`; builds on JWK key APIs      |
 | DER codec surface                 | `src/der/der.ts`                                                                    | public DER encode/decode (`micro509/der`)            |
 | Extension model/builders          | `src/x509/extensions.ts`                                                            | typed extension schema and encoder helpers           |
 | Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                                         | shared DER helpers, internal probing through imports |

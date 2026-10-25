@@ -12,6 +12,7 @@
 		"./pkcs": "./src/pkcs.ts",
 		"./result": "./src/result.ts",
 		"./revocation": "./src/revocation.ts",
+		"./ssh": "./src/ssh.ts",
 		"./verify": "./src/verify.ts",
 		"./x509": "./src/x509.ts"
 	},

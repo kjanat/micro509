@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `micro509/ssh` entrypoint for OpenSSH key material: public-key lines
+  (`importSshPublicKey`, `exportSshPublicKey`), unencrypted single-key
+  `openssh-key-v1` private files (`importOpenSshPrivateKey`,
+  `exportOpenSshPrivateKey`) and `SHA256:` fingerprints
+  (`sshFingerprintSha256`) for RSA, Ed25519 and ECDSA P-256/P-384/P-521.
+  Imports check the private key against its embedded public key, bound input
+  sizes and RSA moduli, and return typed `malformed`, `unsupported`,
+  `limit_exceeded` and `key_mismatch` results. Encrypted files and files with
+  several keys return `unsupported`. `minRsaModulusBits` and
+  `acceptCompressedEcPoints` expose the choices the standards leave open.
+  [#190](https://github.com/kjanat/micro509/issues/190)
 - Optional `micro509/kdf` entrypoint for Argon2id and Argon2d raw key
   derivation, with explicit versions, per-call resource limits and typed
   failures. The native WebCrypto adapter supports version `0x13` on

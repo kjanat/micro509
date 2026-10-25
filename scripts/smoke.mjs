@@ -42,6 +42,10 @@ const resolvedKdfExport = new URL(pkg['exports']['./kdf']['default'], import.met
 /** @type {typeof import('#micro509/kdf')} */
 const kdfApi = await import(resolvedKdfExport.href);
 
+const resolvedSshExport = new URL(pkg.exports['./ssh'].default, import.meta.resolve('#pkg'));
+/** @type {typeof import('#micro509/ssh')} */
+const sshApi = await import(resolvedSshExport.href);
+
 const whichVersion =
 	typeof Deno !== 'undefined'
 		? Deno.version.deno
@@ -49,4 +53,4 @@ const whichVersion =
 			? Bun.version
 			: process.version;
 
-console.log(`${await runSmoke(micro509, cryptoApi, kdfApi)} (${whichVersion})`);
+console.log(`${await runSmoke(micro509, cryptoApi, kdfApi, sshApi)} (${whichVersion})`);

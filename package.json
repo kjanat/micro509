@@ -64,6 +64,10 @@
 			"types": "./dist/revocation.d.ts",
 			"default": "./dist/revocation.js"
 		},
+		"./ssh": {
+			"types": "./dist/ssh.d.ts",
+			"default": "./dist/ssh.js"
+		},
 		"./verify": {
 			"types": "./dist/verify.d.ts",
 			"default": "./dist/verify.js"

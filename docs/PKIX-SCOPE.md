@@ -580,6 +580,45 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       PBES2 or PBMAC1 count is `malformed`. The PBES2 encoders throw `RangeError`,
       and PBMAC1 creation throws `invalid_iterations`.
 
+## 16. SSH key formats
+
+`micro509/ssh` reads and writes SSH key material. It is not a PKIX surface and
+makes no SSH transport, agent, certificate or `authorized_keys` option claim.
+
+- [x] Read and write public-key blobs for `ssh-rsa` ([RFC 4253 §6.6][rfc4253-section-6.6]),
+      `ssh-ed25519` ([RFC 8709 §4][rfc8709-section-4]) and
+      `ecdsa-sha2-nistp256/384/521` ([RFC 5656 §3.1][rfc5656-section-3.1]), with
+      the [RFC 4251 §5][rfc4251-section-5] `string` and `mpint` encodings. An
+      `mpint` with a redundant leading zero byte, a negative value or a zero
+      value is `malformed`; [RFC 4251 §5][rfc4251-section-5] forbids the first
+      and a key field is a positive integer.
+- [x] The `ssh-rsa` key type names the RSA encoding only. [RFC 8332 §3][rfc8332-section-3]
+      reuses it for `rsa-sha2-256` and `rsa-sha2-512`, so importing an `ssh-rsa`
+      key enables no SHA-1 signature.
+- [x] Read OpenSSH public-key lines and unencrypted single-key `openssh-key-v1`
+      files as `PROTOCOL.key` defines them. Both are OpenSSH formats; no RFC
+      defines either. Encrypted files, several keys per file and every other
+      key type return `unsupported`.
+- [x] Reject a line key type that differs from the blob type, an ECDSA curve
+      identifier that differs from the key type suffix ([RFC 5656 §6.2][rfc5656-section-6.2]),
+      trailing data, and a private section whose key type or public key differs
+      from the file's public key (`key_mismatch`).
+- [x] Check the private key against the public key: RSA `p·q = n`, `d·e ≡ 1`
+      modulo `p-1` and `q-1`, `iqmp·q ≡ 1 (mod p)`; for every key type a
+      signature made with the private key must verify under the embedded public
+      key; the Ed25519 private field must end with the public key.
+- [x] RSA moduli below `minRsaModulusBits` (default 2048) return `unsupported`.
+      The standards leave key strength to the relying party; [RFC 8332 §5.1][rfc8332-section-5.1]
+      calls 2048 bits prudent and OpenSSH accepts 1024. Moduli above 16384 bits
+      and inputs above 16 KiB (public line) or 32 KiB (private file) return
+      `limit_exceeded`.
+- [x] ECDSA points are read uncompressed by default. [RFC 5656 §3.1][rfc5656-section-3.1]
+      allows SEC 1 compressed points; `acceptCompressedEcPoints` reads them.
+      Points are always written uncompressed.
+- [x] The `SHA256:` fingerprint is the SHA-256 digest of the uncompressed
+      public-key blob in unpadded base64. No RFC defines this text form; it
+      matches `ssh-keygen -l -E sha256`.
+
 [^rfc5280]: https://datatracker.ietf.org/doc/html/rfc5280 "RFC 5280 - Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile"
 
 [^rfc5480]: https://datatracker.ietf.org/doc/html/rfc5480 "RFC 5480 - Elliptic Curve Cryptography Subject Public Key Information"
@@ -623,6 +662,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc4518-section-2.1]: https://www.rfc-editor.org/rfc/rfc4518.html#section-2.1
 [rfc4648-section-3.5]: https://www.rfc-editor.org/rfc/rfc4648.html#section-3.5
 [rfc4120]: https://www.rfc-editor.org/rfc/rfc4120.html
+[rfc4251-section-5]: https://www.rfc-editor.org/rfc/rfc4251.html#section-5
+[rfc4253-section-6.6]: https://www.rfc-editor.org/rfc/rfc4253.html#section-6.6
 [rfc4556]: https://www.rfc-editor.org/rfc/rfc4556.html
 [rfc4985]: https://www.rfc-editor.org/rfc/rfc4985.html
 [rfc4985-section-2]: https://www.rfc-editor.org/rfc/rfc4985.html#section-2
@@ -647,6 +688,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc5280-section-7.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-7.1
 [rfc5280-section-7.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-7.4
 [rfc5652]: https://www.rfc-editor.org/rfc/rfc5652.html
+[rfc5656-section-3.1]: https://www.rfc-editor.org/rfc/rfc5656.html#section-3.1
+[rfc5656-section-6.2]: https://www.rfc-editor.org/rfc/rfc5656.html#section-6.2
 [rfc5890]: https://www.rfc-editor.org/rfc/rfc5890.html
 [rfc5891]: https://www.rfc-editor.org/rfc/rfc5891.html
 [rfc5891-section-4]: https://www.rfc-editor.org/rfc/rfc5891.html#section-4
@@ -670,7 +713,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 [rfc7292-section-4]: https://www.rfc-editor.org/rfc/rfc7292.html#section-4
 [rfc7468]: https://www.rfc-editor.org/rfc/rfc7468.html
 [rfc8018]: https://www.rfc-editor.org/rfc/rfc8018.html
+[rfc8332-section-3]: https://www.rfc-editor.org/rfc/rfc8332.html#section-3
+[rfc8332-section-5.1]: https://www.rfc-editor.org/rfc/rfc8332.html#section-5.1
 [rfc8410]: https://www.rfc-editor.org/rfc/rfc8410.html
+[rfc8709-section-4]: https://www.rfc-editor.org/rfc/rfc8709.html#section-4
 [rfc8753]: https://www.rfc-editor.org/rfc/rfc8753.html
 [rfc9295]: https://www.rfc-editor.org/rfc/rfc9295.html
 [rfc9295-section-3]: https://www.rfc-editor.org/rfc/rfc9295.html#section-3

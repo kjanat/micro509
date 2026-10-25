@@ -16,6 +16,7 @@ asynchronous and must be awaited.
 | `micro509/verify`     | `matchServiceIdentity`, `matchCertificateServiceIdentity`, `checkExtendedKeyUsage`, `isSelfIssuedCertificate`, `trustAnchorFromCertificate` | chain verification, candidate-path building and validation, CSR verification      |
 | `micro509/revocation` | `parse*`, `isCertificateRevoked`, `revocationReasonFromCode`, `hasOcspNoCheckExtension`, responder-URI discovery                            | CRL/OCSP creation, signature verification, validation, `check*` orchestration     |
 | `micro509/keys`       | `inspectEncryptedPkcs8Der`, `parsePbes2AlgorithmIdentifier`                                                                                 | every import/export/generation function, RSA-OAEP                                 |
+| `micro509/ssh`        | —                                                                                                                                           | every import/export function and `sshFingerprintSha256`                           |
 | `micro509/pkcs`       | `parsePkcs7SignedData*`, `parsePkcs7CertBag*`                                                                                               | SignedData creation and verification, PFX creation and parsing, PKCS#12 MAC       |
 | `micro509/crypto`     | `ecdsaSignatureDerToRaw`, `ecdsaSignatureRawToDer`                                                                                          | `signData`, `verifySignature`                                                     |
 
