@@ -24,7 +24,7 @@ micro509 requires these global APIs:
 - `TextEncoder` / `TextDecoder`
 - `atob` / `btoa`
 
-Argon2's TypeScript implementation uses `BigInt`, typed arrays, and timers.
+Argon2's TypeScript implementation uses `BigInt`, typed arrays, `WeakRef`, and timers.
 Native WebCrypto is used when it supports the requested variant and version.
 An unsupported native operation uses the TypeScript implementation in the
 current thread; other native failures are returned to the caller.

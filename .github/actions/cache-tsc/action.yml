@@ -15,7 +15,8 @@ runs:
       run: |
         bun_version=$(bun --version)
         node_version=$(node --version)
-        echo "TSC_ARTIFACT_CACHE_KEY=tsc-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS:-}-${ImageVersion:-}-${bun_version}-${node_version}-${INPUT_HASH}" >> "${GITHUB_ENV}"
+        cache_key=$(printf '%s' "tsc-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS:-}-${ImageVersion:-}-${bun_version}-${node_version}-${INPUT_HASH}" | tr -d '\r\n')
+        printf 'TSC_ARTIFACT_CACHE_KEY=%s\n' "${cache_key}" >> "${GITHUB_ENV}"
     - name: Restore compiler artifacts
       id: restore
       if: inputs.operation == 'restore'
@@ -32,7 +33,11 @@ runs:
       env:
         CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
       run: |
-        echo "TSC_ARTIFACT_CACHE_HIT=${CACHE_HIT}" >> "${GITHUB_ENV}"
+        case "${CACHE_HIT}" in
+          true) printf '%s\n' 'TSC_ARTIFACT_CACHE_HIT=true' >> "${GITHUB_ENV}" ;;
+          false|"") printf '%s\n' 'TSC_ARTIFACT_CACHE_HIT=false' >> "${GITHUB_ENV}" ;;
+          *) echo 'Unexpected cache-hit output' >&2; exit 1 ;;
+        esac
     - name: Save compiler artifacts
       if: inputs.operation == 'save' && env.TSC_ARTIFACT_CACHE_HIT != 'true' && env.TSC_ARTIFACT_CACHE_KEY != '' && hashFiles('.cache/tsc/build') != ''
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 export async function fingerprint(root: string, paths: readonly string[]): Promise<string> {
 	const hash = createHash('sha256');
 	for (const path of [...paths].sort()) {
-		const file = join(root, path);
-		const metadata = await stat(file);
+		await using file = await open(join(root, path), 'r');
+		const metadata = await file.stat();
 		hash.update(JSON.stringify([path, metadata.size, metadata.mode & 0o111]));
-		hash.update(await readFile(file));
+		hash.update(await file.readFile());
 	}
 	return hash.digest('hex');
 }

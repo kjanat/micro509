@@ -30,10 +30,15 @@ retaining the readable progress lines.
 
 Reports record the runtime, CPU, platform, workload, SHA-256 hashes of the Argon2 modules,
 every latency sample, median and range, batch throughput, and the maximum lateness
-of a 5 ms timer. They also record baseline RSS before warm-ups and process peak
-RSS in MiB. The native reference key is computed in the parent, so its memory
-does not contribute to backend measurements. Peak RSS includes the worker runtime,
-module loading, warm-ups, and measured calls; it measures the whole process.
+of a 5 ms timer. They also record baseline RSS before warm-ups and
+`sampledPeakRssMiB`: RSS sampled every 5 ms and at batch boundaries during warm-ups
+and measured calls. This measures the worker process, including its runtime and
+loaded modules. Peaks between observations can be missed. The report records
+`rssSamplingIntervalMs` alongside the workload.
+
+The native reference key is computed in the parent. Sampling the worker
+RSS avoids the inherited parent peak that Linux can include in
+`process.resourceUsage().maxRSS`.
 Call latency includes the normal API boundary, cooperative
 scheduling, and memory cleanup. Correctness checks and the final timer observation
 are excluded. The first batch is also recorded separately; CLI startup is not timed.
@@ -54,13 +59,13 @@ Measured on an AMD Ryzen 9 3900X at the default workload: 64 MiB, three passes,
 four lanes, and 32 output bytes. Values are medians of five calls after two
 warm-ups. The ratio is TypeScript time divided by WASM time.
 
-| Runtime       | Variant  | TypeScript |   WASM | TS / WASM |
-| ------------- | -------- | ---------: | -----: | --------: |
-| Node v26.12.0 | argon2id |    1233 ms | 181 ms |     6.80× |
-| Node v26.12.0 | argon2i  |    1249 ms | 182 ms |     6.86× |
-| Node v26.12.0 | argon2d  |    1235 ms | 184 ms |     6.73× |
-| Bun 1.4.4     | argon2id |     912 ms | 173 ms |     5.25× |
-| Bun 1.4.4     | argon2i  |     924 ms | 171 ms |     5.39× |
-| Bun 1.4.4     | argon2d  |     909 ms | 175 ms |     5.20× |
+| Runtime       | Variant  | TypeScript |   WASM | TS / WASM | TS sampled RSS peak | WASM sampled RSS peak |
+| ------------- | -------- | ---------: | -----: | --------: | ------------------: | --------------------: |
+| Node v26.12.0 | argon2id |    1189 ms | 178 ms |     6.69× |           154.7 MiB |             152.0 MiB |
+| Node v26.12.0 | argon2i  |    1200 ms | 179 ms |     6.72× |           154.4 MiB |             152.2 MiB |
+| Node v26.12.0 | argon2d  |    1186 ms | 181 ms |     6.55× |           155.0 MiB |             151.7 MiB |
+| Bun 1.4.4     | argon2id |     880 ms | 171 ms |     5.15× |           142.9 MiB |             110.9 MiB |
+| Bun 1.4.4     | argon2i  |     886 ms | 172 ms |     5.15× |           143.3 MiB |             110.9 MiB |
+| Bun 1.4.4     | argon2d  |     877 ms | 169 ms |     5.18× |           142.3 MiB |             110.2 MiB |
 
-Reports: [Node](results/optimized-node.json) and [Bun](results/optimized-bun.json).
+Reports: [Node](results/node.json) and [Bun](results/bun.json).

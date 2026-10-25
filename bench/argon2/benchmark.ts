@@ -20,18 +20,21 @@ const execute = promisify(execFile);
 const worker = process.env.MICRO509_ARGON2_BENCH_WORKER === '1';
 const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
 const root = new URL('../../', import.meta.url);
+const rssSamplingIntervalMs = 5;
 
 async function implementationHashes(source = false) {
 	return Promise.all(
-		['argon2', 'argon2-core', 'argon2-arithmetic', 'argon2-portable'].map(async (name) => {
-			const path = source ? `src/kdf/${name}.ts` : `dist/kdf/${name}.js`;
-			return {
-				path,
-				sha256: createHash('sha256')
-					.update(await readFile(new URL(path, root)))
-					.digest('hex'),
-			};
-		}),
+		['argon2', 'argon2-core', 'argon2-arithmetic', 'argon2-memory', 'argon2-portable'].map(
+			async (name) => {
+				const path = source ? `src/kdf/${name}.ts` : `dist/kdf/${name}.js`;
+				return {
+					path,
+					sha256: createHash('sha256')
+						.update(await readFile(new URL(path, root)))
+						.digest('hex'),
+				};
+			},
+		),
 	);
 }
 
@@ -50,6 +53,7 @@ interface Measurement {
 	readonly samplesMs: readonly number[];
 	readonly batchMs: number;
 	readonly maxTimerDelayMs: number;
+	readonly sampledPeakRssMiB: number;
 }
 
 async function measure(
@@ -59,11 +63,13 @@ async function measure(
 ): Promise<Measurement | undefined> {
 	let previous = performance.now();
 	let maxTimerDelayMs = 0;
+	let sampledPeakRssMiB = process.memoryUsage.rss() / 1048576;
 	const timer = setInterval(() => {
+		sampledPeakRssMiB = Math.max(sampledPeakRssMiB, process.memoryUsage.rss() / 1048576);
 		const now = performance.now();
-		maxTimerDelayMs = Math.max(maxTimerDelayMs, now - previous - 5);
+		maxTimerDelayMs = Math.max(maxTimerDelayMs, now - previous - rssSamplingIntervalMs);
 		previous = now;
-	}, 5);
+	}, rssSamplingIntervalMs);
 	try {
 		const start = performance.now();
 		// Wait for every call before starting the next batch, including failures.
@@ -75,6 +81,7 @@ async function measure(
 			}),
 		);
 		const batchMs = performance.now() - start;
+		sampledPeakRssMiB = Math.max(sampledPeakRssMiB, process.memoryUsage.rss() / 1048576);
 		await new Promise<void>((resolve) => setTimeout(resolve, 10));
 		const samplesMs: number[] = [];
 		let unsupported = false;
@@ -93,7 +100,7 @@ async function measure(
 			}
 			samplesMs.push(ms);
 		}
-		return unsupported ? undefined : { samplesMs, batchMs, maxTimerDelayMs };
+		return unsupported ? undefined : { samplesMs, batchMs, maxTimerDelayMs, sampledPeakRssMiB };
 	} finally {
 		clearInterval(timer);
 	}
@@ -107,16 +114,19 @@ async function benchmark(
 	concurrency: number,
 ) {
 	const baselineRssMiB = process.memoryUsage().rss / 1048576;
+	let sampledPeakRssMiB = baselineRssMiB;
 	let firstBatch: Measurement | undefined;
 	for (let index = 0; index < warmups; index++) {
 		const result = await measure(derive, expected, concurrency);
 		if (!result) return { supported: false } as const;
+		sampledPeakRssMiB = Math.max(sampledPeakRssMiB, result.sampledPeakRssMiB);
 		firstBatch ??= result;
 	}
 	const measured: Measurement[] = [];
 	for (let index = 0; index < samples; index++) {
 		const result = await measure(derive, expected, concurrency);
 		if (!result) return { supported: false } as const;
+		sampledPeakRssMiB = Math.max(sampledPeakRssMiB, result.sampledPeakRssMiB);
 		firstBatch ??= result;
 		measured.push(result);
 	}
@@ -130,7 +140,7 @@ async function benchmark(
 	return {
 		supported: true,
 		baselineRssMiB,
-		processPeakRssMiB: process.resourceUsage().maxRSS / 1024,
+		sampledPeakRssMiB,
 		firstBatchMs: firstBatch?.batchMs,
 		medianMs,
 		minMs: sorted[0],
@@ -229,7 +239,7 @@ async function isolated(
 	assert.ok('maxTimerDelayMs' in result && typeof result.maxTimerDelayMs === 'number');
 	assert.ok('derivationsPerSecond' in result && typeof result.derivationsPerSecond === 'number');
 	assert.ok('baselineRssMiB' in result && typeof result.baselineRssMiB === 'number');
-	assert.ok('processPeakRssMiB' in result && typeof result.processPeakRssMiB === 'number');
+	assert.ok('sampledPeakRssMiB' in result && typeof result.sampledPeakRssMiB === 'number');
 	assert.ok('samplesMs' in result && 'batchMs' in result);
 	return {
 		supported: true,
@@ -240,7 +250,7 @@ async function isolated(
 		maxTimerDelayMs: result.maxTimerDelayMs,
 		derivationsPerSecond: result.derivationsPerSecond,
 		baselineRssMiB: result.baselineRssMiB,
-		processPeakRssMiB: result.processPeakRssMiB,
+		sampledPeakRssMiB: result.sampledPeakRssMiB,
 		samplesMs: numericArray(result.samplesMs),
 		batchMs: numericArray(result.batchMs),
 	} as const;
@@ -271,7 +281,7 @@ function expectedKey(input: Argon2Input): Uint8Array {
 
 function summary(result: Awaited<ReturnType<typeof benchmark>>): string {
 	if (!result.supported) return 'unsupported';
-	return `${result.medianMs.toFixed(2)} ms, ${result.derivationsPerSecond.toFixed(2)}/s, max timer delay ${result.maxTimerDelayMs.toFixed(2)} ms, RSS ${result.baselineRssMiB.toFixed(1)} MiB baseline / ${result.processPeakRssMiB.toFixed(1)} MiB peak`;
+	return `${result.medianMs.toFixed(2)} ms, ${result.derivationsPerSecond.toFixed(2)}/s, max timer delay ${result.maxTimerDelayMs.toFixed(2)} ms, RSS ${result.baselineRssMiB.toFixed(1)} MiB baseline / ${result.sampledPeakRssMiB.toFixed(1)} MiB sampled peak`;
 }
 
 const run = command('run')
@@ -317,6 +327,7 @@ const run = command('run')
 			warmups: flags.warmups,
 			samples: flags.samples,
 			concurrency: flags.concurrency,
+			rssSamplingIntervalMs,
 		};
 		const results = [];
 		for (const algorithm of flags.algorithm === 'all' ? algorithms : [flags.algorithm]) {

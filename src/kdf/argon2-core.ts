@@ -5,6 +5,9 @@
  */
 import type { Argon2Input } from '#micro509/kdf/argon2';
 import { multiplyHigh } from '#micro509/kdf/argon2-arithmetic';
+import { createMatrixPool } from '#micro509/kdf/argon2-memory';
+
+const matrices = createMatrixPool();
 
 const MASK_64 = 0xffff_ffff_ffff_ffffn;
 const IV = [
@@ -587,7 +590,7 @@ export async function deriveArgon2TypeScript(input: Argon2Input): Promise<Uint8A
 	let finalBlock: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
 	let finalWords: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 	try {
-		memory = new Uint32Array(memoryBlocks * 256);
+		memory = matrices.take(memoryBlocks * 256);
 		h0 = initialHash(input, type);
 		original = new Uint32Array(256);
 		permuted = new Uint32Array(256);
@@ -641,7 +644,6 @@ export async function deriveArgon2TypeScript(input: Argon2Input): Promise<Uint8A
 			write32(finalBlock, index * 4, finalWords[index] ?? 0);
 		return blakeLong(finalBlock, input.outputBytes);
 	} finally {
-		memory.fill(0);
 		h0.fill(0);
 		original.fill(0);
 		permuted.fill(0);
@@ -649,5 +651,6 @@ export async function deriveArgon2TypeScript(input: Argon2Input): Promise<Uint8A
 		addressTemporary.fill(0);
 		finalBlock.fill(0);
 		finalWords.fill(0);
+		matrices.release(memory);
 	}
 }

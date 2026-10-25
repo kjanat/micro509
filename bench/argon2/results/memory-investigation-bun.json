@@ -1,0 +1,884 @@
+{
+	"runtime": "Bun 1.4.4",
+	"scope": "Read-only investigation. Experiments compile the core in memory; production source files were not edited.",
+	"parameters": {
+		"algorithm": "argon2id",
+		"version": 19,
+		"memoryKiB": 65536,
+		"passes": 3,
+		"parallelism": 4,
+		"outputBytes": 32,
+		"calls": 10
+	},
+	"measurement": "RSS sampled every 5 ms and at each call completion. Each experiment runs in a separate process. Median excludes the first two calls.",
+	"reference": {
+		"implementation": "Node v26.12.0 node:crypto.argon2Sync",
+		"keyHex": "c823ecd634dfd55eab0cd1ca70929f54dff1160c761a37bc3aba38a4c847386c"
+	},
+	"sourceHashes": [
+		{
+			"path": "src/kdf/argon2-core.ts",
+			"sha256": "16db5eb7fc926260f09afd10b4a5b0a1c850ba5d11521fc6cf3cd11416c6a106"
+		},
+		{
+			"path": "src/kdf/argon2-arithmetic.ts",
+			"sha256": "5d1097f6a527148c982ab1dd9b30529a3d102bcbc4771d25dc7f68c7896e040b"
+		}
+	],
+	"experiments": {
+		"original": {
+			"runtime": "Bun 1.4.4",
+			"experiment": "unmodified core compiled in-memory through Bun.Transpiler",
+			"key": "c823ecd634dfd55eab0cd1ca70929f54dff1160c761a37bc3aba38a4c847386c",
+			"rows": [
+				{
+					"stage": "baseline",
+					"ms": 0,
+					"rssMiB": 25.140625,
+					"sampledPeakMiB": 25.140625,
+					"externalMiB": 0.015745162963867188,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "call-1",
+					"ms": 987.603134,
+					"rssMiB": 102.3203125,
+					"sampledPeakMiB": 116.00390625,
+					"externalMiB": 64.30889320373535,
+					"uint32Arrays": 47
+				},
+				{
+					"stage": "call-2",
+					"ms": 946.265701,
+					"rssMiB": 169.01171875,
+					"sampledPeakMiB": 170.33984375,
+					"externalMiB": 128.31554126739502,
+					"uint32Arrays": 105
+				},
+				{
+					"stage": "call-3",
+					"ms": 920.2052329999999,
+					"rssMiB": 233.4921875,
+					"sampledPeakMiB": 249.35546875,
+					"externalMiB": 192.3712673187256,
+					"uint32Arrays": 114
+				},
+				{
+					"stage": "call-4",
+					"ms": 896.742131,
+					"rssMiB": 101.73828125,
+					"sampledPeakMiB": 299.81640625,
+					"externalMiB": 64.42118453979492,
+					"uint32Arrays": 94
+				},
+				{
+					"stage": "call-5",
+					"ms": 912.9475289999996,
+					"rssMiB": 102.41015625,
+					"sampledPeakMiB": 299.81640625,
+					"externalMiB": 64.42119789123535,
+					"uint32Arrays": 81
+				},
+				{
+					"stage": "call-6",
+					"ms": 901.9360790000001,
+					"rssMiB": 103.04296875,
+					"sampledPeakMiB": 299.81640625,
+					"externalMiB": 64.4207763671875,
+					"uint32Arrays": 79
+				},
+				{
+					"stage": "call-7",
+					"ms": 904.2323399999996,
+					"rssMiB": 103.859375,
+					"sampledPeakMiB": 299.81640625,
+					"externalMiB": 64.42745018005371,
+					"uint32Arrays": 65
+				},
+				{
+					"stage": "call-8",
+					"ms": 925.7568029999993,
+					"rssMiB": 168.6328125,
+					"sampledPeakMiB": 299.81640625,
+					"externalMiB": 0.3431711196899414,
+					"uint32Arrays": 111
+				},
+				{
+					"stage": "call-9",
+					"ms": 899.942427,
+					"rssMiB": 261.453125,
+					"sampledPeakMiB": 299.81640625,
+					"externalMiB": 0.38256359100341797,
+					"uint32Arrays": 235
+				},
+				{
+					"stage": "call-10",
+					"ms": 905.3450479999992,
+					"rssMiB": 172.671875,
+					"sampledPeakMiB": 311.890625,
+					"externalMiB": 128.428973197937,
+					"uint32Arrays": 56
+				},
+				{
+					"stage": "after-gc",
+					"ms": 0,
+					"rssMiB": 34.9140625,
+					"sampledPeakMiB": 311.890625,
+					"externalMiB": 0.4265556335449219,
+					"uint32Arrays": 0
+				}
+			],
+			"summary": {
+				"sampledPeakRssMiB": 311.890625,
+				"medianMsExcludingFirstTwo": 904.7886939999994,
+				"calls": 10,
+				"keyMatchesNodeReference": true
+			}
+		},
+		"detach": {
+			"runtime": "Bun 1.4.4",
+			"experiment": "in-memory core transform: zero matrix, then transfer its buffer to zero bytes",
+			"key": "c823ecd634dfd55eab0cd1ca70929f54dff1160c761a37bc3aba38a4c847386c",
+			"rows": [
+				{
+					"stage": "baseline",
+					"ms": 0,
+					"rssMiB": 24.69140625,
+					"sampledPeakMiB": 24.69140625,
+					"externalMiB": 0.01577472686767578,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "call-1",
+					"ms": 984.8228770000001,
+					"rssMiB": 101.98828125,
+					"sampledPeakMiB": 101.98828125,
+					"externalMiB": 128.30963134765625,
+					"uint32Arrays": 49
+				},
+				{
+					"stage": "call-2",
+					"ms": 963.691952,
+					"rssMiB": 105.203125,
+					"sampledPeakMiB": 106.41015625,
+					"externalMiB": 192.34612560272217,
+					"uint32Arrays": 107
+				},
+				{
+					"stage": "call-3",
+					"ms": 923.7055940000002,
+					"rssMiB": 105.01171875,
+					"sampledPeakMiB": 121.03515625,
+					"externalMiB": 256.40496826171875,
+					"uint32Arrays": 113
+				},
+				{
+					"stage": "call-4",
+					"ms": 918.3720120000003,
+					"rssMiB": 105.2109375,
+					"sampledPeakMiB": 124.078125,
+					"externalMiB": 64.26165390014648,
+					"uint32Arrays": 119
+				},
+				{
+					"stage": "call-5",
+					"ms": 1009.9984829999999,
+					"rssMiB": 134.015625,
+					"sampledPeakMiB": 134.015625,
+					"externalMiB": 128.3012294769287,
+					"uint32Arrays": 243
+				},
+				{
+					"stage": "call-6",
+					"ms": 913.0649800000001,
+					"rssMiB": 110.8984375,
+					"sampledPeakMiB": 140.734375,
+					"externalMiB": 128.43186473846436,
+					"uint32Arrays": 101
+				},
+				{
+					"stage": "call-7",
+					"ms": 908.1798199999994,
+					"rssMiB": 111.578125,
+					"sampledPeakMiB": 140.734375,
+					"externalMiB": 192.4386911392212,
+					"uint32Arrays": 101
+				},
+				{
+					"stage": "call-8",
+					"ms": 899.0577370000001,
+					"rssMiB": 105.6953125,
+					"sampledPeakMiB": 140.734375,
+					"externalMiB": 128.4371852874756,
+					"uint32Arrays": 67
+				},
+				{
+					"stage": "call-9",
+					"ms": 899.934432,
+					"rssMiB": 105.1171875,
+					"sampledPeakMiB": 140.734375,
+					"externalMiB": 128.43717861175537,
+					"uint32Arrays": 61
+				},
+				{
+					"stage": "call-10",
+					"ms": 914.5172659999989,
+					"rssMiB": 104.5078125,
+					"sampledPeakMiB": 140.734375,
+					"externalMiB": 128.43718433380127,
+					"uint32Arrays": 51
+				},
+				{
+					"stage": "after-gc",
+					"ms": 0,
+					"rssMiB": 35.59375,
+					"sampledPeakMiB": 140.734375,
+					"externalMiB": 0.43593692779541016,
+					"uint32Arrays": 0
+				}
+			],
+			"summary": {
+				"sampledPeakRssMiB": 140.734375,
+				"medianMsExcludingFirstTwo": 913.7911229999995,
+				"calls": 10,
+				"keyMatchesNodeReference": true
+			}
+		},
+		"weak_pool": {
+			"runtime": "Bun 1.4.4",
+			"experiment": "in-memory core transform: bounded weak-reference pool of wiped matrices, mirroring the WASM oracle",
+			"key": "c823ecd634dfd55eab0cd1ca70929f54dff1160c761a37bc3aba38a4c847386c",
+			"rows": [
+				{
+					"stage": "baseline",
+					"ms": 0,
+					"rssMiB": 25.1171875,
+					"sampledPeakMiB": 25.1171875,
+					"externalMiB": 0.016210556030273438,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "call-1",
+					"ms": 980.848023,
+					"rssMiB": 101.46875,
+					"sampledPeakMiB": 102.1796875,
+					"externalMiB": 64.3113431930542,
+					"uint32Arrays": 49
+				},
+				{
+					"stage": "call-2",
+					"ms": 914.320045,
+					"rssMiB": 105.8671875,
+					"sampledPeakMiB": 132.10546875,
+					"externalMiB": 64.32247734069824,
+					"uint32Arrays": 104
+				},
+				{
+					"stage": "call-3",
+					"ms": 894.3782330000001,
+					"rssMiB": 105.5625,
+					"sampledPeakMiB": 133.203125,
+					"externalMiB": 64.37784481048584,
+					"uint32Arrays": 105
+				},
+				{
+					"stage": "call-4",
+					"ms": 871.9954290000001,
+					"rssMiB": 105.1015625,
+					"sampledPeakMiB": 133.203125,
+					"externalMiB": 64.380051612854,
+					"uint32Arrays": 110
+				},
+				{
+					"stage": "call-5",
+					"ms": 915.796867,
+					"rssMiB": 105.80859375,
+					"sampledPeakMiB": 133.203125,
+					"externalMiB": 64.38011837005615,
+					"uint32Arrays": 103
+				},
+				{
+					"stage": "call-6",
+					"ms": 875.5051659999999,
+					"rssMiB": 106.03125,
+					"sampledPeakMiB": 133.203125,
+					"externalMiB": 64.3834400177002,
+					"uint32Arrays": 106
+				},
+				{
+					"stage": "call-7",
+					"ms": 884.2997050000004,
+					"rssMiB": 107.01171875,
+					"sampledPeakMiB": 133.2890625,
+					"externalMiB": 64.39017486572266,
+					"uint32Arrays": 105
+				},
+				{
+					"stage": "call-8",
+					"ms": 885.0378699999992,
+					"rssMiB": 108.65234375,
+					"sampledPeakMiB": 133.54296875,
+					"externalMiB": 64.3960132598877,
+					"uint32Arrays": 96
+				},
+				{
+					"stage": "call-9",
+					"ms": 873.4889819999999,
+					"rssMiB": 132.76171875,
+					"sampledPeakMiB": 133.54296875,
+					"externalMiB": 64.39608001708984,
+					"uint32Arrays": 101
+				},
+				{
+					"stage": "call-10",
+					"ms": 885.1018000000004,
+					"rssMiB": 109.40234375,
+					"sampledPeakMiB": 133.54296875,
+					"externalMiB": 64.39614677429199,
+					"uint32Arrays": 94
+				},
+				{
+					"stage": "after-gc",
+					"ms": 0,
+					"rssMiB": 35.42578125,
+					"sampledPeakMiB": 133.54296875,
+					"externalMiB": 0.4350776672363281,
+					"uint32Arrays": 0
+				}
+			],
+			"summary": {
+				"sampledPeakRssMiB": 133.54296875,
+				"medianMsExcludingFirstTwo": 884.6687874999998,
+				"calls": 10,
+				"keyMatchesNodeReference": true
+			}
+		}
+	},
+	"controls": {
+		"sequential_public_api": {
+			"runtime": "Bun 1.4.4",
+			"input": {
+				"memoryKiB": 65536,
+				"passes": 3,
+				"parallelism": 4
+			},
+			"rows": [
+				{
+					"stage": "baseline",
+					"rssMiB": 19.8984375,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 0.6220703125,
+					"externalMiB": 0,
+					"arrayBuffersMiB": 0,
+					"jscHeapMiB": 0.1735849380493164,
+					"jscExtraMiB": 0.021943092346191406,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "call-1-1025ms",
+					"rssMiB": 99.4453125,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.53430557250977,
+					"externalMiB": 64.3130874633789,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.5353775024414,
+					"jscExtraMiB": 64.3130874633789,
+					"uint32Arrays": 10
+				},
+				{
+					"stage": "call-2-963ms",
+					"rssMiB": 164.8671875,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 128.55276584625244,
+					"externalMiB": 128.32050037384033,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 128.55383777618408,
+					"jscExtraMiB": 128.32050037384033,
+					"uint32Arrays": 111
+				},
+				{
+					"stage": "call-3-947ms",
+					"rssMiB": 259.23828125,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 128.56309986114502,
+					"externalMiB": 128.36828517913818,
+					"arrayBuffersMiB": 0.03939247131347656,
+					"jscHeapMiB": 128.6024923324585,
+					"jscExtraMiB": 128.36828517913818,
+					"uint32Arrays": 140
+				},
+				{
+					"stage": "call-4-933ms",
+					"rssMiB": 232.5625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 192.60613250732422,
+					"externalMiB": 192.36149215698242,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 192.60720443725586,
+					"jscExtraMiB": 192.36149215698242,
+					"uint32Arrays": 119
+				},
+				{
+					"stage": "call-5-953ms",
+					"rssMiB": 99.7890625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.60934734344482,
+					"externalMiB": 64.38463497161865,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.61041927337646,
+					"jscExtraMiB": 64.38463497161865,
+					"uint32Arrays": 97
+				},
+				{
+					"stage": "call-6-950ms",
+					"rssMiB": 101.078125,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.60781288146973,
+					"externalMiB": 64.38415336608887,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.60888481140137,
+					"jscExtraMiB": 64.38415336608887,
+					"uint32Arrays": 85
+				},
+				{
+					"stage": "call-7-946ms",
+					"rssMiB": 102.140625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.62393856048584,
+					"externalMiB": 64.39849376678467,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.62501049041748,
+					"jscExtraMiB": 64.39849376678467,
+					"uint32Arrays": 73
+				},
+				{
+					"stage": "call-8-946ms",
+					"rssMiB": 102.46484375,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.62736797332764,
+					"externalMiB": 64.40000057220459,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.62843990325928,
+					"jscExtraMiB": 64.40000057220459,
+					"uint32Arrays": 77
+				},
+				{
+					"stage": "call-9-943ms",
+					"rssMiB": 102.6328125,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.62907314300537,
+					"externalMiB": 64.40324687957764,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.63014507293701,
+					"jscExtraMiB": 64.40324687957764,
+					"uint32Arrays": 73
+				},
+				{
+					"stage": "call-10-944ms",
+					"rssMiB": 101.47265625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.63108825683594,
+					"externalMiB": 64.40326309204102,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.63216018676758,
+					"jscExtraMiB": 64.40326309204102,
+					"uint32Arrays": 69
+				},
+				{
+					"stage": "call-11-942ms",
+					"rssMiB": 100.8125,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.6294641494751,
+					"externalMiB": 64.40327167510986,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.63053607940674,
+					"jscExtraMiB": 64.40327167510986,
+					"uint32Arrays": 65
+				},
+				{
+					"stage": "call-12-938ms",
+					"rssMiB": 101.1640625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.63218116760254,
+					"externalMiB": 64.40377616882324,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.63325309753418,
+					"jscExtraMiB": 64.40377616882324,
+					"uint32Arrays": 61
+				},
+				{
+					"stage": "call-13-945ms",
+					"rssMiB": 101.171875,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.63046932220459,
+					"externalMiB": 64.40378856658936,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.63154125213623,
+					"jscExtraMiB": 64.40378856658936,
+					"uint32Arrays": 57
+				},
+				{
+					"stage": "call-14-945ms",
+					"rssMiB": 101.3671875,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.63176727294922,
+					"externalMiB": 64.40409469604492,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.63283920288086,
+					"jscExtraMiB": 64.40409469604492,
+					"uint32Arrays": 47
+				},
+				{
+					"stage": "call-15-942ms",
+					"rssMiB": 101.33203125,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 64.63067722320557,
+					"externalMiB": 64.4037218093872,
+					"arrayBuffersMiB": 0.001071929931640625,
+					"jscHeapMiB": 64.6317491531372,
+					"jscExtraMiB": 64.4037218093872,
+					"uint32Arrays": 43
+				},
+				{
+					"stage": "after-full-gc",
+					"rssMiB": 33.4765625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 0.6218185424804688,
+					"externalMiB": 0.40267181396484375,
+					"arrayBuffersMiB": 0,
+					"jscHeapMiB": 0.6218185424804688,
+					"jscExtraMiB": 0.40267181396484375,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "after-idle",
+					"rssMiB": 33.4765625,
+					"peakRssMiB": 866.83203125,
+					"heapUsedMiB": 0.6220321655273438,
+					"externalMiB": 0.42263031005859375,
+					"arrayBuffersMiB": 0,
+					"jscHeapMiB": 0.6419906616210938,
+					"jscExtraMiB": 0.42263031005859375,
+					"uint32Arrays": 0
+				}
+			]
+		},
+		"full_gc_between_calls": {
+			"runtime": "Bun 1.4.4",
+			"rows": [
+				{
+					"stage": "baseline",
+					"ms": 0,
+					"rssMiB": 20.15234375,
+					"sampledPeakMiB": 19.96484375,
+					"externalMiB": 0.019868850708007812,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "derive-1",
+					"ms": 1009.823989,
+					"rssMiB": 100.76953125,
+					"sampledPeakMiB": 101.01171875,
+					"externalMiB": 64.31321334838867,
+					"uint32Arrays": 10
+				},
+				{
+					"stage": "gc-1",
+					"ms": 0,
+					"rssMiB": 32.33203125,
+					"sampledPeakMiB": 101.01171875,
+					"externalMiB": 0.31612110137939453,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "derive-2",
+					"ms": 938.921388,
+					"rssMiB": 102.03125,
+					"sampledPeakMiB": 102.56640625,
+					"externalMiB": 64.34883403778076,
+					"uint32Arrays": 15
+				},
+				{
+					"stage": "gc-2",
+					"ms": 0,
+					"rssMiB": 97.4375,
+					"sampledPeakMiB": 102.56640625,
+					"externalMiB": 64.34977149963379,
+					"uint32Arrays": 6
+				},
+				{
+					"stage": "derive-3",
+					"ms": 926.3535670000001,
+					"rssMiB": 131.265625,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 0.38935089111328125,
+					"uint32Arrays": 124
+				},
+				{
+					"stage": "gc-3",
+					"ms": 0,
+					"rssMiB": 97.53125,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 64.36898231506348,
+					"uint32Arrays": 6
+				},
+				{
+					"stage": "derive-4",
+					"ms": 933.8096320000004,
+					"rssMiB": 130.515625,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 0.408721923828125,
+					"uint32Arrays": 124
+				},
+				{
+					"stage": "gc-4",
+					"ms": 0,
+					"rssMiB": 97.1796875,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 64.38125419616699,
+					"uint32Arrays": 6
+				},
+				{
+					"stage": "derive-5",
+					"ms": 955.3100199999999,
+					"rssMiB": 130.59765625,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 0.42066192626953125,
+					"uint32Arrays": 124
+				},
+				{
+					"stage": "gc-5",
+					"ms": 0,
+					"rssMiB": 96.44140625,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 64.38077926635742,
+					"uint32Arrays": 6
+				},
+				{
+					"stage": "derive-6",
+					"ms": 938.3334829999994,
+					"rssMiB": 129.52734375,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 0.4201850891113281,
+					"uint32Arrays": 124
+				},
+				{
+					"stage": "gc-6",
+					"ms": 0,
+					"rssMiB": 96.6640625,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 64.38079071044922,
+					"uint32Arrays": 6
+				},
+				{
+					"stage": "derive-7",
+					"ms": 921.7614659999999,
+					"rssMiB": 129.6875,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 0.420196533203125,
+					"uint32Arrays": 124
+				},
+				{
+					"stage": "gc-7",
+					"ms": 0,
+					"rssMiB": 96.5078125,
+					"sampledPeakMiB": 130.140625,
+					"externalMiB": 64.3964729309082,
+					"uint32Arrays": 6
+				}
+			]
+		},
+		"plain_buffers": {
+			"runtime": "Bun 1.4.4",
+			"rows": [
+				{
+					"stage": "baseline",
+					"rssMiB": 18.27734375,
+					"externalMiB": 0.015184402465820312,
+					"uint32Arrays": 0
+				},
+				{
+					"stage": "allocation-1",
+					"rssMiB": 82.77734375,
+					"externalMiB": 0.015184402465820312,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-2",
+					"rssMiB": 146.71484375,
+					"externalMiB": 0.015184402465820312,
+					"uint32Arrays": 2
+				},
+				{
+					"stage": "allocation-3",
+					"rssMiB": 210.83984375,
+					"externalMiB": 0.017066001892089844,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-4",
+					"rssMiB": 210.83984375,
+					"externalMiB": 0.017066001892089844,
+					"uint32Arrays": 2
+				},
+				{
+					"stage": "allocation-5",
+					"rssMiB": 210.83984375,
+					"externalMiB": 0.017088890075683594,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-6",
+					"rssMiB": 210.83984375,
+					"externalMiB": 0.01710033416748047,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-7",
+					"rssMiB": 210.83984375,
+					"externalMiB": 0.017111778259277344,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-8",
+					"rssMiB": 210.83984375,
+					"externalMiB": 0.01712322235107422,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-9",
+					"rssMiB": 146.8125,
+					"externalMiB": 0.017134666442871094,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "allocation-10",
+					"rssMiB": 146.8125,
+					"externalMiB": 0.01714611053466797,
+					"uint32Arrays": 1
+				},
+				{
+					"stage": "after-full-gc",
+					"rssMiB": 18.9921875,
+					"externalMiB": 0.018178939819335938,
+					"uint32Arrays": 0
+				}
+			]
+		},
+		"detached_plain_buffers": {
+			"runtime": "Bun 1.4.4",
+			"rows": [
+				{
+					"stage": "baseline",
+					"rssMiB": 16.83984375,
+					"externalMiB": 0.015048980712890625
+				},
+				{
+					"stage": "allocation-1",
+					"rssMiB": 82.83984375,
+					"externalMiB": 64.01523208618164
+				},
+				{
+					"stage": "allocation-2",
+					"rssMiB": 82.97265625,
+					"externalMiB": 128.0154151916504
+				},
+				{
+					"stage": "allocation-3",
+					"rssMiB": 83.16015625,
+					"externalMiB": 64.01786231994629
+				},
+				{
+					"stage": "allocation-4",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01804542541504
+				},
+				{
+					"stage": "allocation-5",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01797676086426
+				},
+				{
+					"stage": "allocation-6",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01798820495605
+				},
+				{
+					"stage": "allocation-7",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01799964904785
+				},
+				{
+					"stage": "allocation-8",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01801109313965
+				},
+				{
+					"stage": "allocation-9",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01802253723145
+				},
+				{
+					"stage": "allocation-10",
+					"rssMiB": 83.16015625,
+					"externalMiB": 128.01803398132324
+				},
+				{
+					"stage": "after-full-gc",
+					"rssMiB": 19.62890625,
+					"externalMiB": 0.018853187561035156
+				}
+			]
+		}
+	},
+	"peak_counter_control": {
+		"description": "Parent touches 256 MiB and spawns a Bun child that only reads its memory statistics. Child maxRSS includes the pre-exec parent footprint.",
+		"parentRssMiB": 279.05859375,
+		"childRssMiB": 14.7890625,
+		"childReportedMaxRssMiB": 276.43359375
+	},
+	"conclusions": [
+		"The core allocates one 64 MiB matrix per invocation and zeros it in finally. Automatic collection timing can leave several old matrices resident.",
+		"Plain 64 MiB allocations reproduce the growth without Argon2. All observed Uint32Array instances disappear after final collection.",
+		"The WASM oracle already reuses wiped memories through a bounded weak-reference pool. An equivalent TypeScript experiment reduces the sampled process peak substantially.",
+		"process.resourceUsage().maxRSS can include memory from before exec in Bun children and should not alone define benchmark-only peak RSS."
+	],
+	"documentation": "https://bun.sh/docs/project/benchmarking",
+	"bunPR43328": {
+		"pullRequest": "https://github.com/oven-sh/bun/pull/43328",
+		"stateWhenChecked": "OPEN",
+		"binary": "/home/kjanat/.local/share/mise/shims/bun-f4c2efe04a33538639796314e739ba4f69e21cc8-pr43328",
+		"version": "1.4.3",
+		"peakCounterComparison": [
+			{
+				"runtime": "Bun 1.4.4",
+				"parentRssMiB": 278.14453125,
+				"childRssMiB": 14.8515625,
+				"childResourcePeakMiB": 276.26953125,
+				"childJscPeakMiB": 276.26953125
+			},
+			{
+				"runtime": "PR 43328",
+				"parentRssMiB": 293.33203125,
+				"childRssMiB": 29.09375,
+				"childResourcePeakMiB": 29.29296875,
+				"childJscPeakMiB": 29.29296875
+			}
+		],
+		"repeatedBufferComparison": [
+			{
+				"runtime": "Bun 1.4.4",
+				"baselineRssMiB": 16.9453125,
+				"sampledPeakRssMiB": 209.6953125,
+				"afterGcRssMiB": 17.8203125
+			},
+			{
+				"runtime": "PR 43328",
+				"baselineRssMiB": 29.86328125,
+				"sampledPeakRssMiB": 223.17578125,
+				"afterGcRssMiB": 30.88671875
+			}
+		],
+		"result": "The PR build corrects the inherited peak counter. The transient RSS growth across ten short-lived 64 MiB allocations still occurs."
+	}
+}

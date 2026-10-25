@@ -27,6 +27,32 @@ describe('TypeScript Argon2 against the reference WASM oracle', () => {
 
 	describe.each(['argon2d', 'argon2i', 'argon2id'] as const)('%s', (algorithm) => {
 		describe.each([0x10, 0x13] as const)('version %i', (version) => {
+			test('keeps concurrent derivations with matching matrix sizes independent', async () => {
+				const inputs = [1, 2, 3].map((byte) => ({
+					algorithm,
+					version,
+					memoryKiB: 64,
+					parallelism: 2,
+					passes: 2,
+					outputBytes: 32,
+					password: new Uint8Array(16).fill(byte),
+					salt: new Uint8Array(16).fill(byte + 10),
+				}));
+				const original = structuredClone(inputs);
+				const first = inputs[0];
+				if (first === undefined) throw new Error('Missing concurrency fixture');
+				await compare(first);
+				const expected = await Promise.all(
+					inputs.map((input) => deriveArgon2(input, { backend: wasmArgon2 })),
+				);
+				const actual = await Promise.all(
+					inputs.map((input) => deriveArgon2(input, { backend: 'portable' })),
+				);
+				expect(actual).toEqual(expected);
+				expect(actual.every((result) => result.ok)).toBe(true);
+				expect(inputs).toEqual(original);
+				await compare(first);
+			});
 			test.each([
 				// Minimum memory; first slice has no blocks left after initialization.
 				{ parallelism: 1, memoryKiB: 8, passes: 1, outputBytes: 4, inputBytes: 0 },

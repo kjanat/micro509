@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reproduce Argon2 performance comparisons with `bun run bench:argon2`, including
   TypeScript, the WASM oracle, native WebCrypto, and Node crypto. Reports include
   checked outputs, latency samples, throughput, event-loop delay, and baseline
-  and peak RSS from a separate process for each backend and workload.
+  and sampled peak RSS from a separate process for each backend and workload.
 - Derive Argon2d, Argon2i, and Argon2id keys with versions `0x10` and `0x13`
   across Bun, Node.js, Deno, browsers, and Cloudflare Workers. The complete
   Argon2 and BLAKE2b implementation is TypeScript. `micro509/kdf` selects
@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [#203](https://github.com/kjanat/micro509/issues/203)
 
 ### Changed
+
+- Reuse wiped TypeScript Argon2 matrices through a bounded pool of weak references,
+  reducing temporary memory growth across repeated derivations. Concurrent calls
+  own separate matrices.
+- Sample benchmark RSS directly to avoid inherited parent-process peaks. Harden
+  compiler-cache environment writes and hash metadata and contents through one
+  open file handle.
 
 - Cache TypeScript compiler bridge artifacts across installs and CI jobs, validating
   build inputs and outputs before reuse. Rename the shared CI action to `setup`.
