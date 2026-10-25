@@ -320,6 +320,10 @@ function resolveImportOptions(options: SshImportOptions): ResolvedImportOptions 
 	return { minRsaModulusBits, acceptCompressedEcPoints, rsaScheme, rsaHash };
 }
 
+function unhandledKey(value: never): never {
+	throw new Error(`Unhandled SSH key: ${String(value)}`);
+}
+
 function keyTypeOf(material: SshPublicMaterial): SshKeyType {
 	switch (material.kind) {
 		case 'rsa':
@@ -328,10 +332,8 @@ function keyTypeOf(material: SshPublicMaterial): SshKeyType {
 			return 'ssh-ed25519';
 		case 'ecdsa':
 			return `ecdsa-sha2-${CURVES[material.curve].identifier}`;
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -347,10 +349,8 @@ function algorithmOf(material: SshPublicMaterial): SshKeyAlgorithm {
 			return { kind: 'ecdsa', curve: material.curve };
 		case 'ed25519':
 			return { kind: 'ed25519' };
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -478,10 +478,8 @@ function decodePublicBlob(blob: Uint8Array, options: ResolvedImportOptions): Ssh
 			material = readEcdsaPublic(reader, ECDSA_KEY_TYPE_CURVES[keyType], options);
 			break;
 		}
-		default: {
-			const _exhaustive: never = keyType;
-			throw new Error(`Unhandled SSH key type: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(keyType);
 	}
 	if (reader.remaining() !== 0) {
 		return sshFail('malformed', 'SSH public key has trailing data');
@@ -506,10 +504,8 @@ function encodePublicBlob(material: SshPublicMaterial): Uint8Array {
 				sshTextString(CURVES[material.curve].identifier),
 				sshString(ecPoint(material)),
 			]);
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -530,10 +526,8 @@ function publicJwk(material: SshPublicMaterial): JsonWebKey {
 			};
 		case 'ed25519':
 			return { kty: 'OKP', crv: 'Ed25519', x: toBase64Url(material.x) };
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -560,10 +554,8 @@ function privateJwk(material: SshPrivateMaterial): JsonWebKey {
 			};
 		case 'ed25519':
 			return { ...publicJwk(material.pub), d: toBase64Url(material.seed) };
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -580,10 +572,8 @@ function importInputFor(
 			return { kind: 'ecdsa', curve: material.curve };
 		case 'ed25519':
 			return { kind: 'ed25519' };
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -600,10 +590,8 @@ function signParams(
 			return { name: 'ECDSA', hash: CURVES[material.curve].hash };
 		case 'ed25519':
 			return { name: 'Ed25519' };
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
@@ -737,10 +725,8 @@ function readPrivateMaterial(
 			}
 			return { kind: 'ecdsa', pub, d };
 		}
-		default: {
-			const _exhaustive: never = envelopeType;
-			throw new Error(`Unhandled SSH key type: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(envelopeType);
 	}
 }
 
@@ -1138,10 +1124,8 @@ function privateFields(material: SshPublicMaterial, jwk: JsonWebKey): Uint8Array
 				sshString(material.x),
 				sshString(concatBytes([jwkBytes(jwk, 'd'), material.x])),
 			]);
-		default: {
-			const _exhaustive: never = material;
-			throw new Error(`Unhandled SSH key kind: ${String(_exhaustive)}`);
-		}
+		default:
+			return unhandledKey(material);
 	}
 }
 
