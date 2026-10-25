@@ -21,7 +21,6 @@
 		"include": [
 			"src/**/*.ts",
 			"src/**/*.json",
-			"src/**/*.wasm",
 			"package.json",
 			"LICENSE",
 			"README.md",

@@ -10,9 +10,10 @@ This directory owns reusable CI building blocks, not full workflow policy. Keep 
 
 ```tree
 actions/
+├── cache-tsc/         # compiler artifact restore/save
 ├── release-validate/  # manifest/tag consistency gate for publish flow
 ├── setup-openssl/     # pinned OpenSSL differential oracle from ghcr.io/kjanat/openssl-prebuilt
-└── setup-ts/          # shared Bun/Node/Deno runtime bootstrap
+└── setup/             # shared Bun/Node/Deno runtime bootstrap
 ```
 
 ## WHERE TO LOOK
@@ -20,14 +21,14 @@ actions/
 | Task             | Location                                                      | Notes                                                 |
 | ---------------- | ------------------------------------------------------------- | ----------------------------------------------------- |
 | Release gating   | `release-validate/action.yml`, `release-validate/validate.sh` | checks `package.json`, `jsr.json`, and tag alignment  |
-| Runtime setup    | `setup-ts/action.yml`                                         | installs Bun by default; Node/Deno optional           |
+| Runtime setup    | `setup/action.yml`                                            | installs Bun by default; Node/Deno optional           |
 | OpenSSL oracle   | `setup-openssl/action.yml`                                    | installs a build published by `workflows/openssl.yml` |
 | Action consumers | `.github/workflows/`                                          | publish, docs deploy, and preview flows wire these in |
 
 ## CONVENTIONS
 
 - Keep composite actions small and reusable; workflow-specific branching belongs in the workflow file unless reused elsewhere.
-- Shell steps must be `bash` + `set -euo pipefail` and emit outputs only through `GITHUB_OUTPUT`.
+- Shell steps use `shell: "bash -euo pipefail {0}"`; action outputs go through `GITHUB_OUTPUT`.
 - Prefer explicit inputs and outputs over hard-coded repo state.
 - Treat `package.json` and `jsr.json` version parity as a release invariant.
 

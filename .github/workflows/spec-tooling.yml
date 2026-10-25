@@ -4,7 +4,8 @@ on:
     paths: &PATHS
       - .claude/**
       - .github/workflows/spec-tooling.yml
-      - .github/actions/setup-ts/**
+      - .github/actions/setup/**
+      - .github/actions/cache-tsc/**
       - scripts/spec/**
       - scripts/fetch-spec.bun.ts
       - test/spec-*.test.ts
@@ -20,6 +21,8 @@ permissions: { contents: read }
 concurrency:
   group: spec-tooling-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+defaults: { run: { shell: "bash -euo pipefail {0}" } }
+
 jobs:
   test:
     name: Spec tooling regression
@@ -28,9 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
+      - uses: $/.github/actions/setup
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: bun install --frozen-lockfile
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
       - name: Build package
         run: run build
       - name: Reader, gate, research and MS integration regressions

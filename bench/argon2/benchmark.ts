@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /** Reproducible Argon2 latency, throughput, and event-loop benchmark. */
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { argon2, argon2Sync, createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { cli, command, flag } from 'dreamcli';
 import type { Argon2Input, Argon2Result } from '#micro509/kdf';
@@ -14,6 +16,9 @@ import { wasmArgon2 } from '#test/oracles/argon2/wasm';
 const algorithms = ['argon2id', 'argon2i', 'argon2d'] as const;
 const backends = ['typescript', 'wasm', 'native', 'node'] as const;
 const nodeArgon2 = promisify(argon2);
+const execute = promisify(execFile);
+const worker = process.env.MICRO509_ARGON2_BENCH_WORKER === '1';
+const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
 const root = new URL('../../', import.meta.url);
 
 async function implementationHashes(source = false) {
@@ -101,6 +106,7 @@ async function benchmark(
 	samples: number,
 	concurrency: number,
 ) {
+	const baselineRssMiB = process.memoryUsage().rss / 1048576;
 	let firstBatch: Measurement | undefined;
 	for (let index = 0; index < warmups; index++) {
 		const result = await measure(derive, expected, concurrency);
@@ -123,6 +129,8 @@ async function benchmark(
 			: (sorted[middle] ?? 0);
 	return {
 		supported: true,
+		baselineRssMiB,
+		processPeakRssMiB: process.resourceUsage().maxRSS / 1024,
 		firstBatchMs: firstBatch?.batchMs,
 		medianMs,
 		minMs: sorted[0],
@@ -135,8 +143,139 @@ async function benchmark(
 	};
 }
 
+function numericArray(value: unknown): number[] {
+	assert.ok(
+		Array.isArray(value) &&
+			value.every((item) => typeof item === 'number' && Number.isFinite(item)),
+	);
+	return value;
+}
+
+async function isolated(
+	algorithm: string,
+	backend: string,
+	expected: Uint8Array,
+	flags: {
+		'memory-kib': number;
+		passes: number;
+		lanes: number;
+		'output-bytes': number;
+		warmups: number;
+		samples: number;
+		concurrency: number;
+		source: boolean;
+	},
+) {
+	const args = [
+		...process.execArgv,
+		...(typeof Bun === 'undefined' ? [] : ['--bun']),
+		fileURLToPath(import.meta.url),
+		'--algorithm',
+		algorithm,
+		'--backend',
+		backend,
+		'--memory-kib',
+		String(flags['memory-kib']),
+		'--passes',
+		String(flags.passes),
+		'--lanes',
+		String(flags.lanes),
+		'--output-bytes',
+		String(flags['output-bytes']),
+		'--warmups',
+		String(flags.warmups),
+		'--samples',
+		String(flags.samples),
+		'--concurrency',
+		String(flags.concurrency),
+		'--json',
+	];
+	if (flags.source) args.push('--source');
+	const { stdout, stderr } = await execute(process.execPath, args, {
+		env: {
+			...process.env,
+			MICRO509_ARGON2_BENCH_WORKER: '1',
+			MICRO509_ARGON2_EXPECTED: Buffer.from(expected).toString('hex'),
+		},
+		maxBuffer: 8 * 1024 * 1024,
+	});
+	if (stderr) process.stderr.write(stderr);
+	const report: unknown = JSON.parse(stdout);
+	assert.ok(report && typeof report === 'object' && 'results' in report);
+	assert.ok(
+		'environment' in report && report.environment && typeof report.environment === 'object',
+	);
+	assert.ok('runtime' in report.environment);
+	assert.equal(
+		report.environment.runtime,
+		runtime,
+		'Benchmark worker must use the requested runtime',
+	);
+	assert.ok(Array.isArray(report.results) && report.results.length === 1);
+	const result: unknown = report.results[0];
+	assert.ok(result && typeof result === 'object' && 'supported' in result);
+	assert.ok(
+		'algorithm' in result &&
+			result.algorithm === algorithm &&
+			'backend' in result &&
+			result.backend === backend,
+	);
+	if (result.supported === false) return { supported: false } as const;
+	assert.equal(result.supported, true);
+	assert.ok('firstBatchMs' in result && typeof result.firstBatchMs === 'number');
+	assert.ok('medianMs' in result && typeof result.medianMs === 'number');
+	assert.ok('minMs' in result && typeof result.minMs === 'number');
+	assert.ok('maxMs' in result && typeof result.maxMs === 'number');
+	assert.ok('maxTimerDelayMs' in result && typeof result.maxTimerDelayMs === 'number');
+	assert.ok('derivationsPerSecond' in result && typeof result.derivationsPerSecond === 'number');
+	assert.ok('baselineRssMiB' in result && typeof result.baselineRssMiB === 'number');
+	assert.ok('processPeakRssMiB' in result && typeof result.processPeakRssMiB === 'number');
+	assert.ok('samplesMs' in result && 'batchMs' in result);
+	return {
+		supported: true,
+		firstBatchMs: result.firstBatchMs,
+		medianMs: result.medianMs,
+		minMs: result.minMs,
+		maxMs: result.maxMs,
+		maxTimerDelayMs: result.maxTimerDelayMs,
+		derivationsPerSecond: result.derivationsPerSecond,
+		baselineRssMiB: result.baselineRssMiB,
+		processPeakRssMiB: result.processPeakRssMiB,
+		samplesMs: numericArray(result.samplesMs),
+		batchMs: numericArray(result.batchMs),
+	} as const;
+}
+
+async function deriveWith(
+	backend: (typeof backends)[number],
+	input: Argon2Input,
+	deriveArgon2: typeof import('#micro509/kdf').deriveArgon2,
+): Promise<Argon2Result> {
+	if (backend === 'node')
+		return {
+			ok: true,
+			value: new Uint8Array(await nodeArgon2(input.algorithm, nativeParameters(input))),
+		};
+	return deriveArgon2(input, {
+		backend: backend === 'typescript' ? 'portable' : backend === 'wasm' ? wasmArgon2 : 'native',
+	});
+}
+
+function expectedKey(input: Argon2Input): Uint8Array {
+	const expected = worker
+		? new Uint8Array(Buffer.from(process.env.MICRO509_ARGON2_EXPECTED ?? '', 'hex'))
+		: new Uint8Array(argon2Sync(input.algorithm, nativeParameters(input)));
+	assert.equal(expected.length, input.outputBytes);
+	return expected;
+}
+
+function summary(result: Awaited<ReturnType<typeof benchmark>>): string {
+	if (!result.supported) return 'unsupported';
+	return `${result.medianMs.toFixed(2)} ms, ${result.derivationsPerSecond.toFixed(2)}/s, max timer delay ${result.maxTimerDelayMs.toFixed(2)} ms, RSS ${result.baselineRssMiB.toFixed(1)} MiB baseline / ${result.processPeakRssMiB.toFixed(1)} MiB peak`;
+}
+
 const run = command('run')
-	.description('Compare checked Argon2 derivations; backends run sequentially')
+	.description('Compare checked Argon2 derivations in separate sequential processes')
 	.flag('algorithm', flag.enum(['all', ...algorithms]).default('all'))
 	.flag('backend', flag.enum(['all', ...backends]).default('all'))
 	.flag('memory-kib', flag.number({ int: true, min: 8, max: 262144 }).default(65536))
@@ -160,7 +299,6 @@ const run = command('run')
 			? await import('#micro509/kdf')
 			: await import('micro509/kdf');
 		const implementation = await implementationHashes(flags.source);
-		const runtime = typeof Bun === 'undefined' ? `Node ${process.version}` : `Bun ${Bun.version}`;
 		const parameters = {
 			version: 0x13,
 			memoryKiB: flags['memory-kib'],
@@ -188,34 +326,18 @@ const run = command('run')
 				password: new TextEncoder().encode('public benchmark input'),
 				salt: new Uint8Array(16).fill(2),
 			};
-			const expected = new Uint8Array(argon2Sync(algorithm, nativeParameters(input)));
+			const expected = expectedKey(input);
 			for (const backend of flags.backend === 'all' ? backends : [flags.backend]) {
-				const derive = async (): Promise<Argon2Result> =>
-					backend === 'node'
-						? {
-								ok: true,
-								value: new Uint8Array(await nodeArgon2(algorithm, nativeParameters(input))),
-							}
-						: deriveArgon2(input, {
-								backend:
-									backend === 'typescript'
-										? 'portable'
-										: backend === 'wasm'
-											? wasmArgon2
-											: 'native',
-							});
+				const derive = () => deriveWith(backend, input, deriveArgon2);
 				const result = {
 					algorithm,
 					backend,
-					...(await benchmark(derive, expected, flags.warmups, flags.samples, flags.concurrency)),
+					...(worker
+						? await benchmark(derive, expected, flags.warmups, flags.samples, flags.concurrency)
+						: await isolated(algorithm, backend, expected, flags)),
 				};
 				results.push(result);
-				if (!out.jsonMode)
-					out.log(
-						result.supported
-							? `${runtime} ${algorithm} ${backend}: ${result.medianMs.toFixed(2)} ms, ${result.derivationsPerSecond.toFixed(2)}/s, max timer delay ${result.maxTimerDelayMs.toFixed(2)} ms`
-							: `${runtime} ${algorithm} ${backend}: unsupported`,
-					);
+				if (!out.jsonMode) out.log(`${runtime} ${algorithm} ${backend}: ${summary(result)}`);
 			}
 		}
 		const report = { environment, parameters, results };

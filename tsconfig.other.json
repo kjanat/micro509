@@ -28,6 +28,7 @@
 	},
 	"include": [
 		"bench/argon2",
+		"tsc/*.ts",
 		".config",
 		".dprint.json",
 		"src",

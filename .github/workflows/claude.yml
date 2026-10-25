@@ -5,6 +5,8 @@ on:
   issues: { types: [opened, assigned] }
   pull_request_review: { types: [submitted] }
 permissions: { contents: read }
+defaults: { run: { shell: "bash -euo pipefail {0}" } }
+
 jobs:
   claude:
     if: |
@@ -24,15 +26,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
-      - { uses: $/.github/actions/setup-ts, id: setup-ts, with: { install-bun: "true", install-node: "true" } }
+      - { uses: $/.github/actions/setup, id: setup, with: { install-bun: "true", install-node: "true" } }
       - name: Install dependencies and build
         run: runner install -f build
+      - uses: $/.github/actions/cache-tsc
+        with: { operation: save }
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@93f0fe1f6f57c1c6047dddacd7d728ecec7f28a7 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          path_to_bun_executable: ${{ steps.setup-ts.outputs.bun-path }}
+          path_to_bun_executable: ${{ steps.setup.outputs.bun-path }}
           settings: ${{ vars.CLAUDE_SETTINGS }}
           additional_permissions: "actions: read"

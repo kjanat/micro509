@@ -9,13 +9,13 @@ mismatched keys fail the command; unsupported backends are reported explicitly.
 bun run build
 bun run build:argon2
 bun run bench:argon2 --output bench/argon2/results/node.json
-bun bench/argon2/benchmark.ts --output bench/argon2/results/bun.json
+bun --bun bench/argon2/benchmark.ts --output bench/argon2/results/bun.json
 ```
 
 Defaults match the guide: all three variants at version `0x13`, 64 MiB, three
 passes, four lanes, and a 32-byte output. Each backend gets two warm-up batches
-followed by five measured batches, with one derivation per batch. Backends and
-runtimes should run sequentially to avoid competing for CPU and memory bandwidth.
+followed by five measured batches, with one derivation per batch. Each backend/workload runs in a fresh process, sequentially. Run
+runtimes sequentially to avoid competing for CPU and memory bandwidth.
 
 For a focused iteration on the source:
 
@@ -30,7 +30,11 @@ retaining the readable progress lines.
 
 Reports record the runtime, CPU, platform, workload, SHA-256 hashes of the Argon2 modules,
 every latency sample, median and range, batch throughput, and the maximum lateness
-of a 5 ms timer. Call latency includes the normal API boundary, cooperative
+of a 5 ms timer. They also record baseline RSS before warm-ups and process peak
+RSS in MiB. The native reference key is computed in the parent, so its memory
+does not contribute to backend measurements. Peak RSS includes the worker runtime,
+module loading, warm-ups, and measured calls; it measures the whole process.
+Call latency includes the normal API boundary, cooperative
 scheduling, and memory cleanup. Correctness checks and the final timer observation
 are excluded. The first batch is also recorded separately; CLI startup is not timed.
 

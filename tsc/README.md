@@ -92,8 +92,20 @@ ships only the bundle in `dist/`, which runs on Node 24 and newer as well as Bun
 [`tsdown.config.ts`](../tsdown.config.ts) builds the packages as a `tsc/*` workspace next to
 micro509, each package's own `tsdown.config.ts` names its entries, and tsdown writes the
 `exports` and `bin` of every `package.json`. `build:tsc` builds the five packages alone.
-`bun install` runs `build:tsc` and then builds the native
-helper and both WebAssembly modules through the root `prepare` script. Each push to `master` or a pull request
+`bun install` builds the native helper, both WebAssembly modules, and their TypeScript
+bundles through `tsc/prepare.ts`. Subsequent installs verify the input and output
+hashes in `.cache/tsc/build` and reuse matching artifacts. Changes to compiler
+sources, Go modules, build configuration, the Bun lockfile, runtimes or Go
+toolchain trigger a rebuild. Missing or changed output files also trigger a rebuild.
+Delete `.cache/tsc/build` to force the next install to rebuild. Standalone package
+build commands and `build:tsc` continue to build directly.
+
+CI restores `tsc/*/bin`, `tsc/*/dist`, and the validation stamp before installation
+with `actions/cache/restore`, then saves successful builds with `actions/cache/save`.
+Keys separate runner platforms, architectures, image versions, runtimes, and build
+inputs. The preview publication workflow uses its existing read-only cache policy.
+
+Each push to `master` or a pull request
 publishes all five packages with their built binaries to [pkg.pr.new] through [`.github/workflows/pkg-pr-new.yml`][wf/pkg-pr-new].
 Under Cloudflare Workers Builds, where `WORKERS_CI` is set, `prepare` skips the Go builds and
 `@kjanat/tsc-bridge:fetch` downloads the native helper pkg.pr.new published for the commit, its

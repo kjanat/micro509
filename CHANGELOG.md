@@ -23,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reproduce Argon2 performance comparisons with `bun run bench:argon2`, including
   TypeScript, the WASM oracle, native WebCrypto, and Node crypto. Reports include
-  checked outputs, latency samples, throughput, and event-loop delay.
+  checked outputs, latency samples, throughput, event-loop delay, and baseline
+  and peak RSS from a separate process for each backend and workload.
 - Derive Argon2d, Argon2i, and Argon2id keys with versions `0x10` and `0x13`
   across Bun, Node.js, Deno, browsers, and Cloudflare Workers. The complete
   Argon2 and BLAKE2b implementation is TypeScript. `micro509/kdf` selects
@@ -35,13 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Cache TypeScript compiler bridge artifacts across installs and CI jobs, validating
+  build inputs and outputs before reuse. Rename the shared CI action to `setup`.
+
 - The key-derivation guide demonstrates encryption, a serialized JSON record,
   message recovery and rejection of modified ciphertext. Saved binary fields
   use base64url for compact, readable output. The docs build checks examples
   against the package declarations and runs the TypeScript Argon2 implementation.
 - Install Tombi in shared CI setup and resolve it through PATH for formatting.
-  Simplify the autofix workflow and update the OpenSSL workflow's Docker login
-  action to v4.7.0.
+  Simplify the autofix workflow.
 
 ## [0.17.0] - 2026-10-25
 

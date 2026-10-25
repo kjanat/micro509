@@ -1,0 +1,229 @@
+{
+	"environment": {
+		"runtime": "Bun 1.4.4",
+		"cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+		"platform": "linux",
+		"arch": "x64",
+		"date": "2026-10-25T22:31:45.218Z",
+		"packageVersion": "0.17.0",
+		"implementation": [
+			{
+				"path": "dist/kdf/argon2.js",
+				"sha256": "8b81c336d91509f9b6d7d286bf2d9858a1d23fa2b6ba635a5f9c7f5e72bb51a6"
+			},
+			{
+				"path": "dist/kdf/argon2-core.js",
+				"sha256": "708b524ffb9ab391c52d06f1a846211e15a558027adc61d9dcc99d9a95987086"
+			},
+			{
+				"path": "dist/kdf/argon2-arithmetic.js",
+				"sha256": "bd8df538637bf41d5e8ce8134d2ece5926aec4591c225b87b42d6c6a0b23a573"
+			},
+			{
+				"path": "dist/kdf/argon2-portable.js",
+				"sha256": "4108b9dbe4606d1b024e27fda03ee71dde238d8efad17d5fa0fe4fff03aa320e"
+			}
+		],
+		"warmups": 2,
+		"samples": 5,
+		"concurrency": 1
+	},
+	"parameters": {
+		"version": 19,
+		"memoryKiB": 65536,
+		"passes": 3,
+		"parallelism": 4,
+		"outputBytes": 32
+	},
+	"results": [
+		{
+			"algorithm": "argon2id",
+			"backend": "typescript",
+			"supported": true,
+			"firstBatchMs": 950.642242,
+			"medianMs": 914.5744359999994,
+			"minMs": 908.4155840000003,
+			"maxMs": 926.0104270000002,
+			"maxTimerDelayMs": 19.211283999999978,
+			"derivationsPerSecond": 1.091077105356763,
+			"baselineRssMiB": 35.68359375,
+			"processPeakRssMiB": 308.3125,
+			"samplesMs": [
+				922.5142940000001, 926.0104270000002, 914.5744359999994, 908.4155840000003,
+				911.0671510000002
+			],
+			"batchMs": [
+				922.5345329999998, 926.018302, 914.5808479999996, 908.4209929999997, 911.0728720000006
+			]
+		},
+		{
+			"algorithm": "argon2id",
+			"backend": "wasm",
+			"supported": true,
+			"firstBatchMs": 211.168451,
+			"medianMs": 171.34560900000008,
+			"minMs": 170.20705199999998,
+			"maxMs": 172.06361700000002,
+			"maxTimerDelayMs": 11.183492999999999,
+			"derivationsPerSecond": 5.837254573302748,
+			"baselineRssMiB": 35.37890625,
+			"processPeakRssMiB": 111.1796875,
+			"samplesMs": [
+				171.92771199999999, 170.96083699999997, 172.06361700000002, 171.34560900000008,
+				170.20705199999998
+			],
+			"batchMs": [
+				171.94548600000002, 170.968751, 172.07562900000005, 171.35417500000005, 170.22302100000002
+			]
+		},
+		{
+			"algorithm": "argon2id",
+			"backend": "native",
+			"supported": false
+		},
+		{
+			"algorithm": "argon2id",
+			"backend": "node",
+			"supported": true,
+			"firstBatchMs": 170.599789,
+			"medianMs": 143.209748,
+			"minMs": 142.346186,
+			"maxMs": 145.966954,
+			"maxTimerDelayMs": 1.0439870000000155,
+			"derivationsPerSecond": 6.962397673415116,
+			"baselineRssMiB": 35.625,
+			"processPeakRssMiB": 100.33984375,
+			"samplesMs": [145.966954, 142.67533500000002, 143.209748, 142.346186, 143.90442199999995],
+			"batchMs": [
+				145.975209, 142.68244800000002, 143.217762, 142.35381100000006, 143.91417899999988
+			]
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "typescript",
+			"supported": true,
+			"firstBatchMs": 947.194663,
+			"medianMs": 914.5359549999994,
+			"minMs": 910.3730229999999,
+			"maxMs": 917.3515539999999,
+			"maxTimerDelayMs": 22.014987000000474,
+			"derivationsPerSecond": 1.093603194467949,
+			"baselineRssMiB": 34.72265625,
+			"processPeakRssMiB": 267.6796875,
+			"samplesMs": [
+				910.3730229999999, 916.4101559999999, 917.3515539999999, 913.3186210000003,
+				914.5359549999994
+			],
+			"batchMs": [910.396187, 916.4164289999999, 917.3598990000005, 913.3250029999999, 914.544723]
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "wasm",
+			"supported": true,
+			"firstBatchMs": 205.3412,
+			"medianMs": 172.57570700000008,
+			"minMs": 170.615337,
+			"maxMs": 174.63239799999997,
+			"maxTimerDelayMs": 15.482242999999926,
+			"derivationsPerSecond": 5.7956850846352,
+			"baselineRssMiB": 35.30859375,
+			"processPeakRssMiB": 111.7890625,
+			"samplesMs": [
+				170.615337, 171.35771, 172.57570700000008, 173.48376199999996, 174.63239799999997
+			],
+			"batchMs": [
+				170.62479500000006, 171.3659859999999, 172.58583599999997, 173.49142600000005,
+				174.64273700000012
+			]
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "native",
+			"supported": false
+		},
+		{
+			"algorithm": "argon2i",
+			"backend": "node",
+			"supported": true,
+			"firstBatchMs": 175.04056400000002,
+			"medianMs": 143.464114,
+			"minMs": 142.47994699999998,
+			"maxMs": 145.70612300000005,
+			"maxTimerDelayMs": 0.9590969999999288,
+			"derivationsPerSecond": 6.959481273671369,
+			"baselineRssMiB": 35.49609375,
+			"processPeakRssMiB": 102.45703125,
+			"samplesMs": [
+				142.47994699999998, 143.821104, 142.94340599999998, 143.464114, 145.70612300000005
+			],
+			"batchMs": [
+				142.48709000000002, 143.82775700000002, 142.94779400000004, 143.468522, 145.71318699999995
+			]
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "typescript",
+			"supported": true,
+			"firstBatchMs": 942.630697,
+			"medianMs": 904.3719910000002,
+			"minMs": 901.2378749999998,
+			"maxMs": 908.2134889999998,
+			"maxTimerDelayMs": 21.673345000000154,
+			"derivationsPerSecond": 1.105337928164739,
+			"baselineRssMiB": 35.375,
+			"processPeakRssMiB": 330.33984375,
+			"samplesMs": [
+				904.3719910000002, 906.2449260000003, 901.2378749999998, 903.3850550000006,
+				908.2134889999998
+			],
+			"batchMs": [
+				904.3938509999998, 906.253252, 901.2443079999998, 903.3930309999996, 908.2190700000001
+			]
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "wasm",
+			"supported": true,
+			"firstBatchMs": 209.07484799999997,
+			"medianMs": 169.02275600000002,
+			"minMs": 165.30194999999992,
+			"maxMs": 171.58179999999993,
+			"maxTimerDelayMs": 10.54185700000005,
+			"derivationsPerSecond": 5.938704413052913,
+			"baselineRssMiB": 35.93359375,
+			"processPeakRssMiB": 111.16015625,
+			"samplesMs": [
+				169.02275600000002, 169.4235480000001, 165.30194999999992, 166.54352099999994,
+				171.58179999999993
+			],
+			"batchMs": [
+				169.03787399999993, 169.43153299999994, 165.31826999999998, 166.55033400000002,
+				171.59646700000008
+			]
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "native",
+			"supported": false
+		},
+		{
+			"algorithm": "argon2d",
+			"backend": "node",
+			"supported": true,
+			"firstBatchMs": 170.47700500000002,
+			"medianMs": 143.476406,
+			"minMs": 141.63596999999993,
+			"maxMs": 146.79997500000002,
+			"maxTimerDelayMs": 0.8421180000000277,
+			"derivationsPerSecond": 6.952576225880011,
+			"baselineRssMiB": 35.70703125,
+			"processPeakRssMiB": 102.45703125,
+			"samplesMs": [
+				146.79997500000002, 142.37426699999992, 143.476406, 144.827993, 141.63596999999993
+			],
+			"batchMs": [
+				146.808241, 142.38262300000008, 143.48468100000002, 144.83648900000003, 141.6458490000001
+			]
+		}
+	]
+}

@@ -1,20 +1,38 @@
-# yaml-language-server: $schema=https://cdn.jsdelivr.net/npm/@kjanat/actionlint@1.17.0/actionlint.schema.json
----
-config-variables: null
-config-secrets: null
-
-# Permissions assumed for a caller workflow that declares no "permissions:"
-# block at all. "restricted" (the default) assumes GitHub's restricted default
-# token.
-assume-default-permissions: permissive
-
-# Cache policies are enabled by default. Set a cache policy to false to disable it.
-# The remaining policies are opt-in repository conventions.
-policy:
-  cache-call-unrestricted: true
-  cache-operation: true
-  cache-write-untrusted: true
-  disallow-suppressions: true
-  require-commit-hash: true
-  require-job-timeout: true
-  require-permissions: true
+lint:
+  rules:
+    security:
+      cache-call-unrestricted:
+        options: null
+        level: on
+      cache-write-untrusted:
+        options: null
+        level: on
+    correctness:
+      cache-operation:
+        options: null
+        level: on
+      expression-reference:
+        level: default
+        options:
+          variables: null
+          secrets: null
+      workflow-call:
+        level: default
+        options:
+          default-permissions: permissive
+    policy:
+      disallow-suppressions:
+        options: null
+        level: on
+      require-commit-hash:
+        options: null
+        level: on
+      require-job-timeout:
+        options: null
+        level: on
+      require-permissions:
+        options: null
+        level: on
+plugins:
+  - ruff
+  - shellcheck

@@ -6,8 +6,9 @@ Existing JavaScript PKI packages tend to fall into three camps:
 heavyweight standards toolkits, older crypto kitchen sinks, or narrow
 parsing utilities.
 
-micro509 combines modern X.509/PKI workflows, zero dependencies, and typed
-results that let your code act on failures.
+micro509 aims at the practical middle: modern X.509/PKI workflows,
+pure WebCrypto, zero dependencies, and typed results that let your code
+act on failures instead of just logging them.
 
 That matters most during verification. A bare `false` does not tell you
 which certificate failed, whether the problem was the signature,
@@ -101,7 +102,7 @@ micro509 covers PKI surface that's hard to find in a single zero-dependency JS p
 ## Design principles
 
 - **Zero dependencies** — no transitive supply chain risk
-- **Portable crypto** — runs in Node, Bun, Deno, browsers, and Cloudflare Workers
+- **Pure WebCrypto** — no Node builtins in library code, runs in any modern runtime
 - **Narrow defaults, explicit escape hatches** — dangerous operations like CN fallback or self-signed leaf acceptance require opt-in
 - **No `any`, no type assertions, no non-null assertions** — discriminated unions and exhaustive checks throughout
 - **No runtime DI** — no `reflect-metadata`, no decorators, no side effects that break edge runtimes or tree-shaking

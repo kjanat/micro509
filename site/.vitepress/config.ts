@@ -426,9 +426,9 @@ export default defineConfig<DocsThemeConfig>({
 		await bundleLibrary({
 			config: false,
 			entry: Object.fromEntries(
-				Object.entries(repo.registry.exports).map(([subpath, source]) => {
+				Object.keys(repo.registry.exports).map((subpath) => {
 					const name = subpath === '.' ? 'index' : subpath.slice(2);
-					return [name, path.join(repoRoot, source)];
+					return [name, path.join(repoRoot, 'dist', `${name}.js`)];
 				}),
 			),
 			outDir: path.join(config.outDir, '_library', `@${nextRef}`),

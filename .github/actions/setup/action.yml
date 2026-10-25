@@ -1,5 +1,5 @@
-name: Setup Js Runtime
-description: Setup Deno, Node.js, and/or Bun runtimes
+name: Setup
+description: Set up runtimes, repository tools, and compiler artifact caching
 
 # pretty-yaml-ignore
 inputs:
@@ -62,5 +62,12 @@ runs:
     - name: Update npm
       id: update-npm
       if: ${{ inputs.install-node == 'true' && inputs.update-npm == 'true' }}
-      shell: bash
-      run: npm install -g npm@11 && echo "npm-version=$(npm --version)" >> "${GITHUB_OUTPUT}"
+      shell: "bash -euo pipefail {0}"
+      run: |
+        npm install -g npm@11
+        npm_version=$(npm --version)
+        echo "npm-version=${npm_version}" >> "${GITHUB_OUTPUT}"
+
+    - name: Restore compiler artifacts
+      if: inputs.install-bun == 'true' && inputs.install-node == 'true'
+      uses: $/.github/actions/cache-tsc

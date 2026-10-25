@@ -1,6 +1,6 @@
 # Runtime Support
 
-micro509 is ESM-only, side-effect-free, and has zero dependencies.
+micro509 is ESM-only, side-effect-free, and uses only WebCrypto APIs.
 
 ## Compatibility
 
@@ -33,7 +33,7 @@ _No_ Node.js builtins (`crypto`, `buffer`, `fs`, etc.) are used in library code.
 
 ## Tree-shaking
 
-Import from domain entrypoints to minimize bundle size. Certificate and key-format
+micro509 is fully tree-shakeable. Import from domain entrypoints to minimize bundle size. Certificate and key-format
 imports do not load Argon2:
 
 ```ts

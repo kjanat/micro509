@@ -1,0 +1,41 @@
+name: Cache compiler artifacts
+description: Restore or save the compiler binaries, Go runtimes, bundles, and validation stamp.
+inputs:
+  operation:
+    description: restore before installation, save after installation
+    default: restore
+runs:
+  using: composite
+  steps:
+    - name: Select compiler artifact cache
+      if: inputs.operation == 'restore'
+      shell: "bash -euo pipefail {0}"
+      env:
+        INPUT_HASH: ${{ hashFiles('tsc/**/*.go', 'tsc/*/go.mod', 'tsc/*/go.sum', 'tsc/*/src/**', 'tsc/*.ts', 'tsc/*/build.ts', 'tsc/*/package.json', 'tsc/*/tsconfig.json', 'tsc/*/tsdown.config.ts', 'go.work*', 'bun.lock', 'package.json', 'tsdown.config.ts', '.dprint.json', '.github/actions/cache-tsc/action.yml') }}
+      run: |
+        bun_version=$(bun --version)
+        node_version=$(node --version)
+        echo "TSC_ARTIFACT_CACHE_KEY=tsc-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS:-}-${ImageVersion:-}-${bun_version}-${node_version}-${INPUT_HASH}" >> "${GITHUB_ENV}"
+    - name: Restore compiler artifacts
+      id: restore
+      if: inputs.operation == 'restore'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ env.TSC_ARTIFACT_CACHE_KEY }}
+        path: &artifacts |
+          .cache/tsc
+          tsc/*/bin
+          tsc/*/dist
+    - name: Record cache result
+      if: inputs.operation == 'restore'
+      shell: "bash -euo pipefail {0}"
+      env:
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
+      run: |
+        echo "TSC_ARTIFACT_CACHE_HIT=${CACHE_HIT}" >> "${GITHUB_ENV}"
+    - name: Save compiler artifacts
+      if: inputs.operation == 'save' && env.TSC_ARTIFACT_CACHE_HIT != 'true' && env.TSC_ARTIFACT_CACHE_KEY != '' && hashFiles('.cache/tsc/build') != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ env.TSC_ARTIFACT_CACHE_KEY }}
+        path: *artifacts
