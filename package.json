@@ -241,7 +241,7 @@
 			"tar": "^7.5.22",
 			"vite-robots-txt": "^1.0.0",
 			"vite-svg-to-ico": "^5.0.0",
-			"vitepress": "2.0.0-alpha.20"
+			"vitepress": "2.0.0-alpha.21"
 		},
 		"ts": {
 			"@arethetypeswrong/core": "^0.18.4",
