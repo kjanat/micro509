@@ -40,6 +40,10 @@
 			"types": "./dist/der.d.ts",
 			"default": "./dist/der.js"
 		},
+		"./kdf": {
+			"types": "./dist/kdf.d.ts",
+			"default": "./dist/kdf.js"
+		},
 		"./keys": {
 			"types": "./dist/keys.d.ts",
 			"default": "./dist/keys.js"
@@ -121,6 +125,7 @@
 		"test": "BIN=\"${BIN:-bun}\"; AGENT=\"${AGENT:-1}\" $BIN test --concurrent",
 		"test:35433": "PR=\"35433\"; (command -v \"bun-${PR}\" >/dev/null || bunx bun-pr \"${PR}\") && BIN=\"bun-${PR}\" bun --silent run test",
 		"test:coverage": "run -q test --coverage",
+		"test:coverage:native": "node --experimental-test-coverage --test-coverage-include=src/kdf/argon2.ts --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/native.lcov --test test/native/argon2.node.mjs",
 		"test:differential": "BIN=\"${BIN:-bun}\"; $BIN test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "BIN=\"${BIN:-bun}\"; $BIN test test/pkits.test.ts",
 		"test:watch": "BIN=\"${BIN:-bun}\"; $BIN run test --watch",
@@ -154,7 +159,7 @@
 		"dprint-plugin-malva": "catalog:dprint",
 		"dprint-plugin-markup": "catalog:dprint",
 		"dprint-plugin-yaml": "catalog:dprint",
-		"dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
+		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
 		"playwright": "^1.63.0",
 		"publint": "catalog:build",
@@ -200,7 +205,7 @@
 		"npm": "12.2.1"
 	},
 	"catalog": {
-		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
+		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"biome": "npm:@biomejs/biome@^2.5.14",
 		"dprint": "^0.64.0",
 		"runner-run": "^0.28.0",

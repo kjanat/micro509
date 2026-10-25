@@ -38,6 +38,10 @@ const resolvedCryptoExport = new URL(
 /** @type {typeof import('#micro509/crypto')} */
 const cryptoApi = await import(resolvedCryptoExport.href);
 
+const resolvedKdfExport = new URL(pkg['exports']['./kdf']['default'], import.meta.resolve('#pkg'));
+/** @type {typeof import('#micro509/kdf')} */
+const kdfApi = await import(resolvedKdfExport.href);
+
 const resolvedSshExport = new URL(pkg.exports['./ssh'].default, import.meta.resolve('#pkg'));
 /** @type {typeof import('#micro509/ssh')} */
 const sshApi = await import(resolvedSshExport.href);
@@ -49,4 +53,4 @@ const whichVersion =
 			? Bun.version
 			: process.version;
 
-console.log(`${await runSmoke(micro509, cryptoApi, sshApi)} (${whichVersion})`);
+console.log(`${await runSmoke(micro509, cryptoApi, kdfApi, sshApi)} (${whichVersion})`);

@@ -26,10 +26,17 @@ jobs:
         run: run -p check:deno lint:deno docs:lint
       - run: run test:coverage
         env: { DIFFERENTIAL_OPENSSL: "1" }
+      - name: Native WebCrypto coverage (Node)
+        run: run test:coverage:native
       - name: Upload coverage to Codecov
         if: &OG github.repository == 'kjanat/micro509'
         uses: &codecov codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
-        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
+        with:
+          flags: bun,node
+          fail_ci_if_error: true
+          use_oidc: true
+          report_type: coverage
+          files: coverage/lcov.info,coverage/native.lcov
       - name: Upload test-results to Codecov
         if: *OG
         uses: *codecov

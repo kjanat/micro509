@@ -18,6 +18,19 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 `default` branch. Renaming or removing a code only happens in a major release.
 :::
 
+## micro509/kdf
+
+### Argon2ErrorCode
+
+Returned by `deriveArgon2` from `micro509/kdf`.
+
+| Code                 | Meaning                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `invalid_parameters` | Invalid numeric parameters, resource ceilings or input buffers.                       |
+| `limit_exceeded`     | The request exceeds the configured per-call resource limits.                          |
+| `unsupported`        | The requested variant, version or input range is unavailable in the selected backend. |
+| `derivation_failed`  | The backend failed or returned invalid output.                                        |
+
 ## micro509/x509
 
 ### ParseCertificateErrorCode

@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   several keys return `unsupported`. `minRsaModulusBits` and
   `acceptCompressedEcPoints` expose the choices the standards leave open.
   [#190](https://github.com/kjanat/micro509/issues/190)
+- Optional `micro509/kdf` entrypoint for Argon2id and Argon2d raw key
+  derivation, with explicit versions, per-call resource limits and typed
+  failures. The native WebCrypto adapter supports version `0x13` on
+  compatible runtimes. An explicit backend callback supports separately
+  installed implementations, including legacy `0x10` handling.
+  [#189](https://github.com/kjanat/micro509/issues/189)
 
 ### Fixed
 

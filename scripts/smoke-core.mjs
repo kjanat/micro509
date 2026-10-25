@@ -3,14 +3,16 @@
  * @module
  */
 
+import { rfc9106Vectors } from '../test/fixtures/argon2.mjs';
 import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
 
 /**
  * @param {typeof import('#micro509')} micro509
  * @param {typeof import('#micro509/crypto')} cryptoApi
+ * @param {typeof import('#micro509/kdf')} kdfApi
  * @param {typeof import('#micro509/ssh')} sshApi
  */
-export async function runSmoke(micro509, cryptoApi, sshApi) {
+export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi) {
 	const { signData, verifySignatureWithKey } = cryptoApi;
 	const { certificate, keyPair } = await micro509.createSelfSignedCertificate({
 		subject: { commonName: 'smoke.example' },
@@ -66,8 +68,39 @@ export async function runSmoke(micro509, cryptoApi, sshApi) {
 		throw new Error('smoke: independently generated SHA-1 OAEP ciphertext failed');
 	}
 
+	await runArgon2Smoke(kdfApi);
 	await runSshSmoke(micro509, sshApi);
 	return 'smoke OK';
+}
+
+/** @param {typeof import('#micro509/kdf')} kdfApi */
+async function runArgon2Smoke(kdfApi) {
+	for (const { input, expected } of rfc9106Vectors) {
+		let available = true;
+		try {
+			await Reflect.apply(crypto.subtle.importKey, crypto.subtle, [
+				'raw-secret',
+				input.password,
+				input.algorithm === 'argon2id' ? 'Argon2id' : 'Argon2d',
+				false,
+				['deriveBits'],
+			]);
+		} catch (error) {
+			if (!(error instanceof Error) || error.name !== 'NotSupportedError') throw error;
+			available = false;
+		}
+		const derived = await kdfApi.deriveArgon2(input);
+		if (available) {
+			if (!derived.ok) throw new Error(`smoke: native Argon2 failed: ${derived.error.code}`);
+			const actual = Array.from(derived.value, (byte) => byte.toString(16).padStart(2, '0')).join(
+				'',
+			);
+			if (actual !== expected) throw new Error('smoke: Argon2 RFC 9106 vector mismatch');
+			derived.value.fill(0);
+		} else if (derived.ok || derived.error.code !== 'unsupported') {
+			throw new Error('smoke: unavailable native Argon2 must report unsupported');
+		}
+	}
 }
 
 /**
