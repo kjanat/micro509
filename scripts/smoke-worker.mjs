@@ -8,9 +8,9 @@
 
 import * as micro509 from '#micro509';
 import * as cryptoApi from '#micro509/crypto';
+import * as joseApi from '#micro509/jose';
 import * as kdfApi from '#micro509/kdf';
 import * as sshApi from '#micro509/ssh';
-import * as joseApi from '#micro509/jose';
 import { runSmoke } from '#smoke';
 
 export default {
