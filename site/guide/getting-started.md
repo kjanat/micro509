@@ -80,9 +80,13 @@ import * as micro509 from 'jsr:@kjanat/micro509';
 | ----------------------------------- | --------------------------------- |
 | Create certificates and CSRs        | [Certificates](./certificates.md) |
 | Verify a chain and service identity | [Verification](./verification.md) |
-| Check CRL or OCSP evidence          | [Revocation](./revocation.md)     |
 | Import, export, or encrypt keys     | [Keys](./keys.md)                 |
+| Import and export OpenSSH keys      | [SSH keys](./ssh.md)              |
+| Derive keys with Argon2             | [Argon2](./key-derivation.md)     |
+| Check CRL or OCSP evidence          | [Revocation](./revocation.md)     |
 | Work with PFX or PKCS#7             | [PKCS](./pkcs.md)                 |
+| Sign and verify JWTs, resolve JWKS  | [JWTs and JWKS](./jose.md)        |
+| Configure certificate extensions    | [Extensions](./extensions.md)     |
 
 ## Quick Start
 

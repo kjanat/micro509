@@ -96,6 +96,73 @@ describe('single-target docs builds', () => {
 		});
 	}
 
+	test('sidebarTitle changes navigation text without changing page titles or fallback labels', async () => {
+		const { root, site } = setup();
+		try {
+			writeFileSync(
+				path.join(site, 'guide', 'key-derivation.md'),
+				`---\ntitle: Key derivation\nsidebarTitle: 'Argon2'\n---\n# Key derivation\n`,
+			);
+			writeFileSync(
+				path.join(site, 'guide', 'ssh.md'),
+				'---\ntitle: "SSH keys"\n---\n# SSH keys\n',
+			);
+			writeFileSync(
+				path.join(site, 'guide', 'extra.md'),
+				'---\nsidebarTitle: Extra\n---\n# Extra page\n',
+			);
+			const docs = await versionedDocs({
+				target: { channel: 'next' },
+				repoRoot: root,
+				siteRoot: 'site',
+				versionsDir: path.join(site, 'versions'),
+				cacheDir: path.join(root, 'cache'),
+				devLabel: 'v1.2.3-dev',
+				pages: ['site/guide', 'site/index.md'],
+				sources: ['src', 'package.json'],
+				releases: {
+					index: 'http://127.0.0.1:1/packument',
+					tag: (version) => `v${version}`,
+					source: (tag) => `http://127.0.0.1:1/${tag}.tgz`,
+					url: (tag) => `https://example.test/releases/${tag}`,
+				},
+				library: {
+					name: 'micro509',
+					moduleUrl: (version, subpath) => `https://cdn.test/${version.tag}/${subpath}`,
+				},
+				generateApi: ({ outDir }) => {
+					mkdirSync(outDir, { recursive: true });
+					writeFileSync(path.join(outDir, 'index.md'), '# API\n');
+				},
+				fileGuardrail: 100,
+			});
+
+			const pages = docs.versions[0]?.sections.guide;
+			assert.deepEqual(
+				pages?.map(({ slug, title, sidebarTitle }) => ({ slug, title, sidebarTitle })),
+				[
+					{ slug: 'extra', title: 'Extra page', sidebarTitle: 'Extra' },
+					{ slug: 'index', title: 'Guide', sidebarTitle: undefined },
+					{ slug: 'key-derivation', title: 'Key derivation', sidebarTitle: 'Argon2' },
+					{ slug: 'ssh', title: 'SSH keys', sidebarTitle: undefined },
+				],
+			);
+			const sidebar = docs.sidebar({
+				guide: [{ text: 'Guides', slugs: ['index', 'key-derivation'] }],
+			});
+			const guide = sidebar['/guide/'];
+			assert.ok(guide !== undefined && !Array.isArray(guide));
+			assert.deepEqual(guide.items[0]?.items, [
+				{ text: 'Guide', link: '/guide/' },
+				{ text: 'Argon2', link: '/guide/key-derivation' },
+				{ text: 'Extra', link: '/guide/extra' },
+				{ text: 'SSH keys', link: '/guide/ssh' },
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	test('latest and archive versions must match the checked-out manifest', async () => {
 		const { root } = setup();
 		try {

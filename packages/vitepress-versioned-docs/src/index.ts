@@ -100,6 +100,8 @@ export interface DocsPage {
 	readonly slug: string;
 	/** The page's own title — frontmatter `title`, else its first heading. */
 	readonly title: string;
+	/** Optional shorter label used only in navigation. */
+	readonly sidebarTitle?: string;
 }
 
 /** The pages a version ships, per section. Sidebars are built from these. */
@@ -254,13 +256,14 @@ async function materializePages(
 	}
 }
 
-/** What a page calls itself: frontmatter `title`, else its first heading, else its slug. */
-function titleOf(file: string, slug: string): string {
-	const source = fs.readFileSync(file, 'utf8');
-	const frontmatter = source.match(/^---\n([\s\S]*?)\n---/);
-	const declared = frontmatter?.[1]?.match(/^title:\s*(.+)$/m)?.[1]?.trim();
-	if (declared !== undefined && declared !== '') return declared.replace(/^['"]|['"]$/g, '');
-	return source.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? slug;
+/** Read the optional single-line labels from a page's frontmatter. */
+function frontmatterLabel(source: string, key: 'title' | 'sidebarTitle'): string | undefined {
+	const frontmatter = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+	const declared = frontmatter?.[1]?.match(new RegExp(`^${key}:[ \t]*(.*)$`, 'm'))?.[1]?.trim();
+	if (declared === undefined || declared === '') return undefined;
+	const quoted = declared.match(/^(['"])(.*)\1$/);
+	const value = quoted?.[2] ?? declared;
+	return value === '' ? undefined : value;
 }
 
 /** The pages a directory holds, titled by the pages themselves. */
@@ -278,7 +281,15 @@ function sectionPages(dir: string): readonly DocsPage[] {
 	return markdownFiles(dir)
 		.map((entry) => {
 			const slug = entry.replace(/\.md$/, '').split(path.sep).join('/');
-			return { slug, title: titleOf(path.join(dir, entry), slug) };
+			const file = path.join(dir, entry);
+			const source = fs.readFileSync(file, 'utf8');
+			const sidebarTitle = frontmatterLabel(source, 'sidebarTitle');
+			return {
+				slug,
+				title:
+					frontmatterLabel(source, 'title') ?? source.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? slug,
+				...(sidebarTitle === undefined ? {} : { sidebarTitle }),
+			};
 		})
 		.sort((a, b) => a.slug.localeCompare(b.slug));
 }
@@ -629,7 +640,7 @@ function sectionSidebar(
 		items: group.slugs
 			.map((slug) => bySlug.get(slug))
 			.filter((page) => page !== undefined)
-			.map((page) => ({ text: page.title, link: linkTo(section, page) })),
+			.map((page) => ({ text: page.sidebarTitle ?? page.title, link: linkTo(section, page) })),
 	}));
 
 	const rest = pages.filter((page) => !page.slug.includes('/') && !ordered.has(page.slug));
@@ -637,7 +648,10 @@ function sectionSidebar(
 	if (rest.length > 0 && last?.items !== undefined) {
 		last.items = [
 			...last.items,
-			...rest.map((page) => ({ text: page.title, link: linkTo(section, page) })),
+			...rest.map((page) => ({
+				text: page.sidebarTitle ?? page.title,
+				link: linkTo(section, page),
+			})),
 		];
 	}
 	return items.filter((group) => (group.items?.length ?? 0) > 0);
