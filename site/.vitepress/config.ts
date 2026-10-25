@@ -1,6 +1,5 @@
 import { writeImportMap } from 'importmapify';
 import { entrypointsOf } from '@micro509/doc-render';
-import { argon2Plugin } from '@micro509/tsdown-plugin-argon2';
 import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
 import type { DocExamplesOptions } from '@micro509/vitepress-doc-examples';
 import { docExamplesPlugin } from '@micro509/vitepress-doc-examples';
@@ -434,7 +433,6 @@ export default defineConfig<DocsThemeConfig>({
 			),
 			outDir: path.join(config.outDir, '_library', `@${nextRef}`),
 			platform: 'browser',
-			plugins: [argon2Plugin({ root: repoRoot })],
 			failOnWarn: true,
 			format: 'esm',
 			dts: false,

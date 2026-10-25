@@ -46,7 +46,6 @@
 		},
 		"./kdf": {
 			"types": "./dist/kdf.d.ts",
-			"workerd": "./dist/workerd/kdf.js",
 			"default": "./dist/kdf.js"
 		},
 		"./keys": {
@@ -85,12 +84,13 @@
 	},
 	"jsdelivr": "./dist/index.js",
 	"types": "./dist/index.d.ts",
-	"files": ["dist", "CHANGELOG.md", "vendor/argon2/LICENSE"],
+	"files": ["dist", "CHANGELOG.md"],
 	"workspaces": ["packages/*", "site/.vitepress", "tsc/*"],
 	"scripts": {
 		"bd": "tsdown -F micro509",
+		"bench:argon2": "node bench/argon2/benchmark.ts",
 		"build": "tsdown -F micro509",
-		"build:argon2": "bun run --filter @micro509/tsdown-plugin-argon2 build",
+		"build:argon2": "run @micro509/tsdown-plugin-argon2:build",
 		"build:tsc": "tsdown -F @kjanat/tsc-bridge -F @kjanat/tsc-compat -F @kjanat/tsc-protocol -F @kjanat/tsc-vue-mapper -F @kjanat/tsc-wasm",
 		"build:watch": "tsdown --watch",
 		"check": "run -pK check:biome check:deno typecheck",
@@ -130,8 +130,9 @@
 		"spec": "bun scripts/spec/main.ts",
 		"test": "BIN=\"${BIN:-bun}\"; AGENT=\"${AGENT:-1}\" $BIN test --concurrent",
 		"test:35433": "PR=\"35433\"; (command -v \"bun-${PR}\" >/dev/null || bunx bun-pr \"${PR}\") && BIN=\"bun-${PR}\" bun --silent run test",
+		"test:argon2:oracle": "run -s build:argon2 && bun test test/argon2-oracle.test.ts && node --test test/native/argon2-module.test.mjs test/native/argon2-memory.node.mjs",
 		"test:coverage": "run -q test --coverage",
-		"test:coverage:native": "mkdir -p coverage && node --experimental-test-coverage --test-coverage-include='src/kdf/*.ts' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/native.lcov --test test/native/argon2.node.mjs test/native/argon2-memory.node.mjs test/native/argon2-module.test.mjs",
+		"test:coverage:native": "mkdir -p coverage && node --experimental-test-coverage --test-coverage-include='src/kdf/*.ts' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/native.lcov --test test/native/argon2.node.mjs",
 		"test:coverage:portable": "mkdir -p coverage && node --experimental-test-coverage --test-coverage-include='src/kdf/*.ts' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/portable.lcov --test test/native/argon2-availability.node.mjs",
 		"test:differential": "BIN=\"${BIN:-bun}\"; $BIN test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "BIN=\"${BIN:-bun}\"; $BIN test test/pkits.test.ts",
@@ -154,7 +155,6 @@
 		"@gorhill/ubo-core": "0.1.30",
 		"@kjanat/tsc-bridge": "workspace:*",
 		"@micro509/doc-render": "workspace:*",
-		"@micro509/tsdown-plugin-argon2": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",
 		"@types/deno": "catalog:deno",

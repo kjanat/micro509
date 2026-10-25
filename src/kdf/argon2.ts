@@ -1,14 +1,14 @@
 /**
  * Argon2 derivation and resource-policy boundary. The default backend prefers
- * native WebCrypto and loads the bundled portable implementation when unsupported.
+ * native WebCrypto and uses the TypeScript implementation when unsupported.
  *
  * @module
  */
 
 import type { Micro509Error, Result } from '#micro509/result/result';
 
-/** Argon2id for new uses, or Argon2d for compatibility with existing formats. */
-export type Argon2Algorithm = 'argon2id' | 'argon2d';
+/** RFC 9106 Argon2 variants. Use Argon2id for new password-based applications. */
+export type Argon2Algorithm = 'argon2d' | 'argon2i' | 'argon2id';
 
 /** Argon2 versions used by KDBX. The native backend supports only 0x13. */
 export type Argon2Version = 0x10 | 0x13;
@@ -21,7 +21,7 @@ export interface Argon2Input {
 	readonly version: Argon2Version;
 	/** Password or format-preprocessed input bytes. */
 	readonly password: Uint8Array;
-	/** Salt bytes. The native backend requires at least eight bytes. */
+	/** Salt bytes. RFC 9106 recommends 16 bytes; the native backend requires at least eight. */
 	readonly salt: Uint8Array;
 	/** Total memory in kibibytes, at least eight times parallelism. */
 	readonly memoryKiB: number;
@@ -77,7 +77,7 @@ export interface Argon2Options {
 	/** Per-call ceilings. Applications must separately bound concurrent calls. */
 	readonly limits?: Argon2Limits;
 	/**
-	 * Omit to prefer native WebCrypto, then bundled WASM on `unsupported` only.
+	 * Omit to prefer native WebCrypto, then the TypeScript implementation on `unsupported` only.
 	 * Select `native` or `portable` to require that implementation, or supply a
 	 * trusted callback. Explicit selections never fall back to another backend.
 	 */
@@ -93,7 +93,11 @@ function uintInRange(value: number, min: number, max: number): boolean {
 }
 
 function validate(input: Argon2Input, limits: Argon2Limits): Argon2Result | undefined {
-	if (input.algorithm !== 'argon2id' && input.algorithm !== 'argon2d') {
+	if (
+		input.algorithm !== 'argon2id' &&
+		input.algorithm !== 'argon2d' &&
+		input.algorithm !== 'argon2i'
+	) {
 		return failure('unsupported', 'Unsupported Argon2 variant');
 	}
 	if (input.version !== 0x10 && input.version !== 0x13) {
@@ -211,13 +215,16 @@ async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
 		return failure('unsupported', 'Native WebCrypto is unavailable');
 	}
 	const subtle = globalThis.crypto.subtle;
-	let name: 'Argon2id' | 'Argon2d';
+	let name: 'Argon2d' | 'Argon2i' | 'Argon2id';
 	switch (input.algorithm) {
 		case 'argon2id':
 			name = 'Argon2id';
 			break;
 		case 'argon2d':
 			name = 'Argon2d';
+			break;
+		case 'argon2i':
+			name = 'Argon2i';
 			break;
 		default:
 			return failure('unsupported', 'Unsupported Argon2 variant');
@@ -289,16 +296,16 @@ async function builtinArgon2(
  * Derives raw Argon2 bytes after validating parameters and resource ceilings.
  *
  * Native WebCrypto is preferred for version 0x13. An unsupported request uses
- * the bundled WASM reference implementation for the exact variant and version,
- * including 0x10. Other native failures are returned without retrying. Explicit
+ * the TypeScript implementation for the exact variant and version, including
+ * 0x10. Other native failures are returned without retrying. Explicit
  * backends never fall back. No algorithm, version, or parameter is substituted.
  *
  * Caller buffers are copied synchronously before the first await and never
  * modified. Owned temporary arrays are zeroed on completion. Native key storage
  * and runtime copies cannot be explicitly erased by JavaScript. The returned
  * output is caller-owned. Calls cannot cancel native work once dispatched.
- * Portable work yields between memory segments; a segment runs synchronously.
- * Its complete private linear memory is erased on completion or failure.
+ * TypeScript work yields while filling memory blocks. Its private memory matrix
+ * is erased on completion or failure.
  * Limits apply per call, not to concurrent invocations.
  */
 export async function deriveArgon2(

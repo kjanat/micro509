@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
-import { compileModule, moduleFor } from '#micro509/kdf/argon2-module';
+import { compileModule, moduleFor } from '#test/oracles/argon2/argon2-module';
 
 test('compiles the packaged file and reuses the compiled module', async () => {
 	const module = await moduleFor();
@@ -11,7 +11,7 @@ test('compiles the packaged file and reuses the compiled module', async () => {
 });
 
 test('loads a binary HTTP asset and rejects failed downloads', async () => {
-	const wasm = await readFile(new URL('../../src/kdf/argon2.wasm', import.meta.url));
+	const wasm = await readFile(new URL('../oracles/argon2/argon2.wasm', import.meta.url));
 	const server = createServer((request, response) => {
 		if (request.url !== '/argon2.wasm') {
 			response.writeHead(404);

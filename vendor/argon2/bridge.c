@@ -19,7 +19,7 @@ int begin(uint8_t *password, uint32_t password_len, uint8_t *salt, uint32_t salt
     };
     int result = validate_inputs(&context);
     if (result != ARGON2_OK) return result;
-    if (type != Argon2_d && type != Argon2_id) return ARGON2_INCORRECT_TYPE;
+    if (type != Argon2_d && type != Argon2_i && type != Argon2_id) return ARGON2_INCORRECT_TYPE;
     if (version != ARGON2_VERSION_10 && version != ARGON2_VERSION_13)
         return ARGON2_INCORRECT_PARAMETER;
     uint32_t segment = memory / (lanes * ARGON2_SYNC_POINTS);

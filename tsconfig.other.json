@@ -27,6 +27,7 @@
 		}
 	},
 	"include": [
+		"bench/argon2",
 		".config",
 		".dprint.json",
 		"src",

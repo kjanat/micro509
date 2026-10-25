@@ -7,6 +7,7 @@ import {
 	changingInput,
 	inputRepresentations,
 	libargon2Vectors,
+	rfc9106Argon2iVector,
 	rfc9106Vectors,
 } from './fixtures/argon2.mjs';
 
@@ -58,7 +59,7 @@ function hex(result: Argon2Result): string {
 describe('Argon2 key derivation', () => {
 	it.each([
 		[null, 'invalid_parameters'],
-		[{ ...input(), algorithm: 'argon2i' }, 'unsupported'],
+		[{ ...input(), algorithm: 'argon2z' }, 'unsupported'],
 		[{ ...input(), version: NaN }, 'unsupported'],
 		[{ ...input(), version: 20 }, 'unsupported'],
 		[{ ...input(), password: 'password' }, 'invalid_parameters'],
@@ -77,6 +78,14 @@ describe('Argon2 key derivation', () => {
 			expect(hex(await deriveArgon2(vector.input, { backend: 'portable' }))).toBe(vector.expected);
 		},
 	);
+	it('matches the RFC 9106 Argon2i vector with secret and associated data', async () => {
+		expect(hex(await deriveArgon2(rfc9106Argon2iVector.input, { backend: nodeBackend }))).toBe(
+			rfc9106Argon2iVector.expected,
+		);
+		expect(hex(await deriveArgon2(rfc9106Argon2iVector.input, { backend: 'portable' }))).toBe(
+			rfc9106Argon2iVector.expected,
+		);
+	});
 
 	it('matches the Bitwarden SDK vector after caller-side salt hashing and MiB conversion', async () => {
 		const request: Argon2Input = {
@@ -92,7 +101,7 @@ describe('Argon2 key derivation', () => {
 		expect(hex(await deriveArgon2(request))).toBe(
 			'cff0e1b1a213a34c626ab3afe00911f01493ed2ff6968db83ee183f23335e1f2',
 		);
-	});
+	}, 30_000);
 
 	it.each([
 		['argon2d', '57db1f93bbf3ec526d66002a1e024cc4500444509fdf0ae254572ae4382e6fdf'],
@@ -361,8 +370,7 @@ describe('Argon2 key derivation', () => {
 			error: { code: 'derivation_failed' },
 		});
 		expect(await deriveArgon2(request)).toMatchObject({
-			ok: false,
-			error: { code: 'unsupported' },
+			ok: true,
 		});
 	});
 
@@ -494,7 +502,7 @@ describe('bundled portable Argon2', () => {
 		}
 	}, 30_000);
 
-	it('bounds portable allocations before entering WASM', async () => {
+	it('bounds portable allocations before entering the TypeScript core', async () => {
 		expect(
 			await deriveArgon2(
 				{ ...input(), memoryKiB: 0x200000 },

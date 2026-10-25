@@ -21,24 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Derive Argon2d and Argon2id keys with versions `0x10` and `0x13` across
-  Bun, Node.js, Deno, browsers and Cloudflare Workers using the bundled
-  portable implementation. `micro509/kdf` selects a backend automatically;
-  `backend: 'native'` and `backend: 'portable'` select one explicitly.
-  Derivation preserves per-call resource limits and wipes temporary memory.
+- Reproduce Argon2 performance comparisons with `bun run bench:argon2`, including
+  TypeScript, the WASM oracle, native WebCrypto, and Node crypto. Reports include
+  checked outputs, latency samples, throughput, and event-loop delay.
+- Derive Argon2d, Argon2i, and Argon2id keys with versions `0x10` and `0x13`
+  across Bun, Node.js, Deno, browsers, and Cloudflare Workers. The complete
+  Argon2 and BLAKE2b implementation is TypeScript. `micro509/kdf` selects
+  between native WebCrypto and TypeScript automatically; `backend: 'native'`
+  and `backend: 'portable'` select one explicitly. Resource limits apply before
+  allocation, and owned working memory is cleared after derivation. The
+  C/WASM implementation serves as a test oracle for the TypeScript port.
   [#203](https://github.com/kjanat/micro509/issues/203)
-- Rebuild Argon2 WASM artifacts automatically through the workspace tsdown
-  plugin, including C source and header changes in watch mode. The standalone
-  `bun build:argon2` command uses DreamCLI and supports `--force` for
-  recompilation and `--check` for reproducibility verification.
 
 ### Changed
 
 - The key-derivation guide demonstrates encryption, a serialized JSON record,
   message recovery and rejection of modified ciphertext. Saved binary fields
   use base64url for compact, readable output. The docs build checks examples
-  against the package declarations and packages the Argon2 WASM asset through
-  the shared tsdown plugin.
+  against the package declarations and runs the TypeScript Argon2 implementation.
 - Install Tombi in shared CI setup and resolve it through PATH for formatting.
   Simplify the autofix workflow and update the OpenSSL workflow's Docker login
   action to v4.7.0.

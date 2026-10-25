@@ -22,6 +22,8 @@ jobs:
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
       - run: run typecheck
+      - name: Argon2 TypeScript and WASM oracle parity
+        run: run test:argon2:oracle
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
       - run: run test:coverage

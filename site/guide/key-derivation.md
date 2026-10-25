@@ -5,7 +5,7 @@ outline: [2, 3]
 
 # Derive encryption keys with Argon2
 
-Use `micro509/kdf` to turn a password into key bytes with Argon2id or Argon2d.
+Use `micro509/kdf` to turn a password into key bytes with Argon2id, Argon2i, or Argon2d.
 This guide derives an AES key, encrypts a message, saves the derivation parameters,
 and derives the key again to decrypt it.
 
@@ -13,7 +13,8 @@ For a new application, use Argon2id. When opening an existing format, use its
 recorded variant, version and parameters exactly.
 
 The same `deriveArgon2` API works in Node, Bun, Deno, browsers, and Cloudflare
-Workers. Argon2d and Argon2id support versions `0x10` and `0x13`.
+Workers. All three variants support versions `0x10` and `0x13`; an unsupported
+native operation runs through the TypeScript implementation.
 
 ## Encrypt and decrypt a message
 
@@ -254,14 +255,14 @@ For format vectors and preprocessing examples, see the
 
 Choose an implementation with `options.backend`:
 
-| Value        | Implementation                                       |
-| ------------ | ---------------------------------------------------- |
-| Omitted      | Automatic selection                                  |
-| `'native'`   | Native WebCrypto, version `0x13`                     |
-| `'portable'` | Bundled WASM, versions `0x10` and `0x13`             |
-| Callback     | Your [`Argon2Backend`](../api/kdf.md) implementation |
+| Value        | Implementation                                        |
+| ------------ | ----------------------------------------------------- |
+| Omitted      | Automatic selection                                   |
+| `'native'`   | Native WebCrypto, version `0x13`                      |
+| `'portable'` | TypeScript implementation, versions `0x10` and `0x13` |
+| Callback     | Your [`Argon2Backend`](../api/kdf.md) implementation  |
 
-Automatic selection tries native WebCrypto and uses the bundled implementation
+Automatic selection tries native WebCrypto and uses the TypeScript implementation
 for `unsupported` requests. Other errors are returned directly. An explicit
 selection uses only the chosen implementation.
 
@@ -282,12 +283,12 @@ you have finished with them. JavaScript cannot erase copies inside the runtime o
 native key storage. Native WebCrypto calls cannot be cancelled once dispatched.
 An external backend determines its own scheduling and cancellation behavior.
 
-Both bundled backends require at least eight salt bytes. The portable backend
-uses private WASM memory, wipes it on success and failure, and yields between
-segments. Its total memory, inputs, output and overhead must fit below 2 GiB.
+The native backend requires at least eight salt bytes. The portable backend
+uses a private TypeScript memory matrix, wipes its memory and working buffers on
+success and failure, and yields while filling blocks. Its memory matrix must fit
+below 2 GiB.
 Native output lengths must fit a WebCrypto unsigned 32-bit bit count. Requests
-beyond these limits return `unsupported`. See [runtime requirements](../reference/runtimes.md#requirements)
-for browser and Workers setup.
+beyond these limits return `unsupported`.
 
 </details>
 

@@ -38,11 +38,30 @@ export const rfc9106Vectors = [
 	},
 ];
 
+/** RFC 9106 section 5.2 Argon2i vector. */
+export const rfc9106Argon2iVector = /** @type {const} */ ({
+	input: {
+		algorithm: 'argon2i',
+		version: 0x13,
+		password: new Uint8Array(32).fill(1),
+		salt: new Uint8Array(16).fill(2),
+		secret: new Uint8Array(8).fill(3),
+		associatedData: new Uint8Array(12).fill(4),
+		memoryKiB: 32,
+		passes: 3,
+		parallelism: 4,
+		outputBytes: 32,
+	},
+	expected: 'c814d9d1dc7f37aa13f0d77f2494bda1c8de6b016dd388d29952a4c4672b6ce8',
+});
+
 /** Independent libargon2 vectors, also used by every built-runtime smoke. */
 export const libargon2Vectors = /** @type {const} */ ([
 	['argon2d', 0x10, 'c9da08c31fa64957a1bf63d30cc881474775ce827bc61b0128e5d07119c1e54a'],
+	['argon2i', 0x10, '6a013ba6b098ca273b5a154bce0e0adc8e7dea51cbefd52f7ff777dfe59d0872'],
 	['argon2id', 0x10, '190432db4cacd25d7f023c4eee4ccfa1ccd31e499daecd434e07aa005315edd1'],
 	['argon2d', 0x13, 'fa50b00aee2c79eb02a575fd1b54c8d3956b0c5ddfc6db886e2bda9e738e597d'],
+	['argon2i', 0x13, 'b904cd52edf79ba05bf845798b75156aefe97057494a58be4abbbb13180ca4c0'],
 	['argon2id', 0x13, 'cb88616cdd8e3cd798580402fc2a39cccbb66568ae01f140a358d7fc5e5a210a'],
 ]).map(([algorithm, version, expected]) => ({
 	input: {

@@ -4,7 +4,6 @@ import { basename, dirname, join } from 'node:path';
 import { getBuffer as getFmtBiome } from '@dprint/biome';
 import { createContext } from '@dprint/formatter';
 import { getPath as getFmtJson } from '@dprint/json';
-import { argon2Plugin } from '@micro509/tsdown-plugin-argon2';
 import { wasm } from 'rolldown-plugin-wasm';
 import type { UserConfig } from 'tsdown';
 import { defineConfig } from 'tsdown';
@@ -35,14 +34,6 @@ const exports = {
 				exports[key] = { types: typesPath, ...conditions };
 			}
 		}
-		if (pkg.name === 'micro509' && exports['./kdf']) {
-			const kdf = exports['./kdf'];
-			exports['./kdf'] = {
-				types: './dist/kdf.d.ts',
-				workerd: './dist/workerd/kdf.js',
-				...(typeof kdf === 'string' ? { default: kdf } : kdf),
-			};
-		}
 		return exports;
 	},
 } satisfies UserConfig['exports'];
@@ -65,7 +56,6 @@ export default defineConfig((options) => [
 			mangle: { keepNames: true },
 			codegen: { legalComments: 'external', removeWhitespace: false },
 		},
-		plugins: [argon2Plugin({ root: import.meta.dirname })],
 		inputOptions: { resolve: { mainFields: ['browser', 'module', 'main'] } },
 		attw: { profile: 'esm-only', enabled: 'ci-only' },
 		report: 'ci-only',
@@ -108,19 +98,6 @@ export default defineConfig((options) => [
 						},
 					},
 				}),
-	},
-	{
-		name: pkg.name,
-		entry: { kdf: 'src/kdf.ts' },
-		outDir: 'dist/workerd',
-		clean: false,
-		format: 'esm',
-		platform: 'neutral',
-		target: 'baseline-widely-available',
-		dts: false,
-		hash: false,
-		exports: false,
-		plugins: [argon2Plugin({ root: import.meta.dirname, workerd: true })],
 	},
 	{
 		cwd: import.meta.dirname,

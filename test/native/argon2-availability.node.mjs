@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { deriveArgon2 } from '#micro509/kdf';
-import { rfc9106Vectors } from '../fixtures/argon2.mjs';
+import { rfc9106Argon2iVector, rfc9106Vectors } from '../fixtures/argon2.mjs';
 
 // Run on Node 22 to exercise real WebCrypto KeyFormat enum rejection.
 test('the runtime rejects raw-secret as an unsupported KeyFormat', async () => {
@@ -32,13 +32,24 @@ for (const { input, expected } of rfc9106Vectors) {
 	});
 }
 
-test('portable limits reject short salts and oversized memory without changing input', async () => {
+test('Argon2i uses the TypeScript implementation after native refusal', async () => {
+	const { input, expected } = rfc9106Argon2iVector;
+	const native = await deriveArgon2(input, { backend: 'native' });
+	assert.equal(native.ok, false);
+	assert.equal(native.error.code, 'unsupported');
+	for (const result of [
+		await deriveArgon2(input),
+		await deriveArgon2(input, { backend: 'portable' }),
+	]) {
+		assert.equal(result.ok, true);
+		assert.equal(Buffer.from(result.value).toString('hex'), expected);
+	}
+});
+
+test('portable limits reject oversized memory without changing input', async () => {
 	const vector = rfc9106Vectors[1];
 	assert.ok(vector);
-	for (const input of [
-		{ ...vector.input, salt: new Uint8Array(7) },
-		{ ...vector.input, memoryKiB: 0x200000 },
-	]) {
+	for (const input of [{ ...vector.input, memoryKiB: 0x200000 }]) {
 		const original = structuredClone(input);
 		const result = await deriveArgon2(input, {
 			backend: 'portable',
