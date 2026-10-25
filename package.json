@@ -150,7 +150,7 @@
 		"dprint-plugin-malva": "catalog:dprint",
 		"dprint-plugin-markup": "catalog:dprint",
 		"dprint-plugin-yaml": "catalog:dprint",
-		"dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
+		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
 		"playwright": "^1.63.0",
 		"publint": "catalog:build",

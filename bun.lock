@@ -25,7 +25,7 @@
         "dprint-plugin-malva": "catalog:dprint",
         "dprint-plugin-markup": "catalog:dprint",
         "dprint-plugin-yaml": "catalog:dprint",
-        "dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
+        "dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
         "importmapify": "catalog:deno",
         "playwright": "^1.63.0",
         "publint": "catalog:build",
@@ -805,7 +805,7 @@
 
     "alien-signals": ["alien-signals@3.2.1", "", {}, "sha512-I8FjmltrfnDFoZedi5CG8DghVYNhzb/Ijluz7tCSJH0xpd0484Kowhbb1XDYOxfJpU1p5wnM2X54dA+IfGyD1g=="],
 
-    "ansispeck": ["ansispeck@0.4.2", "", {}, "sha512-ZIIS0aQgc1HyhgK3Rru5SgL162D8jpRd39BH84eWDYmyT7eUuMj0Mx5OrKplp1dZJxZ/eQQNuYzkoX9OFnoYtA=="],
+    "ansispeck": ["ansispeck@0.4.3", "", {}, "sha512-+U6dFeORz6VrHK0AYqkVpLsjsRZGWgVQDqp7c6KpKDzpGbCdNAyEH7K8wtomuElS3sX1Nne1YeMgCK0kfPB/9A=="],
 
     "biome": ["@biomejs/biome@2.6.2", "", { "optionalDependencies": { "@biomejs/cli-android-arm64": "2.6.2", "@biomejs/cli-android-x64": "2.6.2", "@biomejs/cli-darwin-arm64": "2.6.2", "@biomejs/cli-darwin-x64": "2.6.2", "@biomejs/cli-linux-arm64": "2.6.2", "@biomejs/cli-linux-arm64-musl": "2.6.2", "@biomejs/cli-linux-x64": "2.6.2", "@biomejs/cli-linux-x64-musl": "2.6.2", "@biomejs/cli-win32-arm64": "2.6.2", "@biomejs/cli-win32-x64": "2.6.2" }, "bin": { "biome": "bin/biome" } }, "sha512-JLTFAFF9vfJcWwLhwuL4ZHflLg+XfTEC4IUnAlJRX1cMRt57++Xd1Ysb9Fdmlh9YUrvyCXfPEHjjEIqKJGdPKw=="],
 
@@ -851,7 +851,7 @@
 
     "dprint-plugin-yaml": ["dprint-plugin-yaml@0.6.0", "", {}, "sha512-jFCM6LxutTjfiSR7BtDhbZA2OvuqYY9xksULg0vdu0nZV1hiaupvRfJHGZSiQS9aLmqMNc+5WcHpOBSwxCK7qQ=="],
 
-    "dreamcli": ["@kjanat/dreamcli@4.2.0", "", { "dependencies": { "ansispeck": "^0.4.2" } }, "sha512-llRDfPcCt222QBZrZCLRtL0nLArzZUY6veElNn1n2jiaaMSvfbkXzgyqC0bI2qryA3SIvgFLiop9H8L9XWHmkg=="],
+    "dreamcli": ["@kjanat/dreamcli@5.0.0", "", { "dependencies": { "ansispeck": "^0.4.3" } }, "sha512-pKQJu6KDnW8U4EQI2vZTwZz2v+H/z9uwfK4jnOV9BLrn2LDnmVNM91/iNxsxpZaFMZyhOU8AggMA6OhD5dqhdQ=="],
 
     "dts-resolver": ["dts-resolver@3.0.0", "", { "peerDependencies": { "oxc-resolver": ">=11.0.0" }, "optionalPeers": ["oxc-resolver"] }, "sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q=="],
 
@@ -1121,6 +1121,8 @@
 
     "@jsr/deno__cache-dir/@jsr/deno__graph": ["@jsr/deno__graph@0.86.9", "https://npm.jsr.io/~/11/@jsr/deno__graph/0.86.9.tgz", {}, "sha512-+qrrma5/bL+hcG20mfaEeC8SLopqoyd1RjcKFMRu++3SAXyrTKuvuIjBJCn/NyN7X+kV+QrJG67BCHX38Rzw+g=="],
 
+    "@kjanat/dreamcli/ansispeck": ["ansispeck@0.4.2", "", {}, "sha512-ZIIS0aQgc1HyhgK3Rru5SgL162D8jpRd39BH84eWDYmyT7eUuMj0Mx5OrKplp1dZJxZ/eQQNuYzkoX9OFnoYtA=="],
+
     "@vue/devtools-kit/hookable": ["hookable@5.5.3", "", {}, "sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ=="],
 
     "@vue/language-core/@volar/language-core": ["@volar/language-core@2.4.28", "", { "dependencies": { "@volar/source-map": "2.4.28" } }, "sha512-w4qhIJ8ZSitgLAkVay6AbcnC7gP3glYM3fYwKV3srj8m494E3xtrCv6E+bWviiK/8hs6e6t1ij1s2Endql7vzQ=="],
@@ -1129,10 +1131,16 @@
 
     "miniflare/ws": ["ws@8.21.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g=="],
 
+    "runner-run/ansispeck": ["ansispeck@0.4.2", "", {}, "sha512-ZIIS0aQgc1HyhgK3Rru5SgL162D8jpRd39BH84eWDYmyT7eUuMj0Mx5OrKplp1dZJxZ/eQQNuYzkoX9OFnoYtA=="],
+
     "vite-robots-txt/vite": ["vite@7.3.7", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA=="],
+
+    "vite-svg-to-ico/ansispeck": ["ansispeck@0.4.2", "", {}, "sha512-ZIIS0aQgc1HyhgK3Rru5SgL162D8jpRd39BH84eWDYmyT7eUuMj0Mx5OrKplp1dZJxZ/eQQNuYzkoX9OFnoYtA=="],
 
     "vite-svg-to-ico/dreamcli": ["@kjanat/dreamcli@3.0.1", "", { "dependencies": { "ansispeck": "^0.4.1" } }, "sha512-FY5uBPI7EQouhyUEpQdMEVew4jGEcshBZSSH6a8G47Bie+uBk1flLj8l2sJrVDOyd9lG1i1BaYyV0jmgdENp3A=="],
 
     "@vue/language-core/@volar/language-core/@volar/source-map": ["@volar/source-map@2.4.28", "", {}, "sha512-yX2BDBqJkRXfKw8my8VarTyjv48QwxdJtvRgUpNE5erCsgEUdI2DsLbpa+rOQVAJYshY99szEcRDmyHbF10ggQ=="],
+
+    "importmapify/dreamcli/ansispeck": ["ansispeck@0.4.2", "", {}, "sha512-ZIIS0aQgc1HyhgK3Rru5SgL162D8jpRd39BH84eWDYmyT7eUuMj0Mx5OrKplp1dZJxZ/eQQNuYzkoX9OFnoYtA=="],
   }
 }
