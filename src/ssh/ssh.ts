@@ -652,7 +652,7 @@ function textOf(input: string | Uint8Array, maxBytes: number): string {
 	return decodeUtf8(input);
 }
 
-const PUBLIC_KEY_LINE = /^([^ \t]+)[ \t]+([A-Za-z0-9+/]+={0,2})(?:[ \t]+(.*))?$/;
+const PUBLIC_KEY_LINE = /^([^ \t]+)[ \t]+([A-Za-z0-9+/]+={0,2})(?:[ \t]+(.*))?$/s;
 
 async function decodePublicKeyLine(
 	input: string | Uint8Array,

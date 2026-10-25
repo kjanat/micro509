@@ -1174,7 +1174,14 @@ describe('runtime options and comment boundaries', () => {
 
 	it('round-trips a leading BOM and the 8192-byte UTF-8 boundary', async () => {
 		const pair = await generateKeyPair({ kind: 'ed25519' });
-		for (const comment of ['\ufeffme@host', 'a'.repeat(8192), 'é'.repeat(4096)]) {
+		for (const comment of [
+			'\ufeffme@host',
+			'a\u2028b',
+			'a\u2029b',
+			'\u2028trailing\u2029',
+			'a'.repeat(8192),
+			'é'.repeat(4096),
+		]) {
 			const line = await exportSshPublicKey(pair.publicKey, { comment });
 			const file = await exportOpenSshPrivateKey(pair.privateKey, { comment });
 			expect(ok(await importSshPublicKey(line)).comment).toBe(comment);
