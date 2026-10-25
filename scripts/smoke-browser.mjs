@@ -16,9 +16,10 @@ const pageHtml = `\
   <script type="module">
     import * as m from '/dist/index.js';
     import * as cryptoApi from '/dist/crypto.js';
+    import * as kdfApi from '/dist/kdf.js';
     import { runSmoke } from '/scripts/smoke-core.mjs';
     try {
-      globalThis.__smoke = await runSmoke(m, cryptoApi);
+      globalThis.__smoke = await runSmoke(m, cryptoApi, kdfApi);
     } catch (err) {
       globalThis.__smoke = 'FAIL: ' + err;
     }

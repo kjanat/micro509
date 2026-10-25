@@ -40,6 +40,10 @@
 			"types": "./dist/der.d.ts",
 			"default": "./dist/der.js"
 		},
+		"./kdf": {
+			"types": "./dist/kdf.d.ts",
+			"default": "./dist/kdf.js"
+		},
 		"./keys": {
 			"types": "./dist/keys.d.ts",
 			"default": "./dist/keys.js"
