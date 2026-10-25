@@ -28,8 +28,8 @@ parameter set. `memoryKiB` is measured in **KiB**, `passes` is the number of pas
 through that memory, and `parallelism` is the number of lanes. The 32-byte output
 becomes an AES-256-GCM key.
 
-Each run prints a JSON record containing the salt, derivation parameters, IV and
-ciphertext. It then derives the key again from that record and prints the recovered
+Each run prints its derivation inputs. On a supported runtime, it also prints a
+JSON record containing the salt, derivation parameters, IV and ciphertext. It then derives the key again from that record and prints the recovered
 message. The password and derived key are separate from the saved record.
 
 <LiveCode>
@@ -48,6 +48,7 @@ const parameters = {
 } as const;
 const salt = crypto.getRandomValues(new Uint8Array(16));
 const limits = { maxMemoryKiB: 64 * 1024, maxPasses: 3, maxParallelism: 4 };
+console.log('Derivation inputs:', { ...parameters, salt: Array.from(salt) });
 
 try {
   const derived = await deriveArgon2(
