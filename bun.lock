@@ -98,6 +98,7 @@
         "@cloudflare/vite-plugin": "catalog:cloudflare",
         "@kjanat/tsc-bridge": "workspace:*",
         "@kjanat/tsc-vue-mapper": "workspace:*",
+        "@micro509/tsdown-plugin-argon2": "workspace:*",
         "@micro509/vitepress-api-docs": "workspace:*",
         "@micro509/vitepress-doc-examples": "workspace:*",
         "@micro509/vitepress-github-links": "workspace:*",

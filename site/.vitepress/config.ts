@@ -1,5 +1,6 @@
 import { writeImportMap } from 'importmapify';
 import { entrypointsOf } from '@micro509/doc-render';
+import { argon2Plugin } from '@micro509/tsdown-plugin-argon2';
 import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
 import type { DocExamplesOptions } from '@micro509/vitepress-doc-examples';
 import { docExamplesPlugin } from '@micro509/vitepress-doc-examples';
@@ -238,8 +239,8 @@ const examples: DocExamplesOptions = {
 	/** Compile runnable examples and explicitly marked copyable recipes. */
 	block: /(?:<LiveCode[^>]*>|<!-- typecheck -->)\s*\n\n```ts\n([\s\S]*?)```/g,
 	paths: {
-		[repo.name]: [path.join(repoRoot, 'src/index.ts')],
-		[`${repo.name}/*`]: [path.join(repoRoot, 'src/*.ts')],
+		[repo.name]: [path.join(repoRoot, 'dist/index.d.ts')],
+		[`${repo.name}/*`]: [path.join(repoRoot, 'dist/*.d.ts')],
 	},
 };
 
@@ -426,13 +427,15 @@ export default defineConfig<DocsThemeConfig>({
 		await bundleLibrary({
 			config: false,
 			entry: Object.fromEntries(
-				Object.keys(repo.registry.exports).map((subpath) => {
+				Object.entries(repo.registry.exports).map(([subpath, source]) => {
 					const name = subpath === '.' ? 'index' : subpath.slice(2);
-					return [name, path.join(repoRoot, 'dist', `${name}.js`)];
+					return [name, path.join(repoRoot, source)];
 				}),
 			),
 			outDir: path.join(config.outDir, '_library', `@${nextRef}`),
 			platform: 'browser',
+			plugins: [argon2Plugin({ root: repoRoot })],
+			failOnWarn: true,
 			format: 'esm',
 			dts: false,
 			outExtensions: () => ({ js: '.js' }),

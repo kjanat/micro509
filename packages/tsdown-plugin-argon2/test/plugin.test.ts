@@ -210,10 +210,19 @@ test('tsdown emits a relocatable WASM asset without embedding it in JavaScript',
 		expect(await readFile(join(root, 'dist', argon2Artifacts.output))).toEqual(
 			await readFile(join(root, argon2Artifacts.wasm)),
 		);
-		const loaded: { moduleFor(): Promise<WebAssembly.Module> } = await import(
-			pathToFileURL(join(root, 'dist', entry.fileName)).href
+		const consumer = spawnSync(
+			'node',
+			[
+				'--input-type=module',
+				'--eval',
+				`import assert from 'node:assert/strict';
+import { moduleFor } from ${JSON.stringify(pathToFileURL(join(root, 'dist', entry.fileName)).href)};
+assert.equal(WebAssembly.Module.imports(await moduleFor()).length, 2);`,
+			],
+			{ encoding: 'utf8' },
 		);
-		expect(WebAssembly.Module.imports(await loaded.moduleFor())).toHaveLength(2);
+		expect(consumer.stderr).toBe('');
+		expect(consumer.status).toBe(0);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

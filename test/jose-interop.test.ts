@@ -179,7 +179,7 @@ describe('jose interoperability: RS256 tokens', () => {
 		const [header, body, signature] = token.split('.');
 		const tampered: readonly string[] = [
 			`${header}.${base64UrlOfText(`{"iss":"${ISSUER}","aud":"${AUDIENCE}","exp":${NOW + 9999}}`)}.${signature}`,
-			`${header}.${body}.${signature?.slice(0, -2)}AA`,
+			`${header}.${body}.${signature?.[0] === 'A' ? 'B' : 'A'}${signature?.slice(1)}`,
 			`${base64UrlOfText('{"alg":"RS256","typ":"JWT","kid":"x"}')}.${body}.${signature}`,
 			`${header}.${body}`,
 			`${header}.${body}.${signature}.extra`,
@@ -187,6 +187,7 @@ describe('jose interoperability: RS256 tokens', () => {
 			'a.b.c',
 		];
 		for (const candidate of tampered) {
+			expect(candidate).not.toBe(token);
 			expect({
 				candidate: candidate.slice(0, 24),
 				micro: await micro509Accepts(candidate),

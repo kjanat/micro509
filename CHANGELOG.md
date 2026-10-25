@@ -36,7 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The key-derivation guide demonstrates encryption, a serialized JSON record,
   message recovery and rejection of modified ciphertext. Saved binary fields
-  use base64url for compact, readable output.
+  use base64url for compact, readable output. The docs build checks examples
+  against the package declarations and packages the Argon2 WASM asset through
+  the shared tsdown plugin.
 - Install Tombi in shared CI setup and resolve it through PATH for formatting.
   Simplify the autofix workflow and update the OpenSSL workflow's Docker login
   action to v4.7.0.
