@@ -150,8 +150,6 @@
 		"@dprint/biome": "catalog:dprint",
 		"@dprint/formatter": "catalog:dprint",
 		"@dprint/json": "catalog:dprint",
-		"@dprint/markdown": "catalog:dprint",
-		"@dprint/typescript": "catalog:dprint",
 		"@gorhill/ubo-core": "0.1.30",
 		"@kjanat/tsc-bridge": "workspace:*",
 		"@micro509/doc-render": "workspace:*",
@@ -163,9 +161,6 @@
 		"biome": "catalog:",
 		"deno": "catalog:deno",
 		"dprint": "catalog:",
-		"dprint-plugin-malva": "catalog:dprint",
-		"dprint-plugin-markup": "catalog:dprint",
-		"dprint-plugin-yaml": "catalog:dprint",
 		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
 		"jose": "^6.2.13",
@@ -241,12 +236,7 @@
 		"dprint": {
 			"@dprint/biome": "^0.15.0",
 			"@dprint/formatter": "^0.6.0",
-			"@dprint/json": "^0.25.0",
-			"@dprint/markdown": "^0.28.0",
-			"@dprint/typescript": "^0.96.1",
-			"dprint-plugin-malva": "^0.16.0",
-			"dprint-plugin-markup": "^0.27.5",
-			"dprint-plugin-yaml": "^0.6.0"
+			"@dprint/json": "^0.25.0"
 		},
 		"site": {
 			"markdown-it-task-lists": "^2.1.1",
