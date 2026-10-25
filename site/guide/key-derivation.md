@@ -49,6 +49,81 @@ const limits = {
 };
 const message = 'A message recovered from the saved parameters.';
 
+try {
+  console.log('Argon2id v0x13: 64 MiB, 3 passes, 4 lanes');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const start = performance.now();
+  const derived = await deriveArgon2(
+    { ...parameters, password, salt },
+    { limits },
+  );
+  if (!derived.ok) throw new Error(derived.error.code);
+  console.log('Derived key: ' + derived.value.length + ' bytes');
+  console.log(
+    'Derivation time: ' + Math.round(performance.now() - start) + ' ms',
+  );
+  const key = await crypto.subtle
+    .importKey('raw', derived.value.slice(), 'AES-GCM', false, ['encrypt'])
+    .finally(() => derived.value.fill(0));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(message),
+  );
+  const saved = JSON.stringify({
+    format: 1,
+    kdf: parameters,
+    passwordEncoding: 'UTF-8',
+    salt: encode(salt),
+    cipher: 'AES-256-GCM',
+    iv: encode(iv),
+    ciphertext: encode(new Uint8Array(ciphertext)),
+  });
+  console.log('Saved record:', saved);
+
+  // Later: reload the saved JSON and use the same password.
+  const record = loadRecord(saved);
+  const restored = await deriveArgon2(
+    { ...record.kdf, password, salt: record.salt },
+    { limits },
+  );
+  if (!restored.ok) throw new Error(restored.error.code);
+  const decryptionKey = await crypto.subtle
+    .importKey('raw', restored.value.slice(), 'AES-GCM', false, ['decrypt'])
+    .finally(() => restored.value.fill(0));
+  console.log('Record serialized, reloaded and validated.');
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: record.iv },
+    decryptionKey,
+    record.ciphertext,
+  );
+  const recovered = new TextDecoder().decode(plaintext);
+  if (recovered !== message) throw new Error('Round trip failed');
+  console.log('Recovered message:', recovered);
+  console.log('Round trip: PASS');
+
+  const modified = record.ciphertext.slice();
+  modified[0] = (modified[0] ?? 0) ^ 1;
+  let rejected = false;
+  try {
+    await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: record.iv },
+      decryptionKey,
+      modified,
+    );
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== 'OperationError')
+      throw error;
+    rejected = true;
+  }
+  if (!rejected) throw new Error('Modified ciphertext was accepted');
+  console.log('Modified ciphertext: REJECTED');
+} finally {
+  password.fill(0);
+}
+
+// Encoding and saved-record validation helpers.
 function encode(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
     .replaceAll('+', '-')
@@ -123,80 +198,6 @@ function loadRecord(json: string) {
     iv,
     ciphertext,
   } as const;
-}
-
-try {
-  console.log('Argon2id v0x13: 64 MiB, 3 passes, 4 lanes');
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const start = performance.now();
-  const derived = await deriveArgon2(
-    { ...parameters, password, salt },
-    { limits },
-  );
-  if (!derived.ok) throw new Error(derived.error.code);
-  console.log('Derived key: ' + derived.value.length + ' bytes');
-  console.log(
-    'Derivation time: ' + Math.round(performance.now() - start) + ' ms',
-  );
-  const key = await crypto.subtle
-    .importKey('raw', derived.value.slice(), 'AES-GCM', false, ['encrypt'])
-    .finally(() => derived.value.fill(0));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    new TextEncoder().encode(message),
-  );
-  const saved = JSON.stringify({
-    format: 1,
-    kdf: parameters,
-    passwordEncoding: 'UTF-8',
-    salt: encode(salt),
-    cipher: 'AES-256-GCM',
-    iv: encode(iv),
-    ciphertext: encode(new Uint8Array(ciphertext)),
-  });
-  console.log('Saved record:', saved);
-
-  // Later: reload the saved JSON and use the same password.
-  const record = loadRecord(saved);
-  const restored = await deriveArgon2(
-    { ...record.kdf, password, salt: record.salt },
-    { limits },
-  );
-  if (!restored.ok) throw new Error(restored.error.code);
-  const decryptionKey = await crypto.subtle
-    .importKey('raw', restored.value.slice(), 'AES-GCM', false, ['decrypt'])
-    .finally(() => restored.value.fill(0));
-  console.log('Record serialized, reloaded and validated.');
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: record.iv },
-    decryptionKey,
-    record.ciphertext,
-  );
-  const recovered = new TextDecoder().decode(plaintext);
-  if (recovered !== message) throw new Error('Round trip failed');
-  console.log('Recovered message:', recovered);
-  console.log('Round trip: PASS');
-
-  const modified = record.ciphertext.slice();
-  modified[0] = (modified[0] ?? 0) ^ 1;
-  let rejected = false;
-  try {
-    await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: record.iv },
-      decryptionKey,
-      modified,
-    );
-  } catch (error) {
-    if (!(error instanceof Error) || error.name !== 'OperationError')
-      throw error;
-    rejected = true;
-  }
-  if (!rejected) throw new Error('Modified ciphertext was accepted');
-  console.log('Modified ciphertext: REJECTED');
-} finally {
-  password.fill(0);
 }
 ```
 

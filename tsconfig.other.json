@@ -23,8 +23,7 @@
 		"allowJs": true,
 		"checkJs": true,
 		"paths": {
-			"micro509": ["./src/index.ts"],
-			"micro509/kdf": ["./src/kdf.ts"]
+			"micro509": ["./src/index.ts"]
 		}
 	},
 	"include": [
