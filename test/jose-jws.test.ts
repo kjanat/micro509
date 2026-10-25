@@ -430,6 +430,32 @@ describe('bounds', () => {
 });
 
 describe('key suitability', () => {
+	it('rejects RSA exponents one and even values in non-extractable verification keys', async () => {
+		const jwk = await crypto.subtle.exportKey('jwk', primary.publicKey);
+		const signed = await sign();
+		for (const e of ['AQ', 'Ag', 'BA']) {
+			const key = await crypto.subtle.importKey(
+				'jwk',
+				{ ...jwk, e },
+				{ name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+				false,
+				['verify'],
+			);
+			expect(key.extractable).toBe(false);
+			expect(failureCode(await verifyCompactJws(signed, options({ key })))).toBe('key_unsuitable');
+		}
+		const exponentThree = await crypto.subtle.importKey(
+			'jwk',
+			{ ...jwk, e: 'Aw' },
+			{ name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+			false,
+			['verify'],
+		);
+		expect(failureCode(await verifyCompactJws(signed, options({ key: exponentThree })))).toBe(
+			'invalid_signature',
+		);
+	});
+
 	it('rejects a private key, a key without verify usage, and a non-RSA key', async () => {
 		const token = await sign();
 		expect(failureCode(await verifyCompactJws(token, options({ key: primary.privateKey })))).toBe(
@@ -763,7 +789,7 @@ describe('resolver and crypto failures are typed and sanitized', () => {
 			type: { value: 'public' },
 			usages: { value: ['verify'] },
 			algorithm: {
-				value: { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' }, modulusLength: 2048 },
+				value: primary.publicKey.algorithm,
 			},
 		});
 		expect(await resolved(forged)).toMatchObject({ ok: false, code: 'invalid_signature' });

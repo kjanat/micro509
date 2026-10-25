@@ -11,7 +11,11 @@ import { isJsonArray, isJsonObject, parseStrictJson } from '#micro509/internal/j
 import type { JoseErrorResult, JoseResult, KeyResolutionErrorCode } from '#micro509/jose/errors';
 import { joseFailure } from '#micro509/jose/errors';
 import type { JwsAlgorithm, JwsKeyResolver } from '#micro509/jose/jws';
-import { checkRs256VerificationKey, MIN_RS256_MODULUS_BITS } from '#micro509/jose/jws';
+import {
+	checkRs256VerificationKey,
+	MIN_RS256_MODULUS_BITS,
+	validRsaPublicExponent,
+} from '#micro509/jose/jws';
 import { importPublicJwk } from '#micro509/keys/keys';
 import { successResult } from '#micro509/result/result';
 
@@ -248,6 +252,7 @@ function unsuitableReason(entry: JwkEntry, algorithm: JwsAlgorithm): string | un
 	if (modulus.length > MAX_RSA_MODULUS_BYTES) return 'RSA modulus is too large';
 	const modulusBits = (modulus.length - 1) * 8 + 32 - Math.clz32(modulus[0] ?? 0);
 	if (modulusBits < MIN_RS256_MODULUS_BITS) return 'RSA modulus is too small';
+	if (!validRsaPublicExponent(exponent, modulus)) return 'RSA public exponent is invalid';
 	return undefined;
 }
 
@@ -296,6 +301,14 @@ export function selectJwk(
 export async function importJwkEntry(
 	entry: RsaJwkEntry,
 ): Promise<JoseResult<CryptoKey, 'key_unsuitable'>> {
+	const reason = unsuitableReason(entry, 'RS256');
+	if (reason !== undefined) {
+		return joseFailure(
+			'key_unsuitable',
+			reason,
+			entry.kid === undefined ? undefined : { kid: entry.kid },
+		);
+	}
 	const imported = await importPublicJwk(
 		{ kty: 'RSA', n: entry.n, e: entry.e, alg: 'RS256', key_ops: ['verify'], ext: true },
 		{ kind: 'rsa', scheme: 'pkcs1-v1_5', hash: 'SHA-256' },

@@ -4,6 +4,7 @@
  */
 
 import { rfc9106Vectors } from '../test/fixtures/argon2.mjs';
+import { forgeExponentOneJwt } from '../test/fixtures/jose-exponent-one.mjs';
 import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
 
 /**
@@ -183,6 +184,7 @@ async function runJoseSmoke(micro509, joseApi) {
 			claims: policy,
 		});
 		if (!viaJwks.ok) throw new Error('smoke: JWKS verification failed');
+		await runExponentOneSmoke(joseApi, keys.publicKey, now);
 
 		const [header, body, signature] = token.split('.');
 		const forged = `${header}.${body}.${signature?.slice(0, -4)}AAAA`;
@@ -200,5 +202,58 @@ async function runJoseSmoke(micro509, joseApi) {
 		if (requests !== 0) throw new Error('smoke: JOSE made a request before it was needed');
 	} finally {
 		if (guarded) Reflect.set(globalThis, 'fetch', originalFetch);
+	}
+}
+
+/**
+ * @param {typeof import('#micro509/jose')} joseApi
+ * @param {CryptoKey} publicKey
+ * @param {number} now
+ */
+async function runExponentOneSmoke(joseApi, publicKey, now) {
+	const forged = await forgeExponentOneJwt(publicKey, {
+		iss: 'https://smoke.example',
+		aud: 'smoke',
+		exp: now + 60,
+	});
+	const parsed = joseApi.parseJwks(JSON.stringify({ keys: [forged.jwk] }));
+	if (!parsed.ok) throw new Error(`smoke: exponent-one JWKS did not parse: ${parsed.code}`);
+	const policy = {
+		algorithms: /** @type {const} */ (['RS256']),
+		tokenType: 'JWT',
+		claims: { issuer: 'https://smoke.example', audience: 'smoke' },
+	};
+	const resolved = await joseApi.verifyJwt(forged.token, {
+		...policy,
+		key: joseApi.createJwksKeyResolver(parsed.value),
+	});
+	if (resolved.ok || resolved.code !== 'key_unsuitable') {
+		throw new Error('smoke: local JWKS accepted a public-material-only exponent-one forgery');
+	}
+	let key;
+	try {
+		key = await crypto.subtle.importKey(
+			'jwk',
+			forged.jwk,
+			{
+				name: 'RSASSA-PKCS1-v1_5',
+				hash: 'SHA-256',
+			},
+			false,
+			['verify'],
+		);
+	} catch (error) {
+		// Some runtimes reject the invalid RSA key before JOSE receives a CryptoKey.
+		if (
+			error instanceof Error &&
+			['DataError', 'OperationError', 'NotSupportedError'].includes(error.name)
+		)
+			return;
+		throw error;
+	}
+	if (key.extractable) throw new Error('smoke: exponent-one key must be non-extractable');
+	const direct = await joseApi.verifyJwt(forged.token, { ...policy, key });
+	if (direct.ok || direct.code !== 'key_unsuitable') {
+		throw new Error('smoke: CryptoKey accepted a public-material-only exponent-one forgery');
 	}
 }

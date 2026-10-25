@@ -241,6 +241,34 @@ describe('selectJwk', () => {
 		}
 	});
 
+	it('excludes invalid RSA exponents before deciding a matching set is ambiguous', async () => {
+		const strong = await rsaJwkEntry(primary, { kid: 'shared' });
+		const n = strong.n;
+		const strongExponent = strong.e;
+		if (typeof n !== 'string' || typeof strongExponent !== 'string')
+			throw new Error('Expected RSA parameters');
+		for (const e of [
+			'AQ',
+			'Ag',
+			'BA',
+			n,
+			Buffer.alloc(256, 255).toString('base64url'),
+			Buffer.alloc(257, 255).toString('base64url'),
+		]) {
+			const invalid = { ...strong, e };
+			const entry = parsed(invalid).keys[0];
+			if (entry?.kind !== 'rsa') throw new Error('Expected RSA entry');
+			expect((await importJwkEntry(entry)).ok).toBe(false);
+			for (const kid of [undefined, 'shared']) {
+				const selector = { algorithm: 'RS256', ...(kid === undefined ? {} : { kid }) } as const;
+				const alone = selectJwk(parsed(invalid), selector);
+				expect(alone.ok ? 'accepted' : alone.code).toBe('key_unsuitable');
+				const selected = selectJwk(parsed(invalid, strong), selector);
+				expect(selected.ok && selected.value.e).toBe(strongExponent);
+			}
+		}
+	});
+
 	it('accepts consistent use and key_ops and an alg that names the algorithm', async () => {
 		const jwks = parsed(
 			await rsaJwkEntry(primary, { kid: 'k', use: 'sig', key_ops: ['verify'], alg: 'RS256' }),

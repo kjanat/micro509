@@ -3,8 +3,10 @@ import { signData } from '#micro509/crypto';
 import { base64UrlEncode } from '#micro509/internal/jose/base64url';
 import type { JwtClaimsPolicy, VerifyJwtOptions } from '#micro509/jose';
 import {
+	createJwksKeyResolver,
 	decodeJwtUnverified,
 	MAX_CLOCK_TOLERANCE_SECONDS,
+	parseJwks,
 	signJwt,
 	verifyJwt,
 } from '#micro509/jose';
@@ -15,6 +17,8 @@ import {
 	joseTestKeys,
 	signRawRs256Token,
 } from '#test/helpers';
+
+import { forgeExponentOneJwt } from './fixtures/jose-exponent-one.mjs';
 
 const [primary, secondary] = await joseTestKeys();
 const NOW = 1_800_000_000;
@@ -71,6 +75,24 @@ async function code(
 }
 
 describe('verifyJwt', () => {
+	it('rejects an exponent-one forgery through JWKS and a non-extractable public key', async () => {
+		const { token: forged, jwk } = await forgeExponentOneJwt(primary.publicKey, validClaims());
+		const jwks = parseJwks(JSON.stringify({ keys: [jwk] }));
+		if (!jwks.ok) throw new Error(jwks.code);
+		const publicKey = await crypto.subtle.importKey(
+			'jwk',
+			jwk,
+			{ name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+			false,
+			['verify'],
+		);
+		expect(publicKey.extractable).toBe(false);
+		for (const key of [publicKey, createJwksKeyResolver(jwks.value)]) {
+			const result = await verifyJwt(forged, options({}, { key }));
+			expect(result.ok ? 'accepted' : result.code).toBe('key_unsuitable');
+		}
+	});
+
 	it('returns the verified header, every claim and the typed registered claims', async () => {
 		const token = await signJwt({
 			privateKey: primary.privateKey,

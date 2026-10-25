@@ -463,6 +463,23 @@ function isAlgorithmAdmitted(
 	);
 }
 
+/** Checks the observable RSA exponent constraints in RFC 8017 section 3.1. */
+export function validRsaPublicExponent(exponent: Uint8Array, modulus?: Uint8Array): boolean {
+	const first = exponent.findIndex((byte) => byte !== 0);
+	const last = exponent[exponent.length - 1] ?? 0;
+	if (first < 0 || (last & 1) === 0) return false;
+	const length = exponent.length - first;
+	if (length === 1 && last < 3) return false;
+	if (modulus === undefined) return true;
+	if (length !== modulus.length) return length < modulus.length;
+	for (let i = 0; i < length; i++) {
+		const left = exponent[first + i] ?? 0;
+		const right = modulus[i] ?? 0;
+		if (left !== right) return left < right;
+	}
+	return false;
+}
+
 /**
  * Checks a key may verify RS256 (RFC 7518 §3.3, RFC 8725 §3.1) and returns the signature length
  * in bytes it requires (RFC 8017 §8.2.2).
@@ -498,6 +515,16 @@ function inspectRs256VerificationKey(key: CryptoKey): JoseResult<number, 'key_un
 		return joseFailure(
 			'key_unsuitable',
 			`RS256 needs an RSA modulus of at least ${MIN_RS256_MODULUS_BITS} bits`,
+		);
+	}
+	if (
+		!('publicExponent' in algorithm) ||
+		!(algorithm.publicExponent instanceof Uint8Array) ||
+		!validRsaPublicExponent(algorithm.publicExponent)
+	) {
+		return joseFailure(
+			'key_unsuitable',
+			'RS256 needs a valid odd RSA public exponent of at least 3',
 		);
 	}
 	return successResult(Math.ceil(algorithm.modulusLength / 8));
