@@ -53,7 +53,16 @@ test('bootstrap release selection filters prereleases and sorts stable versions 
 
 /** @param {string} directory @param {string[]} args */
 function fixtureGit(directory, args) {
-	return execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8', stdio: 'pipe' });
+	// Hooks export repository-local Git variables. Inheriting them here can
+	// make even `git -C <fixture> init` rewrite the real worktree's metadata.
+	const env = Object.fromEntries(
+		Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+	);
+	return execFileSync('git', ['-C', directory, ...args], {
+		encoding: 'utf8',
+		stdio: 'pipe',
+		env,
+	});
 }
 
 /** @param {string} directory */

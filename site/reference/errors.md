@@ -324,6 +324,27 @@ cannot settle the status as `good`.
 | `decryption_failed` | Deliberately opaque: wrong key, wrong label, or bad ciphertext |
 | `invalid_key`       | Key is not an RSA-OAEP private key with `decrypt` usage        |
 
+## micro509/ssh
+
+### SshErrorCode
+
+| Code              | Meaning                                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_options` | An import policy option has an invalid type or value                                                                                            |
+| `key_mismatch`    | Key types disagree, or the private key does not match the embedded public key                                                                   |
+| `limit_exceeded`  | A micro509 limit: input above 16 KiB (public line) or 32 KiB (private file), a field above its length bound, or an RSA modulus above 16384 bits |
+| `malformed`       | Structurally invalid line, file, `mpint`, padding, check integers or trailing data                                                              |
+| `unsupported`     | Encrypted file, several keys, other key type or curve, RSA below `minRsaModulusBits`, compressed point without `acceptCompressedEcPoints`       |
+
+### SshExportErrorCode
+
+| Code                    | Meaning                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `invalid_comment`       | Comment exceeds 8192 UTF-8 bytes, contains CR, LF or NUL, or has an unpaired surrogate |
+| `invalid_key`           | Key has the wrong type for the operation                                               |
+| `not_extractable`       | Key is not extractable                                                                 |
+| `unsupported_algorithm` | Key is not RSA, ECDSA P-256/384/521 or Ed25519                                         |
+
 ## micro509/pem
 
 ### PemErrorCode
