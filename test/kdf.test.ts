@@ -233,6 +233,66 @@ describe('Argon2 key derivation', () => {
 		expect(backendOutputs.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true);
 	});
 
+	it('refuses a real backend output of the wrong length and erases the rejected key', async () => {
+		const request = {
+			...input(),
+			secret: new Uint8Array(8).fill(3),
+			associatedData: new Uint8Array(12).fill(4),
+		};
+		const snapshots: Argon2Input[] = [];
+		const outputs: Uint8Array[] = [];
+		const backend: Argon2Backend = async (snapshot) => {
+			snapshots.push(snapshot);
+			const result = await nodeBackend({ ...snapshot, outputBytes: snapshot.outputBytes + 1 });
+			if (!result.ok) throw new Error(result.error.code);
+			expect(result.value.byteLength).toBe(33);
+			expect(result.value.some((byte) => byte !== 0)).toBe(true);
+			outputs.push(result.value);
+			return result;
+		};
+		expect(await deriveArgon2(request, { backend })).toMatchObject({
+			ok: false,
+			error: {
+				code: 'derivation_failed',
+				message: 'Argon2 backend returned an incorrect output length',
+			},
+		});
+		expect(outputs).toHaveLength(1);
+		expect(outputs[0]?.every((byte) => byte === 0)).toBe(true);
+		for (const snapshot of snapshots) {
+			for (const bytes of [
+				snapshot.password,
+				snapshot.salt,
+				snapshot.secret,
+				snapshot.associatedData,
+			]) {
+				expect(bytes?.every((byte) => byte === 0)).toBe(true);
+			}
+		}
+		expect(request.password.every((byte) => byte === 1)).toBe(true);
+		expect(request.secret.every((byte) => byte === 3)).toBe(true);
+	});
+
+	it('rejects an ArrayBuffer returned by a JavaScript adapter instead of Uint8Array', async () => {
+		const snapshots: Argon2Input[] = [];
+		const backend = async (snapshot: Argon2Input) => {
+			snapshots.push(snapshot);
+			const result = await nodeBackend(snapshot);
+			if (!result.ok) throw new Error(result.error.code);
+			const value = new Uint8Array(result.value).buffer;
+			result.value.fill(0);
+			return { ok: true, value };
+		};
+		const result: unknown = await Reflect.apply(deriveArgon2, undefined, [input(), { backend }]);
+		expect(result).toMatchObject({
+			ok: false,
+			error: { code: 'derivation_failed', message: 'Argon2 backend returned invalid output' },
+		});
+		expect(snapshots).toHaveLength(1);
+		expect(snapshots[0]?.password.every((byte) => byte === 0)).toBe(true);
+		expect(snapshots[0]?.salt.every((byte) => byte === 0)).toBe(true);
+	});
+
 	it('handles genuine backend refusal and failure without exposing inputs', async () => {
 		const unsupported = await deriveArgon2({ ...input(), version: 0x10 }, { backend: nodeBackend });
 		expect(unsupported).toMatchObject({ ok: false, error: { code: 'unsupported' } });
