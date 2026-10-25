@@ -196,7 +196,7 @@
 		"npm": "12.2.1"
 	},
 	"catalog": {
-		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^4.1.0",
+		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"biome": "npm:@biomejs/biome@^2.5.14",
 		"dprint": "^0.64.0",
 		"runner-run": "^0.28.0",

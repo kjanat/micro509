@@ -49,6 +49,11 @@
 			"groupName": "Vue compiler integration"
 		},
 		{
+			"description": "The root dreamcli alias and the @kjanat/dreamcli catalog entry declare one package through two managers, so update both in one PR.",
+			"matchPackageNames": ["@kjanat/dreamcli", "dreamcli"],
+			"groupName": "dreamcli"
+		},
+		{
 			"description": "Review VitePress prereleases independently.",
 			"matchPackageNames": ["vitepress"],
 			"groupName": null
