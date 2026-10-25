@@ -22,6 +22,7 @@
 -->
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
+import { formatConsoleArgs } from '../../console-output.ts';
 
 const props = withDefaults(
   defineProps<{
@@ -106,7 +107,7 @@ async function run() {
 
     const src = `${head}
 			const __out = [];
-			const __fmt = (a) => a.map(v => typeof v === 'string' ? v : JSON.stringify(v, null, 2) ?? String(v)).join(' ');
+			const __fmt = ${formatConsoleArgs.toString()};
 			const __mk = (m) => ({ value: (...a) => {
 			  globalThis.console[m](...a);
 			  __out.push(__fmt(a));

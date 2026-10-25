@@ -1,141 +1,197 @@
 ---
+sidebarTitle: SSH keys
 outline: [2, 3]
 ---
 
-# SSH keys
+# Import, convert and export SSH keys
 
-`micro509/ssh` converts OpenSSH key files to WebCrypto keys and back. It reads
-and writes public-key lines (`.pub` files), unencrypted `openssh-key-v1` private
-keys, and `SHA256:` fingerprints for RSA, Ed25519, and ECDSA on P-256, P-384 and
-P-521. It opens no connection and imports nothing from the certificate modules.
+Use `micro509/ssh` to read OpenSSH key material into WebCrypto `CryptoKey`s,
+convert it to PEM formats, and write OpenSSH keys again. RSA, Ed25519 and
+ECDSA P-256/P-384/P-521 are supported.
 
-## Import a private key
+The examples below all use the same Ed25519 demo key. Its public line, private
+file and SPKI are included so each example runs independently and their
+fingerprints can be compared. This key is published demo material.
+
+## Inspect a public key
+
+Pass the contents of a `.pub` file to `importSshPublicKey`. The result includes
+the comment, algorithm, public `CryptoKey` and OpenSSH-style SHA-256 fingerprint.
+For an existing file, read its text in your application and replace `publicLine`.
+
+<LiveCode data-output="deterministic">
+
+```ts
+import { exportSpkiPem } from 'micro509/keys';
+import { importSshPublicKey } from 'micro509/ssh';
+
+const publicLine =
+  'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEe8pyyvj5Dmkk+3GLdlRTCy23tkJN+qAoA277AqkMTa docs@example.com';
+const result = await importSshPublicKey(publicLine);
+if (!result.ok) throw new Error(result.error.code);
+
+console.log('Public line:', publicLine);
+console.log('Key type:', result.value.keyType);
+console.log('Comment:', result.value.comment);
+console.log('Fingerprint:', result.value.fingerprint);
+console.log('SPKI PEM:\n' + (await exportSpkiPem(result.value.publicKey)));
+```
+
+</LiveCode>
+
+Save the printed public line as `demo.pub`. OpenSSH should print the same
+fingerprint:
+
+```bash
+ssh-keygen -lf demo.pub -E sha256
+```
+
+For this key, the fingerprint is `SHA256:h4TPQn6XDJNXs9cPaExw1sEckQM+SWlkc3GdYQfyRLA`.
+The fingerprint identifies the SSH public-key blob, so converting the key to
+SPKI and back produces the same fingerprint. Hashing the SPKI bytes directly
+would hash a different encoding.
+
+## Import and convert a private key
+
+`importOpenSshPrivateKey` accepts an **unencrypted, single-key** OpenSSH private
+file as text or bytes. Password-protected files return `unsupported`.
+
+This example imports the demo private key, converts it to PKCS#8, and exports
+it as an OpenSSH private file again. It also prints the corresponding public
+line and fingerprint for comparison with the first example.
 
 <LiveCode>
 
 ```ts
-import { generateKeyPair, unwrap } from 'micro509';
+import { exportPkcs8Pem } from 'micro509/keys';
 import {
   exportOpenSshPrivateKey,
   exportSshPublicKey,
   importOpenSshPrivateKey,
 } from 'micro509/ssh';
 
-const keys = await generateKeyPair({ kind: 'ed25519' });
-const file = await exportOpenSshPrivateKey(keys.privateKey, {
-  comment: 'me@host',
-});
+const privateFile = `-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtz
+c2gtZWQyNTUxOQAAACBHvKcsr4+Q5pJPtxi3ZUUwstt7ZCTfqgKANu+wKpDE2gAA
+AJjG4ObKxuDmygAAAAtzc2gtZWQyNTUxOQAAACBHvKcsr4+Q5pJPtxi3ZUUwstt7
+ZCTfqgKANu+wKpDE2gAAAECqFGHsHLN5lRCCAPIxD/kHFhY1mlExMyCLZ9zGqUvE
+H0e8pyyvj5Dmkk+3GLdlRTCy23tkJN+qAoA277AqkMTaAAAAEGRvY3NAZXhhbXBs
+ZS5jb20BAgMEBQ==
+-----END OPENSSH PRIVATE KEY-----`;
+const result = await importOpenSshPrivateKey(privateFile);
+if (!result.ok) throw new Error(result.error.code);
+const imported = result.value;
 
-const imported = unwrap(await importOpenSshPrivateKey(file));
-const line = await exportSshPublicKey(imported.publicKey, {
-  comment: imported.comment,
-});
-
-console.log(`\
-type:        ${imported.keyType}
-comment:     ${imported.comment}
-fingerprint: ${imported.fingerprint}
-public line: ${line}`);
+console.log('Fingerprint:', imported.fingerprint);
+console.log(
+  'Public line:',
+  await exportSshPublicKey(imported.publicKey, {
+    comment: imported.comment,
+  }),
+);
+console.log(
+  'PKCS#8 private key:\n' + (await exportPkcs8Pem(imported.privateKey)),
+);
+console.log(
+  'OpenSSH private key:\n' +
+    (await exportOpenSshPrivateKey(imported.privateKey, {
+      comment: imported.comment,
+    })),
+);
 ```
 
 </LiveCode>
 
-`importOpenSshPrivateKey` takes the PEM file as text or bytes and returns the
-`privateKey` (`sign`), the `publicKey` (`verify`), the comment, and the
-fingerprint. Both keys are extractable, so `exportPkcs8Pem`, `exportSpkiPem`,
-`exportPrivateJwk` and the other `micro509/keys` exports work on them.
+The imported private key has `sign` usage and its public key has `verify` usage.
+Both are extractable. Use the [Keys guide](./keys.md#import-and-export) for
+PKCS#8, SPKI and JWK conversions, or [encrypted PKCS#8](./keys.md#encrypted-pkcs8)
+to produce a password-protected private-key container.
+
+OpenSSH private exports include random check integers. Two exported files can
+differ while holding the same key. Compare their public keys or fingerprints.
+
+## Export a public key to OpenSSH
+
+Here is the SPKI printed by the first example. Importing it and calling
+`exportSshPublicKey` produces the original `.pub` line. The comment is metadata
+you supply separately from the key.
 
 <LiveCode data-output="deterministic">
 
 ```ts
-import { importSshPublicKey } from 'micro509/ssh';
+import { importSpkiPemOrThrow } from 'micro509/keys';
+import { exportSshPublicKey, sshFingerprintSha256 } from 'micro509/ssh';
 
-const result = await importSshPublicKey(
-  'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl me@host',
+const spki = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAR7ynLK+PkOaST7cYt2VFMLLbe2Qk36oCgDbvsCqQxNo=
+-----END PUBLIC KEY-----`;
+const publicKey = await importSpkiPemOrThrow(spki);
+console.log(
+  await exportSshPublicKey(publicKey, { comment: 'docs@example.com' }),
 );
-console.log(result);
+console.log('Fingerprint:', await sshFingerprintSha256(publicKey));
 ```
 
 </LiveCode>
 
-## Accepted formats
+Export requires an extractable key. `exportSshPublicKey` and
+`exportOpenSshPrivateKey` throw a typed `ResultError` for `not_extractable`,
+`unsupported_algorithm`, `invalid_key` or `invalid_comment`. See
+[handling builder errors](../reference/errors.md) for `isResultError`.
 
-| Input            | Accepted                                                                                                   |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| Public-key line  | `<type> <base64> [comment]` with `ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-nistp256`, `-nistp384`, `-nistp521` |
-| Private-key file | `-----BEGIN OPENSSH PRIVATE KEY-----` holding one key, cipher `none`, KDF `none`                           |
-| Not accepted     | encrypted files, files with several keys, `authorized_keys` options, SSH certificates, `sk-*` keys, DSA    |
+## Handle import failures
 
-Encrypted files and multi-key files return `unsupported`. Strict parsing
-rejects a bad magic header, truncated or oversize fields, non-canonical or
-negative `mpint`s, differing check integers, wrong padding, and trailing bytes.
+Imports return a result. Branch on `result.error.code` when accepting uploaded
+or pasted key material:
 
-### The `ssh-rsa` name
+| Code              | Meaning and response                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `malformed`       | The file or key encoding is invalid. Ask for the complete, original key file.                                    |
+| `unsupported`     | The key type, encryption or container is outside the accepted formats, or an RSA key is below your minimum size. |
+| `key_mismatch`    | A private file's embedded public and private keys disagree. Reject it.                                           |
+| `limit_exceeded`  | The file or key exceeds the size limits below.                                                                   |
+| `invalid_options` | Fix the import options supplied by your application.                                                             |
 
-`ssh-rsa` names the RSA public-key encoding. [RFC 8332][rfc8332] reuses that
-encoding for the `rsa-sha2-256` and `rsa-sha2-512` signature algorithms, so
-importing an `ssh-rsa` key enables no SHA-1 signature. The `rsa` option picks how
-the returned `CryptoKey` signs, PKCS#1 v1.5 with SHA-256 by default.
+The complete result and error types are in the [SSH API reference](../api/ssh.md).
 
-## Consistency checks
+## Formats and import options
 
-An embedded public key must match its private key. A mismatch returns
-`key_mismatch`:
+| Input        | Supported                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| Public line  | `ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521` |
+| Private file | `OPENSSH PRIVATE KEY`, `openssh-key-v1`, one key, cipher and KDF both `none`                  |
 
-- the private section's key type and public key equal the file's public key.
-- RSA: `p·q = n`, `d·e ≡ 1` modulo `p-1` and `q-1`, and `iqmp·q ≡ 1 (mod p)`.
-- Ed25519: the 64-byte private field ends with the public key.
-- every key type: a signature made with the private key verifies under the
-  embedded public key.
+Encrypted OpenSSH files, SSH certificates, `authorized_keys` options, `sk-*`
+keys and DSA are unsupported. This module converts key material. SSH connections
+and protocol authentication belong to an SSH client.
 
-## Policy options
+| Import option              | Default               | When to change it                                                                    |
+| -------------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `minRsaModulusBits`        | `2048`                | Your application's RSA key-size policy differs.                                      |
+| `acceptCompressedEcPoints` | `false`               | You need to read compressed ECDSA points permitted by RFC 5656.                      |
+| `rsa.scheme` / `rsa.hash`  | PKCS#1 v1.5 / SHA-256 | The imported RSA `CryptoKey` will be used with a different signature scheme or hash. |
 
-The standards leave these choices to the relying party:
+The `ssh-rsa` label describes a key encoding. It does not select SHA-1 signatures.
+RSA-SHA2 signature algorithms also use that encoding. The `rsa` import options
+select the WebCrypto signature parameters.
 
-| Option                     | Default | Effect                                                               |
-| -------------------------- | ------- | -------------------------------------------------------------------- |
-| `minRsaModulusBits`        | `2048`  | smaller RSA keys return `unsupported`. OpenSSH itself accepts 1024   |
-| `acceptCompressedEcPoints` | `false` | read SEC 1 compressed ECDSA points, which [RFC 5656][rfc5656] allows |
+Public lines are limited to 16 KiB, private files to 32 KiB, and RSA moduli to
+16384 bits. Comments allow at most 8192 UTF-8 bytes and must be well-formed
+Unicode without CR, LF or NUL.
 
-Limits are fixed: 16 KiB for a public-key line, 32 KiB for a private file, and
-RSA moduli up to 16384 bits (`limit_exceeded`). Comments are limited to 8192
-UTF-8 bytes and must be well-formed Unicode without CR, LF or NUL. A leading
-Unicode BOM in a comment is preserved. Invalid policy options return
-`invalid_options`.
+<details>
+<summary>Private-key consistency and buffer handling</summary>
 
-## Fingerprints
+Imports check that the private section describes the file's public key and that
+a signature from the private key verifies under it. RSA imports also check the
+relationships between the modulus, prime factors, exponents and CRT coefficient.
+Ed25519's embedded public-key bytes must agree with the public key.
 
-`sshFingerprintSha256` returns the value `ssh-keygen -l -E sha256` prints: the
-SHA-256 digest of the SSH public-key blob, base64 without padding, prefixed with
-`SHA256:`. It is not a certificate fingerprint and not a digest of the SPKI.
+The decoded private-file buffer is zeroed before import returns. Export zeroes
+its combined private-field, padded-section and file buffers. Strings and temporary
+field encodings are managed by JavaScript and cannot all be erased explicitly.
 
-<LiveCode>
+</details>
 
-```ts
-import { generateKeyPair } from 'micro509';
-import { sshFingerprintSha256 } from 'micro509/ssh';
-
-const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
-console.log(await sshFingerprintSha256(keys.publicKey));
-```
-
-</LiveCode>
-
-## Export
-
-`exportSshPublicKey` and `exportOpenSshPrivateKey` need extractable keys and
-throw a `ResultError` with a code of `invalid_key`, `unsupported_algorithm`,
-`not_extractable` or `invalid_comment`. The check integers in a private file
-are random and differ between exports, so compare keys rather than file bytes. `ssh-keygen`
-reads the exported file as is.
-
-## Secret handling
-
-Your input buffers are never modified. The decoded binary copy of a private file
-is zeroed before import returns. Export zeroes its combined private-field,
-padded-section and file buffers. Temporary field encodings are garbage-collected.
-PEM text, base64 strings and JWK member strings cannot be zeroed. Error messages
-contain no key material.
-
-[rfc8332]: https://www.rfc-editor.org/rfc/rfc8332.html#section-3
-[rfc5656]: https://www.rfc-editor.org/rfc/rfc5656.html#section-3.1
+Continue with [key conversions](./keys.md), the [SSH API](../api/ssh.md),
+or the [SSH error codes](../reference/errors.md#ssherrorcode).
