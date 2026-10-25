@@ -2,7 +2,7 @@
 outline: [2, 3]
 ---
 
-# Getting Started
+# Getting started
 
 ::: warning Prerelease
 micro509 is `0.x` — API may change before 1.0.
@@ -76,15 +76,19 @@ import * as micro509 from 'jsr:@kjanat/micro509';
 
 ## Choose a task
 
-| Task                                | Guide                             |
-| ----------------------------------- | --------------------------------- |
-| Create certificates and CSRs        | [Certificates](./certificates.md) |
-| Verify a chain and service identity | [Verification](./verification.md) |
-| Check CRL or OCSP evidence          | [Revocation](./revocation.md)     |
-| Import, export, or encrypt keys     | [Keys](./keys.md)                 |
-| Work with PFX or PKCS#7             | [PKCS](./pkcs.md)                 |
+| Task                                | Guide                                 |
+| ----------------------------------- | ------------------------------------- |
+| Create certificates and CSRs        | [Certificates](./certificates.md)     |
+| Verify a chain and service identity | [Verification](./verification.md)     |
+| Import, export, or encrypt keys     | [Keys](./keys.md)                     |
+| Import and export OpenSSH keys      | [SSH keys](./ssh.md)                  |
+| Derive keys with Argon2             | [Key derivation](./key-derivation.md) |
+| Check CRL or OCSP evidence          | [Revocation](./revocation.md)         |
+| Work with PFX or PKCS#7             | [PKCS](./pkcs.md)                     |
+| Sign and verify JWTs, resolve JWKS  | [JOSE](./jose.md)                     |
+| Configure certificate extensions    | [Extensions](./extensions.md)         |
 
-## Quick Start
+## Quick start
 
 ### Create a self-signed certificate
 

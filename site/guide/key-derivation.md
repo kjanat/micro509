@@ -1,4 +1,4 @@
-# Derive keys with Argon2
+# Key derivation
 
 Import `deriveArgon2` from `micro509/kdf` for byte-oriented Argon2id and
 Argon2d derivation. The default adapter uses the runtime's native WebCrypto
