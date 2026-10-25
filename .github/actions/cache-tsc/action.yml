@@ -4,6 +4,12 @@ inputs:
   operation:
     description: restore before installation, save after installation
     default: restore
+  path:
+    description: Compiler artifact paths shared by restore and save
+    default: |
+      .cache/tsc
+      tsc/*/bin
+      tsc/*/dist
 runs:
   using: composite
   steps:
@@ -15,7 +21,7 @@ runs:
       run: |
         bun_version=$(bun --version)
         node_version=$(node --version)
-        cache_key=$(printf '%s' "tsc-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS:-}-${ImageVersion:-}-${bun_version}-${node_version}-${INPUT_HASH}" | tr -d '\r\n')
+        cache_key=$(printf '%s' "tsc-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS:-}-${ImageVersion:-}-${bun_version}-${node_version}-${INPUT_HASH}" | tr -d '\r' | tr -d '\n')
         printf 'TSC_ARTIFACT_CACHE_KEY=%s\n' "${cache_key}" >> "${GITHUB_ENV}"
     - name: Restore compiler artifacts
       id: restore
@@ -23,10 +29,7 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         key: ${{ env.TSC_ARTIFACT_CACHE_KEY }}
-        path: &artifacts |
-          .cache/tsc
-          tsc/*/bin
-          tsc/*/dist
+        path: ${{ inputs.path }}
     - name: Record cache result
       if: inputs.operation == 'restore'
       shell: "bash -euo pipefail {0}"
@@ -43,4 +46,4 @@ runs:
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         key: ${{ env.TSC_ARTIFACT_CACHE_KEY }}
-        path: *artifacts
+        path: ${{ inputs.path }}
