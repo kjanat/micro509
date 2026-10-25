@@ -1,6 +1,6 @@
 {
 	"name": "micro509",
-	"version": "0.16.0",
+	"version": "0.17.0",
 	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
 	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk", "importmapify"],
 	"homepage": "https://micro509.kjanat.dev",

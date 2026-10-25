@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-25
+
+Work with OpenSSH keys, derive encryption keys with Argon2, and sign and verify
+JWTs with local or remote JWK Sets. Three optional entrypoints extend micro509
+beyond certificate workflows: `micro509/ssh`, `micro509/kdf` and `micro509/jose`.
+
+The new guides follow complete workflows with runnable examples, inspectable
+key material and returned verification results. Navigation distinguishes PR
+previews from published versions and makes the version list usable on mobile.
+
 ### Added
 
 - `micro509/ssh` entrypoint for OpenSSH key material: public-key lines
@@ -55,8 +65,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cooldown, enforces its deadline even when a transport ignores cancellation,
   and never reuses an expired set after a failed refresh.
 
+### Changed
+
+- **Follow complete SSH, Argon2 and JWT workflows.** The SSH guide uses one
+  key through import, conversion, export and fingerprint comparison. The
+  Argon2 guide derives an encryption key, saves the salt and parameters, and
+  derives it again to decrypt. The JWT guide verifies the same token with a
+  direct key, local JWKS and remote resolver, then demonstrates rejection for
+  the wrong audience. Short sidebar labels link to descriptive articles and
+  their API references. [#201](https://github.com/kjanat/micro509/pull/201)
+
 ### Fixed
 
+- Multiline LiveCode output, including PEM keys and JSON, starts below its
+  label so readers can inspect and copy complete blocks.
 - Mobile navigation uses compact rows and an inline version list that expands
   like VitePress's own screen-menu groups, scrolling with the menu instead of
   inside a nested box. The version button toggles the list, and Escape or an
@@ -2006,7 +2028,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/kjanat/micro509/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/kjanat/micro509/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kjanat/micro509/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kjanat/micro509/compare/v0.13.0...v0.14.0
