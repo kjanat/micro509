@@ -60,7 +60,7 @@ than replacing global crypto. It compares outputs with:
   separately.
 
 The optional-backend contract is also exercised for snapshot ownership,
-temporary-array wiping, genuine runtime failure, exact limit boundaries,
+temporary-array wiping, worker transfer of input buffers, genuine runtime failure, exact limit boundaries,
 malformed numeric values, and memory values that are not multiples of `4*p`.
 
 ## Sample performance

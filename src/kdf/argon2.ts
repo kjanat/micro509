@@ -64,7 +64,8 @@ export type Argon2Result = Result<Uint8Array, Micro509Error<Argon2ErrorCode>>;
 /**
  * Trusted, explicitly supplied implementation for the exact requested algorithm
  * and version. Called only after parameter and resource checks. Input arrays are
- * private copies, wiped when the promise settles. Transfer ownership of output
+ * private copies, wiped when the promise settles. A backend that transfers an input
+ * buffer must erase it in the receiving worker. Transfer ownership of output
  * bytes to the caller: the wrapper copies and wipes that array before returning.
  * Report unsupported requests explicitly, without fallback. Execution behavior
  * and cancellation of a custom backend are its provider's responsibility.
@@ -150,6 +151,12 @@ function copyInput(input: Argon2Input): Argon2Input {
 			? {}
 			: { associatedData: new Uint8Array(input.associatedData) }),
 	};
+}
+
+function eraseAccessible(bytes: Uint8Array | undefined): void {
+	// Transfer detaches the sender's view. Its bytes can only be erased by the
+	// receiving worker, and cleanup must still proceed through the other inputs.
+	if (bytes !== undefined && bytes.byteLength > 0) Uint8Array.prototype.fill.call(bytes, 0);
 }
 
 async function nativeArgon2(input: Argon2Input): Promise<Argon2Result> {
@@ -253,14 +260,14 @@ export async function deriveArgon2(
 				? { ok: true, value: new Uint8Array(result.value) }
 				: failure('derivation_failed', 'Argon2 backend returned an incorrect output length');
 		} finally {
-			result.value.fill(0);
+			eraseAccessible(result.value);
 		}
 	} catch {
 		return failure('derivation_failed', 'Argon2 backend failed');
 	} finally {
-		owned.password.fill(0);
-		owned.salt.fill(0);
-		owned.secret?.fill(0);
-		owned.associatedData?.fill(0);
+		eraseAccessible(owned.password);
+		eraseAccessible(owned.salt);
+		eraseAccessible(owned.secret);
+		eraseAccessible(owned.associatedData);
 	}
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { argon2, createHash } from 'node:crypto';
+import { Worker } from 'node:worker_threads';
 import type { Argon2Backend, Argon2Input, Argon2Limits, Argon2Result } from '#micro509/kdf';
 import { deriveArgon2 } from '#micro509/kdf';
 import { rfc9106Vectors } from './fixtures/argon2.mjs';
@@ -254,7 +255,6 @@ describe('Argon2 key derivation', () => {
 			ok: false,
 			error: {
 				code: 'derivation_failed',
-				message: 'Argon2 backend returned an incorrect output length',
 			},
 		});
 		expect(outputs).toHaveLength(1);
@@ -286,11 +286,66 @@ describe('Argon2 key derivation', () => {
 		const result: unknown = await Reflect.apply(deriveArgon2, undefined, [input(), { backend }]);
 		expect(result).toMatchObject({
 			ok: false,
-			error: { code: 'derivation_failed', message: 'Argon2 backend returned invalid output' },
+			error: { code: 'derivation_failed' },
 		});
 		expect(snapshots).toHaveLength(1);
 		expect(snapshots[0]?.password.every((byte) => byte === 0)).toBe(true);
 		expect(snapshots[0]?.salt.every((byte) => byte === 0)).toBe(true);
+	});
+
+	it('accepts a worker backend that transfers its owned password and erases the other inputs', async () => {
+		const vector = rfc9106Vectors[1];
+		if (vector === undefined) throw new Error('Missing Argon2id vector');
+		const snapshots: Argon2Input[] = [];
+		const worker = new Worker(new URL('./fixtures/argon2-worker.mjs', import.meta.url));
+		const backend: Argon2Backend = (snapshot) =>
+			new Promise((resolve, reject) => {
+				snapshots.push(snapshot);
+				worker.once('error', reject);
+				worker.once('message', (value: unknown) => {
+					if (!(value instanceof Uint8Array)) {
+						reject(new Error('Worker did not return a derived key'));
+						return;
+					}
+					resolve({ ok: true, value });
+				});
+				const transferable = snapshot.password.buffer;
+				if (!(transferable instanceof ArrayBuffer)) {
+					reject(new Error('Owned password must have a transferable ArrayBuffer'));
+					return;
+				}
+				worker.postMessage(snapshot, [transferable]);
+			});
+		try {
+			const result = await deriveArgon2(vector.input, { backend });
+			expect(hex(result)).toBe(vector.expected);
+			expect(snapshots).toHaveLength(1);
+			expect(snapshots[0]?.password.byteLength).toBe(0);
+			for (const bytes of [
+				snapshots[0]?.salt,
+				snapshots[0]?.secret,
+				snapshots[0]?.associatedData,
+			]) {
+				expect(bytes?.every((byte) => byte === 0)).toBe(true);
+			}
+			expect(vector.input.password.every((byte) => byte === 1)).toBe(true);
+		} finally {
+			await worker.terminate();
+		}
+	});
+
+	it('reports a detached backend output as a typed failure', async () => {
+		const backend: Argon2Backend = async (snapshot) => {
+			const result = await nodeBackend(snapshot);
+			if (!result.ok) throw new Error(result.error.code);
+			const transferred = structuredClone(result.value.buffer, { transfer: [result.value.buffer] });
+			new Uint8Array(transferred).fill(0);
+			return result;
+		};
+		expect(await deriveArgon2(input(), { backend })).toMatchObject({
+			ok: false,
+			error: { code: 'derivation_failed' },
+		});
 	});
 
 	it('handles genuine backend refusal and failure without exposing inputs', async () => {
