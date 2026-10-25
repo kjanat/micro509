@@ -13,6 +13,11 @@ micro509 is ESM-only, side-effect-free, and uses only WebCrypto APIs.
 | Cloudflare Workers | supported | Full WebCrypto available                                         |
 | Edge runtimes      | supported | Any runtime with WebCrypto + TextEncoder/TextDecoder + atob/btoa |
 
+The optional [`micro509/kdf` Argon2 adapter](../guide/key-derivation.md)
+requires native WebCrypto Argon2 support or an explicitly supplied backend.
+It returns `unsupported` when the runtime lacks that algorithm. Certificate
+and key-format support does not depend on Argon2 availability.
+
 ## Requirements
 
 micro509 requires these global APIs:

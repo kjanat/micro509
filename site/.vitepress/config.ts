@@ -322,6 +322,7 @@ const ORDER: SidebarOrder = {
 				'certificates',
 				'verification',
 				'keys',
+				'key-derivation',
 				'revocation',
 				'pkcs',
 				'extensions',

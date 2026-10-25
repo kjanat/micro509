@@ -8,12 +8,13 @@
 
 import * as micro509 from '#micro509';
 import * as cryptoApi from '#micro509/crypto';
+import * as kdfApi from '#micro509/kdf';
 import { runSmoke } from '#smoke';
 
 export default {
 	async fetch() {
 		try {
-			return new Response(await runSmoke(micro509, cryptoApi));
+			return new Response(await runSmoke(micro509, cryptoApi, kdfApi));
 		} catch (e) {
 			console.error('smoke-worker fetch failed', e);
 			return new Response('smoke failed', { status: 500 });
