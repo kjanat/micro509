@@ -27,10 +27,11 @@ jobs:
     env: { RERUNS: "${{ inputs.reruns || '100' }}" }
     steps:
       - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } }
-      - { uses: $/.github/actions/setup, with: { install-bun: "true" } }
+      - { uses: $/.github/actions/setup, id: setup, with: { install-bun: "true" } }
       - name: Install and build dist (root-barrel test imports the `micro509` package name)
         run: runner install -f build
+        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
       - uses: $/.github/actions/cache-tsc
-        with: { operation: save }
+        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - name: Run suite with randomized order (failure output includes --seed for repro)
         run: bun test --randomize --concurrent --rerun-each="${RERUNS}"

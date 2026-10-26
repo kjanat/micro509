@@ -94,16 +94,20 @@ micro509, each package's own `tsdown.config.ts` names its entries, and tsdown wr
 `exports` and `bin` of every `package.json`. `build:tsc` builds the five packages alone.
 `bun install` builds the native helper, both WebAssembly modules, and their TypeScript
 bundles through `tsc/prepare.ts`. Subsequent installs verify the input and output
-hashes in `.cache/tsc/build` and reuse matching artifacts. Changes to compiler
-sources, Go modules, build configuration, the Bun lockfile, runtimes or Go
-toolchain trigger a rebuild. Missing or changed output files also trigger a rebuild.
-Delete `.cache/tsc/build` to force the next install to rebuild. Standalone package
-build commands and `build:tsc` continue to build directly.
+hashes separately in `.cache/tsc/go` and `.cache/tsc/bundles` and reuse matching artifacts.
+Go sources, modules, build recipes and the Go toolchain determine the Go build.
+TypeScript sources, bundler configuration, dependencies and JavaScript runtimes determine
+the bundle build. A Node or Bun upgrade does not rebuild the Go artifacts, and a micro509
+version bump does not invalidate either build. Missing or changed output files rebuild
+only their owning stage. Delete the corresponding stamp to force that stage to rebuild.
+Standalone package build commands and `build:tsc` continue to build directly.
 
-CI restores `tsc/*/bin`, `tsc/*/dist`, and the validation stamp before installation
+CI restores `tsc/*/bin` and its Go stamp separately from `tsc/*/dist` and its bundle stamp
 with `actions/cache/restore`, then saves successful builds with `actions/cache/save`.
-Keys separate runner platforms, architectures, image versions, runtimes, and build
-inputs. The preview publication workflow uses its existing read-only cache policy.
+Keys use GitHub's `hashFiles()` for build inputs. The Go key includes the runner platform,
+architecture and image; the bundle key also uses version outputs from the runtime setup
+actions. Restore keys and hit results pass directly through action outputs to save inputs.
+The preview publication workflow uses its existing read-only cache policy.
 
 Each push to `master` or a pull request
 publishes all five packages with their built binaries to [pkg.pr.new] through [`.github/workflows/pkg-pr-new.yml`][wf/pkg-pr-new].

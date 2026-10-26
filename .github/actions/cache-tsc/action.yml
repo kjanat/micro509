@@ -1,49 +1,56 @@
 name: Cache compiler artifacts
-description: Restore or save the compiler binaries, Go runtimes, bundles, and validation stamp.
+description: Cache Go artifacts and compiler bundles independently.
 inputs:
   operation:
     description: restore before installation, save after installation
     default: restore
-  path:
-    description: Compiler artifact paths shared by restore and save
+  bun-version:
+    description: Installed Bun version from setup-bun
+  node-version:
+    description: Installed Node.js version from setup-node
+  state:
+    description: JSON restore outputs passed to save
+    default: "{}"
+  go-path:
+    description: Go artifact paths shared by restore and save
     default: |
-      .cache/tsc
+      .cache/tsc/go
       tsc/*/bin
+  bundle-path:
+    description: Bundle paths shared by restore and save
+    default: |
+      .cache/tsc/bundles
       tsc/*/dist
+outputs:
+  state:
+    description: Restore step outputs as JSON
+    value: ${{ toJSON(steps) }}
 runs:
   using: composite
   steps:
-    - name: Select compiler artifact cache
-      if: inputs.operation == 'restore'
-      shell: "bash -euo pipefail {0}"
-      env:
-        INPUT_HASH: ${{ hashFiles('tsc/**/*.go', 'tsc/*/go.mod', 'tsc/*/go.sum', 'tsc/*/src/**', 'tsc/*.ts', 'tsc/*/build.ts', 'tsc/*/package.json', 'tsc/*/tsconfig.json', 'tsc/*/tsdown.config.ts', 'go.work*', 'bun.lock', 'package.json', 'tsdown.config.ts', '.dprint.json', '.github/actions/cache-tsc/action.yml') }}
-      run: |
-        bun_version=$(bun --version)
-        node_version=$(node --version)
-        cache_key=$(printf '%s' "tsc-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS:-}-${ImageVersion:-}-${bun_version}-${node_version}-${INPUT_HASH}" | tr -d '\r' | tr -d '\n')
-        printf 'TSC_ARTIFACT_CACHE_KEY=%s\n' "${cache_key}" >> "${GITHUB_ENV}"
-    - name: Restore compiler artifacts
-      id: restore
+    - name: Restore Go artifacts
+      id: go
       if: inputs.operation == 'restore'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        key: ${{ env.TSC_ARTIFACT_CACHE_KEY }}
-        path: ${{ inputs.path }}
-    - name: Record cache result
+        key: ${{ format('tsc-go-{0}-{1}-{2}-{3}-{4}', runner.os, runner.arch, env.ImageOS, env.ImageVersion, hashFiles('tsc/**/*.go', 'tsc/*/go.mod', 'tsc/*/go.sum', 'tsc/*/build.ts', 'go.work*', '.tool-versions')) }}
+        path: ${{ inputs.go-path }}
+    - name: Restore compiler bundles
+      id: bundles
       if: inputs.operation == 'restore'
-      shell: "bash -euo pipefail {0}"
-      env:
-        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
-      run: |
-        case "${CACHE_HIT}" in
-          true) printf '%s\n' 'TSC_ARTIFACT_CACHE_HIT=true' >> "${GITHUB_ENV}" ;;
-          false|"") printf '%s\n' 'TSC_ARTIFACT_CACHE_HIT=false' >> "${GITHUB_ENV}" ;;
-          *) echo 'Unexpected cache-hit output' >&2; exit 1 ;;
-        esac
-    - name: Save compiler artifacts
-      if: inputs.operation == 'save' && env.TSC_ARTIFACT_CACHE_HIT != 'true' && env.TSC_ARTIFACT_CACHE_KEY != '' && hashFiles('.cache/tsc/build') != ''
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ format('tsc-bundles-{0}-{1}-{2}-{3}', steps.go.outputs.cache-primary-key, inputs.bun-version, inputs.node-version, hashFiles('tsc/*/src/**', 'tsc/*.ts', '!tsc/*.test.ts', 'tsc/*/package.json', 'tsc/*/tsconfig.json', 'tsc/*/tsdown.config.ts', 'bun.lock', 'tsdown.config.ts', '.dprint.json')) }}
+        path: ${{ inputs.bundle-path }}
+    - name: Save Go artifacts
+      if: inputs.operation == 'save' && fromJSON(inputs.state).go.outputs.cache-hit != 'true' && fromJSON(inputs.state).go.outputs.cache-primary-key != '' && hashFiles('.cache/tsc/go') != ''
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        key: ${{ env.TSC_ARTIFACT_CACHE_KEY }}
-        path: ${{ inputs.path }}
+        key: ${{ fromJSON(inputs.state).go.outputs.cache-primary-key }}
+        path: ${{ inputs.go-path }}
+    - name: Save compiler bundles
+      if: inputs.operation == 'save' && fromJSON(inputs.state).bundles.outputs.cache-hit != 'true' && fromJSON(inputs.state).bundles.outputs.cache-primary-key != '' && hashFiles('.cache/tsc/bundles') != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ fromJSON(inputs.state).bundles.outputs.cache-primary-key }}
+        path: ${{ inputs.bundle-path }}
