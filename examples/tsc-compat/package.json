@@ -7,7 +7,7 @@
 		"start": "node server.js"
 	},
 	"dependencies": {
-		"@kjanat/tsc-compat": "latest"
+		"@kjanat/tsc-compat": "^0.0.0"
 	},
 	"stackblitz": {
 		"installDependencies": true,

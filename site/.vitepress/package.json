@@ -21,8 +21,8 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "catalog:cloudflare",
-		"@kjanat/tsc-bridge": "workspace:*",
-		"@kjanat/tsc-vue-mapper": "workspace:*",
+		"@kjanat/tsc-bridge": "catalog:typebridge",
+		"@kjanat/tsc-vue-mapper": "catalog:typebridge",
 		"@micro509/vitepress-api-docs": "workspace:*",
 		"@micro509/vitepress-doc-examples": "workspace:*",
 		"@micro509/vitepress-github-links": "workspace:*",

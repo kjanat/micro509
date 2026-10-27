@@ -10,7 +10,6 @@ This directory owns reusable CI building blocks, not full workflow policy. Keep 
 
 ```tree
 actions/
-├── cache-tsc/         # compiler artifact restore/save
 ├── release-validate/  # manifest/tag consistency gate for publish flow
 ├── setup-openssl/     # pinned OpenSSL differential oracle from ghcr.io/kjanat/openssl-prebuilt
 └── setup/             # shared Bun/Node/Deno runtime bootstrap

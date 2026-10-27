@@ -4,7 +4,6 @@ import { basename, dirname, join } from 'node:path';
 import { getBuffer as getFmtBiome } from '@dprint/biome';
 import { createContext } from '@dprint/formatter';
 import { getPath as getFmtJson } from '@dprint/json';
-import { wasm } from 'rolldown-plugin-wasm';
 import type { UserConfig } from 'tsdown';
 import { defineConfig } from 'tsdown';
 import jsr from '#jsr' with { type: 'json' };
@@ -98,16 +97,5 @@ export default defineConfig((options) => [
 						},
 					},
 				}),
-	},
-	{
-		cwd: import.meta.dirname,
-		workspace: {
-			config: undefined,
-			exclude: undefined,
-			include: 'tsc/*',
-		},
-		dts: true,
-		exports,
-		plugins: [wasm()],
 	},
 ]);

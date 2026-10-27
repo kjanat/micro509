@@ -9,7 +9,7 @@
 		"./package.json": "./package.json"
 	},
 	"dependencies": {
-		"@kjanat/tsc-bridge": "workspace:*",
+		"@kjanat/tsc-bridge": "catalog:typebridge",
 		"biome": "catalog:"
 	},
 	"peerDependencies": {

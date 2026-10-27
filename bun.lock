@@ -11,7 +11,7 @@
         "@dprint/formatter": "catalog:dprint",
         "@dprint/json": "catalog:dprint",
         "@gorhill/ubo-core": "0.1.30",
-        "@kjanat/tsc-bridge": "workspace:*",
+        "@kjanat/tsc-bridge": "catalog:typebridge",
         "@micro509/doc-render": "workspace:*",
         "@tsconfig/node24": "catalog:ts",
         "@types/bun": "catalog:ts",
@@ -25,7 +25,6 @@
         "jose": "^6.2.13",
         "playwright": "^1.63.0",
         "publint": "catalog:build",
-        "rolldown-plugin-wasm": "catalog:build",
         "runner-run": "catalog:",
         "tombi": "catalog:",
         "tsdown": "catalog:build",
@@ -67,7 +66,7 @@
       "name": "@micro509/vitepress-doc-examples",
       "version": "0.0.0",
       "dependencies": {
-        "@kjanat/tsc-bridge": "workspace:*",
+        "@kjanat/tsc-bridge": "catalog:typebridge",
         "biome": "catalog:",
       },
       "peerDependencies": {
@@ -95,8 +94,8 @@
       "name": "micro509-site",
       "devDependencies": {
         "@cloudflare/vite-plugin": "catalog:cloudflare",
-        "@kjanat/tsc-bridge": "workspace:*",
-        "@kjanat/tsc-vue-mapper": "workspace:*",
+        "@kjanat/tsc-bridge": "catalog:typebridge",
+        "@kjanat/tsc-vue-mapper": "catalog:typebridge",
         "@micro509/vitepress-api-docs": "workspace:*",
         "@micro509/vitepress-doc-examples": "workspace:*",
         "@micro509/vitepress-github-links": "workspace:*",
@@ -116,63 +115,6 @@
         "vitepress": "catalog:site",
         "vue": "catalog:",
         "wrangler": "catalog:cloudflare",
-      },
-    },
-    "tsc/bridge": {
-      "name": "@kjanat/tsc-bridge",
-      "version": "0.0.0",
-      "dependencies": {
-        "@kjanat/tsc-protocol": "workspace:*",
-      },
-      "devDependencies": {
-        "@kjanat/dreamcli": "catalog:",
-        "runner-run": "catalog:",
-        "tsdown": "catalog:build",
-      },
-    },
-    "tsc/compat": {
-      "name": "@kjanat/tsc-compat",
-      "version": "0.0.0",
-      "dependencies": {
-        "typescript": "7.1.0-dev.20261024.1",
-      },
-      "devDependencies": {
-        "tsdown": "catalog:build",
-      },
-    },
-    "tsc/protocol": {
-      "name": "@kjanat/tsc-protocol",
-      "version": "0.0.0",
-      "devDependencies": {
-        "tsdown": "catalog:build",
-      },
-    },
-    "tsc/vue-mapper": {
-      "name": "@kjanat/tsc-vue-mapper",
-      "version": "0.0.0",
-      "bin": {
-        "tsc-vue-mapper": "./dist/server.mjs",
-      },
-      "dependencies": {
-        "@kjanat/tsc-compat": "workspace:*",
-        "@vue/language-core": "catalog:ts",
-      },
-      "devDependencies": {
-        "@kjanat/tsc-bridge": "workspace:*",
-        "@kjanat/tsc-wasm": "workspace:*",
-        "@volar/typescript": "catalog:ts",
-        "tsdown": "catalog:build",
-      },
-    },
-    "tsc/wasm": {
-      "name": "@kjanat/tsc-wasm",
-      "version": "0.0.0",
-      "dependencies": {
-        "@kjanat/tsc-protocol": "workspace:*",
-      },
-      "devDependencies": {
-        "@kjanat/tsc-bridge": "workspace:*",
-        "tsdown": "catalog:build",
       },
     },
   },
@@ -198,7 +140,6 @@
     "build": {
       "@arethetypeswrong/core": "^0.18.4",
       "publint": "^0.3.24",
-      "rolldown-plugin-wasm": "^0.3.2",
       "tsdown": "^0.23.0",
       "unplugin-unused": "^0.6.0",
     },
@@ -230,15 +171,14 @@
       "@types/bun": "^1.4.2",
       "@types/deno": "^2.7.0",
       "@types/node": "^26.6.3",
-      "@volar/typescript": "2.4.30",
-      "@vue/language-core": "^3.3.11",
       "@vue/tsconfig": "^0.9.1",
-      "typescript": "npm:typescript@>=6,<7",
-      "typescript-6": "npm:@typescript/typescript6@^6",
-      "typescript-7": "npm:typescript@>=7",
     },
     "ts7": {
       "typescript": "npm:typescript@7.1.0-dev.20261024.1",
+    },
+    "typebridge": {
+      "@kjanat/tsc-bridge": "^0.0.0",
+      "@kjanat/tsc-vue-mapper": "^0.0.0",
     },
   },
   "packages": {
@@ -502,15 +442,13 @@
 
     "@kjanat/dreamcli": ["@kjanat/dreamcli@5.0.0", "", { "dependencies": { "ansispeck": "^0.4.3" } }, "sha512-pKQJu6KDnW8U4EQI2vZTwZz2v+H/z9uwfK4jnOV9BLrn2LDnmVNM91/iNxsxpZaFMZyhOU8AggMA6OhD5dqhdQ=="],
 
-    "@kjanat/tsc-bridge": ["@kjanat/tsc-bridge@workspace:tsc/bridge"],
+    "@kjanat/tsc-bridge": ["@kjanat/tsc-bridge@0.0.0", "", { "dependencies": { "@kjanat/tsc-protocol": "0.0.0", "effect": "4.0.6" } }, "sha512-NnQ4ATUls6wgtqIsV+tWe8G7nQJK0sqQwNb+2vkSqgGMdqWgDhuIyapRsb7BMwEGEvVrF8rgfyE4BAf8b07VuA=="],
 
-    "@kjanat/tsc-compat": ["@kjanat/tsc-compat@workspace:tsc/compat"],
+    "@kjanat/tsc-compat": ["@kjanat/tsc-compat@0.0.0", "", { "dependencies": { "effect": "4.0.6", "typescript": "7.1.0-dev.20261024.1" } }, "sha512-E3dTAPliSg0j56kVm2qo0cebYOQfRDBE/no7PUHw4eyZ27Q3th3M80V2RzEi58HuXAghiLjTikrxifuL9+zgSg=="],
 
-    "@kjanat/tsc-protocol": ["@kjanat/tsc-protocol@workspace:tsc/protocol"],
+    "@kjanat/tsc-protocol": ["@kjanat/tsc-protocol@0.0.0", "", { "dependencies": { "effect": "4.0.6" } }, "sha512-+hf1V2LVtHsjxmB7C9q84/j9Da0GCz+9VPt3qChW1mPXANuW4plyew5LazxKsGkvL1z0ddQHAUHsl9/LBLmt2Q=="],
 
-    "@kjanat/tsc-vue-mapper": ["@kjanat/tsc-vue-mapper@workspace:tsc/vue-mapper"],
-
-    "@kjanat/tsc-wasm": ["@kjanat/tsc-wasm@workspace:tsc/wasm"],
+    "@kjanat/tsc-vue-mapper": ["@kjanat/tsc-vue-mapper@0.0.0", "", { "dependencies": { "@kjanat/tsc-compat": "0.0.0", "@kjanat/tsc-protocol": "0.0.0", "@vue/language-core": "^3.3.11", "effect": "4.0.6" }, "bin": { "tsc-vue-mapper": "dist/server.mjs" } }, "sha512-SoOZEU9vQAzUITXq+F6FGv6a42O691Ck0COZ47Y04NlQvW1kCJsA2AR49/Ccp9MiVB4uDebNt4ZYz5LZ56wLPQ=="],
 
     "@loaderkit/resolve": ["@loaderkit/resolve@1.0.6", "", { "dependencies": { "@braidai/lang": "^1.0.0" } }, "sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg=="],
 
@@ -732,13 +670,9 @@
 
     "@vitejs/plugin-vue": ["@vitejs/plugin-vue@6.0.10", "", { "dependencies": { "@rolldown/pluginutils": "^1.0.1" }, "peerDependencies": { "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0", "vue": "^3.2.25 || ^3.6.0-rc.10" } }, "sha512-b80aUQh3n+qEzzZm5oQp3rT2QImeCx58K6eFl/RkJ3d65KW0kTuv5lNsLRVAjbW9YRUpo/wzmvzMgV34bTAItA=="],
 
-    "@volar/language-core": ["@volar/language-core@2.4.30", "", { "dependencies": { "@volar/source-map": "2.4.30" } }, "sha512-73fjwEV8wat6aOZ6U/y/hqtE30ocrIWECg67b0txGczOMNw+MffLmvJ5fnFfN9drVUEYZzLdaNo6VAy6G6avMw=="],
+    "@volar/language-core": ["@volar/language-core@2.4.28", "", { "dependencies": { "@volar/source-map": "2.4.28" } }, "sha512-w4qhIJ8ZSitgLAkVay6AbcnC7gP3glYM3fYwKV3srj8m494E3xtrCv6E+bWviiK/8hs6e6t1ij1s2Endql7vzQ=="],
 
-    "@volar/language-service": ["@volar/language-service@2.4.30", "", { "dependencies": { "@volar/language-core": "2.4.30", "vscode-languageserver-protocol": "^3.17.5", "vscode-languageserver-textdocument": "^1.0.11", "vscode-uri": "^3.0.8" }, "peerDependencies": { "typescript": "<7" }, "optionalPeers": ["typescript"] }, "sha512-w/xDsASiqC71ggCOm7sTDXDNk/l72XEptodeRC68tgZ0e5QM4hM3zAqBGC7mBctvhrpYwKfMG+t9xcUo2hEFtA=="],
-
-    "@volar/source-map": ["@volar/source-map@2.4.30", "", {}, "sha512-zym1ob/KwDDyN+0jGVtxwbxJSRRnUvv5HspCtz3yEfVVdCG4/dzxJktMGPAgemqRuVs81O0o/y0q3qOUErR8kg=="],
-
-    "@volar/typescript": ["@volar/typescript@2.4.30", "", { "dependencies": { "@volar/language-core": "2.4.30", "@volar/language-service": "2.4.30", "path-browserify": "^1.0.1", "vscode-uri": "^3.0.8" }, "peerDependencies": { "typescript": "<7" }, "optionalPeers": ["typescript"] }, "sha512-/DgA5tgYFPfrLFuSjIMXMGHk1LQv2+P8eny6+BhGNzFJELWIW7UZlc56ZLIRFhLsPpMfIFxM8/HvOPBggrjTZg=="],
+    "@volar/source-map": ["@volar/source-map@2.4.28", "", {}, "sha512-yX2BDBqJkRXfKw8my8VarTyjv48QwxdJtvRgUpNE5erCsgEUdI2DsLbpa+rOQVAJYshY99szEcRDmyHbF10ggQ=="],
 
     "@vue/compiler-core": ["@vue/compiler-core@3.5.44", "", { "dependencies": { "@babel/parser": "^7.29.9", "@vue/shared": "3.5.44", "entities": "^7.0.1", "estree-walker": "^2.0.2", "source-map-js": "^1.2.2" } }, "sha512-k34nCytbK8PQ1gR2mGROYOw6Pnv/mumqIdrZ3x2tbyXZDWm7ViKGLTfdB+DRrWqEQsLgGJvn0WN9jBif5zCTLQ=="],
 
@@ -847,6 +781,8 @@
     "dreamcli": ["@kjanat/dreamcli@5.0.0", "", { "dependencies": { "ansispeck": "^0.4.3" } }, "sha512-pKQJu6KDnW8U4EQI2vZTwZz2v+H/z9uwfK4jnOV9BLrn2LDnmVNM91/iNxsxpZaFMZyhOU8AggMA6OhD5dqhdQ=="],
 
     "dts-resolver": ["dts-resolver@3.0.0", "", { "peerDependencies": { "oxc-resolver": ">=11.0.0" }, "optionalPeers": ["oxc-resolver"] }, "sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q=="],
+
+    "effect": ["effect@4.0.6", "", {}, "sha512-Tc3mkzuLR6t6P9dhLt0D2GrxYtmU5td4XEJEiXCmILz53IRIfJyHsKZWjTA3xEjiwpNTtXBgI4iqYPxMztBDrw=="],
 
     "empathic": ["empathic@2.1.0", "", {}, "sha512-AnfC1ATldl49/cvZdLPDjBfrRNwbDO05aibiOtzQu3qtlbJtomNLhF30HEtn/7iBz50dlMECqATo3fG0LrdEgw=="],
 
@@ -994,8 +930,6 @@
 
     "rolldown-plugin-dts": ["rolldown-plugin-dts@0.29.0-beta.2", "", { "dependencies": { "dts-resolver": "^3.0.0", "get-tsconfig": "5.0.0-beta.6", "obug": "^3.0.0", "yuku-ast": "^0.19.0", "yuku-codegen": "^0.19.0", "yuku-parser": "^0.19.0" }, "peerDependencies": { "@volar/typescript": "~2.4.0", "@vue/language-core": "~3.2.0 || ~3.3.0", "rolldown": "^1.2.0", "typescript": "^5.0.0 || ^6.0.0 || ~7.0.0 || ~7.1.0-0", "vue-tsc": "~3.2.0 || ~3.3.0" }, "optionalPeers": ["@volar/typescript", "@vue/language-core", "typescript", "vue-tsc"] }, "sha512-0NT4q7HMRIpQv47+SfZB5IhEWJh0gp2rDEZPu2ry+LeJFb9tlMB08Sy+sl1+cqcCXnHpkd9dvBy3rZDCBF1JIg=="],
 
-    "rolldown-plugin-wasm": ["rolldown-plugin-wasm@0.3.2", "", { "peerDependencies": { "rolldown": "^1.0.0" } }, "sha512-WYjcRNvX8i3PoAPIbmENebUhn1b3nbkorLSGMBGBP5mPaSE5Jh5JWuVhRm3Nl5n6VL23OtWh3TOm0wwMYYV+8Q=="],
-
     "rollup": ["rollup@4.65.0", "", { "dependencies": { "@types/estree": "1.0.9" }, "optionalDependencies": { "@napi-rs/lzma-linux-x64-gnu": "1.5.1", "@rollup/rollup-android-arm-eabi": "4.65.0", "@rollup/rollup-android-arm64": "4.65.0", "@rollup/rollup-darwin-arm64": "4.65.0", "@rollup/rollup-darwin-x64": "4.65.0", "@rollup/rollup-freebsd-arm64": "4.65.0", "@rollup/rollup-freebsd-x64": "4.65.0", "@rollup/rollup-linux-arm-gnueabihf": "4.65.0", "@rollup/rollup-linux-arm-musleabihf": "4.65.0", "@rollup/rollup-linux-arm64-gnu": "4.65.0", "@rollup/rollup-linux-arm64-musl": "4.65.0", "@rollup/rollup-linux-loong64-gnu": "4.65.0", "@rollup/rollup-linux-loong64-musl": "4.65.0", "@rollup/rollup-linux-ppc64-gnu": "4.65.0", "@rollup/rollup-linux-ppc64-musl": "4.65.0", "@rollup/rollup-linux-riscv64-gnu": "4.65.0", "@rollup/rollup-linux-riscv64-musl": "4.65.0", "@rollup/rollup-linux-s390x-gnu": "4.65.0", "@rollup/rollup-linux-x64-gnu": "4.65.0", "@rollup/rollup-linux-x64-musl": "4.65.0", "@rollup/rollup-openbsd-x64": "4.65.0", "@rollup/rollup-openharmony-arm64": "4.65.0", "@rollup/rollup-win32-arm64-msvc": "4.65.0", "@rollup/rollup-win32-ia32-msvc": "4.65.0", "@rollup/rollup-win32-x64-gnu": "4.65.0", "@rollup/rollup-win32-x64-msvc": "4.65.0", "fsevents": "~2.3.2" }, "bin": { "rollup": "dist/bin/rollup" } }, "sha512-QVCvQUTGDN6JRwi3jVGCY3H4aTHvi9rX0LyoBMkGUvdh/Z6O51CzcLz85BWZaTCDGhl6ySGqYZs+xI1jmPqGcw=="],
 
     "runner-run": ["runner-run@0.28.0", "", { "dependencies": { "ansispeck": "^0.4.1" }, "optionalDependencies": { "@runner-run/android-arm64": "0.28.0", "@runner-run/darwin-arm64": "0.28.0", "@runner-run/darwin-x64": "0.28.0", "@runner-run/freebsd-arm64": "0.28.0", "@runner-run/freebsd-x64": "0.28.0", "@runner-run/linux-arm64-gnu": "0.28.0", "@runner-run/linux-arm64-musl": "0.28.0", "@runner-run/linux-armv7-gnueabihf": "0.28.0", "@runner-run/linux-x64-gnu": "0.28.0", "@runner-run/linux-x64-musl": "0.28.0", "@runner-run/netbsd-x64": "0.28.0", "@runner-run/win32-arm64-msvc": "0.28.0", "@runner-run/win32-ia32-msvc": "0.28.0", "@runner-run/win32-x64-msvc": "0.28.0" }, "bin": { "run": "bin/run.cjs", "runner": "bin/runner.cjs", "runner-run": "bin/runner.cjs" } }, "sha512-MdnKfl4Ro1JNImD+okpvokUjR9JOMe7f/RgWHdDu50BZFNWIoIHQJdPyI5RKS7k8aPzIg7Ws7iLvdaUXz3HXew=="],
@@ -1074,16 +1008,6 @@
 
     "vitepress": ["vitepress@2.0.0-alpha.21", "", { "dependencies": { "@docsearch/css": "^4.7.1", "@docsearch/js": "^4.7.1", "@docsearch/sidepanel-js": "^4.7.1", "@iconify-json/simple-icons": "^1.2.99", "@shikijs/transformers": "^4.5.0", "@types/markdown-it": "^14.2.0", "@vitejs/plugin-vue": "^6.0.9", "@vue/devtools-api": "^8.2.1", "@vue/shared": "^3.5.43", "@vueuse/core": "^15.0.0", "@vueuse/integrations": "^15.0.0", "focus-trap": "^8.2.3", "mark.js": "8.11.1", "minisearch": "^7.2.0", "shiki": "^4.5.0", "vite": "^8.3.4", "vue": "^3.5.43" }, "peerDependencies": { "markdown-it-mathjax3": "^4", "postcss": "^8" }, "optionalPeers": ["markdown-it-mathjax3", "postcss"], "bin": { "vitepress": "bin/vitepress.js" } }, "sha512-b2PFPIw2mVfxDi490FhSq4AlkFi17b9lofLCqWfH4uPKz/dF4oy2C9vBpP2r7l7hl2hc5BG7OTRPvRFfRzF7MA=="],
 
-    "vscode-jsonrpc": ["vscode-jsonrpc@10.0.0", "", {}, "sha512-USSfxg0vDIpTQqlQBGxF3mBARyoS8cU7LHLpbYNh6dOJt32dlskxPWB0Irrh5TllTmyf7oNLAvqDqzklbwwnpA=="],
-
-    "vscode-languageserver-protocol": ["vscode-languageserver-protocol@3.18.5", "", { "dependencies": { "vscode-jsonrpc": "10.0.0", "vscode-languageserver-types": "3.18.5" } }, "sha512-FW4fBMzZ99N8xeob4py0l050wgCoRgTpEq5Xcsb9lM1bc29UKGR/wSV+4knaqFxssFHajy7OzNiKP/m3U1ZEuA=="],
-
-    "vscode-languageserver-textdocument": ["vscode-languageserver-textdocument@1.0.16", "", {}, "sha512-qeNEuOi9a3qkqRf7Gfez2WL2VwlBTLCNekHBGO9kxPVUp9XuY15yfTJ9jwvOwKI0I2MhUUfZq95NSp+LK1CLQg=="],
-
-    "vscode-languageserver-types": ["vscode-languageserver-types@3.18.5", "", {}, "sha512-kPd6+JQNz3HMJvjKlqUxERSlZHAntl/aGpsk7ImwIh0ewDKDcjgAEyVSYciPiOJD3ftbK9IrfiqUeTZLSbCizw=="],
-
-    "vscode-uri": ["vscode-uri@3.2.0", "", {}, "sha512-m2gXo3bn0G1kT9InzMf07fTbqMbGtyckj3bH5ktLO+1Ssv+yiATZ4dhwaQv9UZWxJh6E9IFGnQyjgWVDWVBDrg=="],
-
     "vue": ["vue@3.5.44", "", { "dependencies": { "@vue/compiler-dom": "3.5.44", "@vue/compiler-sfc": "3.5.44", "@vue/runtime-dom": "3.5.44", "@vue/server-renderer": "3.5.44", "@vue/shared": "3.5.44" }, "peerDependencies": { "typescript": "*" }, "optionalPeers": ["typescript"] }, "sha512-dvvmaOCG7lAMkJTPqPwWeGMsPS6DIsFsfZDUgBp9V6mHf9b3+/wyVwYR4Es+WV6uJC0FKRxp81Obcq0ZwUcGFQ=="],
 
     "webpack-virtual-modules": ["webpack-virtual-modules@0.6.2", "", {}, "sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ=="],
@@ -1118,8 +1042,6 @@
 
     "@vue/devtools-kit/hookable": ["hookable@5.5.3", "", {}, "sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ=="],
 
-    "@vue/language-core/@volar/language-core": ["@volar/language-core@2.4.28", "", { "dependencies": { "@volar/source-map": "2.4.28" } }, "sha512-w4qhIJ8ZSitgLAkVay6AbcnC7gP3glYM3fYwKV3srj8m494E3xtrCv6E+bWviiK/8hs6e6t1ij1s2Endql7vzQ=="],
-
     "importmapify/dreamcli": ["@kjanat/dreamcli@3.0.1", "", { "dependencies": { "ansispeck": "^0.4.1" } }, "sha512-FY5uBPI7EQouhyUEpQdMEVew4jGEcshBZSSH6a8G47Bie+uBk1flLj8l2sJrVDOyd9lG1i1BaYyV0jmgdENp3A=="],
 
     "miniflare/ws": ["ws@8.21.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g=="],
@@ -1127,7 +1049,5 @@
     "vite-robots-txt/vite": ["vite@7.3.7", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA=="],
 
     "vite-svg-to-ico/dreamcli": ["@kjanat/dreamcli@3.0.1", "", { "dependencies": { "ansispeck": "^0.4.1" } }, "sha512-FY5uBPI7EQouhyUEpQdMEVew4jGEcshBZSSH6a8G47Bie+uBk1flLj8l2sJrVDOyd9lG1i1BaYyV0jmgdENp3A=="],
-
-    "@vue/language-core/@volar/language-core/@volar/source-map": ["@volar/source-map@2.4.28", "", {}, "sha512-yX2BDBqJkRXfKw8my8VarTyjv48QwxdJtvRgUpNE5erCsgEUdI2DsLbpa+rOQVAJYshY99szEcRDmyHbF10ggQ=="],
   }
 }

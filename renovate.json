@@ -59,11 +59,6 @@
 			"groupName": null
 		},
 		{
-			"matchManagers": ["gomod"],
-			"matchDepTypes": ["toolchain"],
-			"groupName": "Go toolchain"
-		},
-		{
 			"matchManagers": ["bun", "npm", "nodenv"],
 			"matchDepNames": ["node"],
 			"groupName": "Node.js"
@@ -86,21 +81,13 @@
 			"updateNotScheduled": false
 		},
 		{
-			"description": "The TypeScript Go revision is synchronized from the selected npm release by autofix.",
-			"matchManagers": ["gomod"],
-			"matchPackageNames": ["github.com/microsoft/TypeScript/tsc"],
-			"enabled": false
-		},
-		{
-			"description": "This module is supplied by the local Go workspace replacement.",
-			"matchManagers": ["gomod"],
-			"matchPackageNames": ["github.com/microsoft/TypeScript/tsc/protocol"],
-			"enabled": false
-		},
-		{
 			"description": "The exec plugin is managed manually.",
 			"matchPackageNames": ["@dprint/exec"],
 			"enabled": false
+		},
+		{
+			"matchPackageNames": ["@kjanat/tsc-*"],
+			"groupName": "Typebridge"
 		}
 	],
 	"customManagers": [

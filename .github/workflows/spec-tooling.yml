@@ -5,7 +5,6 @@ on:
       - .claude/**
       - .github/workflows/spec-tooling.yml
       - .github/actions/setup/**
-      - .github/actions/cache-tsc/**
       - scripts/spec/**
       - scripts/fetch-spec.bun.ts
       - test/spec-*.test.ts
@@ -35,9 +34,6 @@ jobs:
         id: setup
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: bun install --frozen-lockfile
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - name: Build package
         run: run build
       - name: Reader, gate, research and MS integration regressions

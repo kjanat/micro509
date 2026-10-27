@@ -1,8 +1,10 @@
 # tsc-compat AST explorer
 
-A small web page for exploring the syntax tree that [`@kjanat/tsc-compat`](../../tsc/compat/README.md) builds. The package runs the parser of the pinned TypeScript Go compiler as WebAssembly behind the TypeScript 6 API.
+A small web page for exploring the syntax tree that [`@kjanat/tsc-compat`](https://github.com/kjanat/typebridge/tree/master/compat) builds. The package runs the parser of the TypeScript Go compiler as WebAssembly behind the TypeScript 6 API.
 
 Type TypeScript or TSX on the left, and the tree and the parse diagnostics update on the right. Clicking a node or a diagnostic selects its source range.
+
+The file selector loads a TypeScript example with a parse error or a TSX component with JSX. Each example keeps its edits when you switch files.
 
 ```sh
 npm install

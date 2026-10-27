@@ -50,9 +50,6 @@ jobs:
         with: { install-bun: true, install-deno: true }
       - name: Install build dependencies
         run: bun install --frozen-lockfile
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - name: Restore published snapshots
         id: published
         run: |

@@ -58,9 +58,6 @@ jobs:
         with: { install-bun: "true" }
       - name: Install dependencies and build (tsdown regenerates jsr.json)
         run: runner install -f build fmt
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |
@@ -90,9 +87,6 @@ jobs:
         id: setup
         with: { install-bun: true, install-node: true, update-npm: true, node-registry-url: https://registry.npmjs.org }
       - run: runner install -f build
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |
