@@ -39,7 +39,7 @@ const MS_DOCUMENT = /^MS-[A-Z0-9]+$/;
 
 const MS_DOWNLOADS = 'https://winprotocoldocs-bhdugrdyduf5h2e4.b02.azurefd.net';
 
-const PANDOC = { repository: 'jgm/pandoc', version: '3.12.1' } as const;
+const PANDOC = { repository: 'jgm/pandoc', version: '3.13' } as const;
 
 const PANDOC_ASSETS = new Map([
 	['linux-x64', 'linux-amd64.tar.gz'],
