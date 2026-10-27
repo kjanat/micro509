@@ -113,15 +113,8 @@
 		},
 		"typescript": {
 			"binary": {
-				"path": "go",
-				"arguments": [
-					"-C",
-					"tsc/bridge",
-					"run",
-					"github.com/microsoft/TypeScript/tsc/cmd/tsc",
-					"--lsp",
-					"--stdio"
-				]
+				"path": "node_modules/.bin/tsc",
+				"arguments": ["--lsp", "--stdio"]
 			},
 			"initialization_options": { "runExternalCode": true }
 		}

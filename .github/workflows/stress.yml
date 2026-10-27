@@ -30,8 +30,5 @@ jobs:
       - { uses: $/.github/actions/setup, id: setup, with: { install-bun: "true" } }
       - name: Install and build dist (root-barrel test imports the `micro509` package name)
         run: runner install -f build
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - name: Run suite with randomized order (failure output includes --seed for repro)
         run: bun test --randomize --concurrent --rerun-each="${RERUNS}"

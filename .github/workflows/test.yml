@@ -24,9 +24,6 @@ jobs:
           - uses: &SSL $/.github/actions/setup-openssl
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - run: run typecheck
       - name: Argon2 TypeScript and WASM oracle parity
         run: run test:argon2:oracle
@@ -66,9 +63,7 @@ jobs:
         id: setup
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}", GITHUB_TOKEN: "${{ github.token }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
       - name: Version switcher distinguishes preview and production destinations
         run: bun test ./site/.vitepress/theme/components/version-catalog.test.ts
       - name: Every version's examples import the library that version documents
@@ -88,9 +83,6 @@ jobs:
         id: setup
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -sf bd playwright:chromium smoke
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
       - name: Setup Node without native Argon2
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: "22", package-manager-cache: false }
@@ -106,25 +98,6 @@ jobs:
           report_type: coverage
           files: coverage/portable.lcov
 
-  tsc:
-    name: TypeScript compiler bridges
-    runs-on: *U
-    timeout-minutes: 25
-    permissions: { contents: *r }
-    steps:
-      - *checkout
-      - parallel:
-          - uses: *TS
-            id: setup
-            with: { install-bun: true, install-node: true }
-          - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-            with: { go-version-file: go.work, cache-dependency-path: tsc/*/go.sum }
-      - run: runner install -f
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}
-      - run: run -s @kjanat/tsc-protocol:test @kjanat/tsc-bridge:test @kjanat/tsc-wasm:test @kjanat/tsc-compat:test @kjanat/tsc-vue-mapper:test
-
   differential:
     name: OpenSSL differential
     runs-on: *U
@@ -137,6 +110,3 @@ jobs:
           - { uses: *TS, id: setup, with: { install-bun: "true" } }
           - { uses: *SSL }
       - run: runner install -f test:differential
-        env: { TSC_NODE_VERSION: "${{ steps.setup.outputs.node-version }}" }
-      - uses: $/.github/actions/cache-tsc
-        with: ${{ fromJSON(steps.setup.outputs.tsc-cache) }}

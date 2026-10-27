@@ -1,5 +1,5 @@
 name: Setup
-description: Set up runtimes, repository tools, and compiler artifact caching
+description: Set up runtimes and repository tools
 
 # pretty-yaml-ignore
 inputs:
@@ -21,8 +21,6 @@ outputs:
   bun-path:       { description: The installed Bun path,        value: "${{ steps.setup-bun.outputs.bun-path      }}" }
   node-version:   { description: The installed Node.js version, value: "${{ steps.setup-node.outputs.node-version }}" }
   npm-version:    { description: The installed npm version,     value: "${{ steps.update-npm.outputs.npm-version  }}" }
-
-  tsc-cache: { description: Compiler cache save inputs as JSON, value: "${{ format('{{\"operation\":\"save\",\"state\":{0}}}', toJSON(steps.cache.outputs.state)) }}" }
 
 runs:
   using: composite
@@ -69,11 +67,3 @@ runs:
         npm install -g npm@11
         npm_version=$(npm --version)
         echo "npm-version=${npm_version}" >> "${GITHUB_OUTPUT}"
-
-    - name: Restore compiler artifacts
-      id: cache
-      if: inputs.install-bun == 'true' && inputs.install-node == 'true'
-      uses: $/.github/actions/cache-tsc
-      with:
-        bun-version: ${{ steps.setup-bun.outputs.bun-version }}
-        node-version: ${{ steps.setup-node.outputs.node-version }}
