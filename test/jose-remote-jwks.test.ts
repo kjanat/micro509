@@ -1,5 +1,10 @@
 import { afterAll, describe, expect, it } from 'bun:test';
-import type { JwksRequestInit, RemoteJwksConfig, VerifiedJws } from '#micro509/jose';
+import type {
+	JwksRequestInit,
+	JwsKeyResolver,
+	RemoteJwksConfig,
+	VerifiedJws,
+} from '#micro509/jose';
 import { createRemoteJwksKeyResolver, signCompactJws, verifyCompactJws } from '#micro509/jose';
 import { expectBuildErrorCode, joseTestKeys, rsaJwkEntry, signRawRs256Token } from '#test/helpers';
 
@@ -688,19 +693,72 @@ describe('cancellation', () => {
 
 	it('keeps the request alive while another verification still waits', async () => {
 		const path = freshPath();
-		const url = primaryServer.route(path, async () => {
-			await Bun.sleep(150);
-			return jsonResponse(await jwksJson(await keyA()));
+		const signed = await token('a');
+		const body = await jwksJson(await keyA());
+		const received = Promise.withResolvers<AbortSignal>();
+		const respond = Promise.withResolvers<void>();
+		const bothJoined = Promise.withResolvers<void>();
+		const url = primaryServer.route(path, async (request) => {
+			received.resolve(request.signal);
+			await respond.promise;
+			return jsonResponse(body);
 		});
 		const resolver = resolverFor(url, clock());
+		let joined = 0;
+		const observedResolver: JwsKeyResolver = (request) => {
+			// The real resolver registers its waiter before returning its pending promise.
+			const pending = resolver(request);
+			if (++joined === 2) bothJoined.resolve();
+			return pending;
+		};
+		const options = {
+			algorithms: ['RS256'],
+			key: observedResolver,
+			tokenType: { unchecked: true },
+		} as const;
 		const controller = new AbortController();
-		const cancelled = verifyKid('a', resolver, primary, controller.signal);
-		const patient = verifyKid('a', resolver);
-		await eventually(() => primaryServer.hits.get(path) === 1);
-		controller.abort();
-		expect(await cancelled).toBe('aborted');
-		expect(await patient).toBe('ok');
+		const cancelled = verifyCompactJws(signed, { ...options, signal: controller.signal });
+		const patient = verifyCompactJws(signed, options);
+		try {
+			await bothJoined.promise;
+			const requestSignal = await received.promise;
+			controller.abort();
+			expect(await cancelled).toMatchObject({ ok: false, code: 'aborted' });
+			expect(requestSignal.aborted).toBe(false);
+		} finally {
+			respond.resolve();
+		}
+		expect(await patient).toMatchObject({ ok: true });
 		expect(primaryServer.hits.get(path)).toBe(1);
+	});
+
+	it('starts a new request when a second verification joins after the sole waiter cancels', async () => {
+		const path = freshPath();
+		const signed = await token('a');
+		const body = await jwksJson(await keyA());
+		const received = Promise.withResolvers<void>();
+		const aborted = Promise.withResolvers<void>();
+		const url = primaryServer.route(path, async (request, hit) => {
+			if (hit === 1) {
+				request.signal.addEventListener('abort', () => aborted.resolve(), { once: true });
+				received.resolve();
+				await aborted.promise;
+			}
+			return jsonResponse(body);
+		});
+		const options = {
+			algorithms: ['RS256'],
+			key: resolverFor(url, clock()),
+			tokenType: { unchecked: true },
+		} as const;
+		const controller = new AbortController();
+		const cancelled = verifyCompactJws(signed, { ...options, signal: controller.signal });
+		await received.promise;
+		controller.abort();
+		expect(await cancelled).toMatchObject({ ok: false, code: 'aborted' });
+		await aborted.promise;
+		expect(await verifyCompactJws(signed, options)).toMatchObject({ ok: true });
+		expect(primaryServer.hits.get(path)).toBe(2);
 	});
 
 	it('does not count a cancelled request as a failure', async () => {
