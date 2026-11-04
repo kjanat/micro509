@@ -204,7 +204,7 @@
 	},
 	"volta": {
 		"node": "26.13.0",
-		"npm": "12.2.1"
+		"npm": "12.2.2"
 	},
 	"catalog": {
 		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
