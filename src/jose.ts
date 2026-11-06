@@ -8,7 +8,7 @@
  * @module micro509/jose
  */
 
-export { base64UrlDecode, base64UrlEncode } from '#micro509/internal/jose/base64url';
+export { base64UrlDecode, base64UrlEncode } from '#micro509/jose/base64url';
 export type { JsonObject, JsonValue } from '#micro509/internal/jose/strict-json';
 export type {
 	JoseErrorCode,
