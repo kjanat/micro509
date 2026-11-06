@@ -5,6 +5,7 @@
  * @module
  */
 
+import { isPrimeEcPoint } from '#micro509/internal/crypto/prime-ec';
 import { base64UrlDecode } from '#micro509/internal/jose/base64url';
 import type { JsonObject, JsonValue } from '#micro509/internal/jose/strict-json';
 import { isJsonArray, isJsonObject, parseStrictJson } from '#micro509/internal/jose/strict-json';
@@ -277,9 +278,10 @@ function unsuitableReason(entry: JwkEntry, algorithm: JwsAlgorithm): string | un
 		if (entry.crv !== profile.curve) return 'EC curve does not match the algorithm';
 		const x = base64UrlDecode(entry.x);
 		const y = base64UrlDecode(entry.y);
-		return x?.length === profile.coordinateBytes && y?.length === profile.coordinateBytes
-			? undefined
-			: 'EC coordinates must be canonical base64url of the required fixed width';
+		if (x?.length !== profile.coordinateBytes || y?.length !== profile.coordinateBytes) {
+			return 'EC coordinates must be canonical base64url of the required fixed width';
+		}
+		return isPrimeEcPoint(profile.curve, x, y) ? undefined : 'EC point is not on the curve';
 	}
 	return entry.kind === 'rsa'
 		? unsuitableRsaParameters(entry)

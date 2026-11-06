@@ -305,7 +305,8 @@ console.log('Verified:', result.ok);
 
 Local and remote JWKS resolvers select RSA or EC keys by the admitted algorithm,
 `kid`, `alg`, `use` and `key_ops`. EC JWKs need `crv` and full-width `x` and `y`;
-compressed points are unsupported. Resolvers keep imports separate for each
+compressed points are unsupported. Off-curve points are excluded before ambiguity
+checks. Resolvers keep imports separate for each
 algorithm, even when RSA key material is shared. Reuse a resolver across calls.
 When importing a selected entry yourself, pass its admitted algorithm to
 `importJwkEntry(entry, 'ES256')`; the omitted-argument default remains RS256.

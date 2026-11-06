@@ -385,3 +385,46 @@ it('keeps the signing algorithm stable while WebCrypto is pending', async () => 
 	input.algorithm = 'RS256';
 	expect(await verify(await signing, 'ES256', fixture.keys.publicKey)).toMatchObject({ ok: true });
 });
+
+it('excludes off-curve EC entries before deciding local or remote JWKS ambiguity', async () => {
+	for (const fixture of fixtures.filter(({ algorithm }) => algorithm.startsWith('ES'))) {
+		const algorithm = fixture.algorithm;
+		const width = algorithm === 'ES256' ? 32 : 48;
+		const valid = { ...(await exportJWK(fixture.keys.publicKey)), kid: 'ec', alg: algorithm };
+		const invalid = {
+			...valid,
+			x: base64UrlEncode(new Uint8Array(width)),
+			y: base64UrlEncode(new Uint8Array(width)),
+		};
+		for (const kid of [undefined, 'ec']) {
+			const selector = { algorithm, ...(kid === undefined ? {} : { kid }) };
+			const selected = selectJwk(jwks(invalid, valid), selector);
+			expect(selected).toMatchObject({ ok: true, value: { x: valid.x, y: valid.y } });
+			const token = await new CompactSign(payload)
+				.setProtectedHeader({ alg: algorithm, ...(kid === undefined ? {} : { kid }) })
+				.sign(fixture.keys.privateKey);
+			expect((await verify(token, algorithm, createJwksKeyResolver(jwks(invalid, valid)))).ok).toBe(
+				true,
+			);
+			const server = Bun.serve({
+				hostname: '127.0.0.1',
+				port: 0,
+				fetch: () => Response.json({ keys: [invalid, valid] }),
+			});
+			try {
+				const resolver = createRemoteJwksKeyResolver({ url: new URL('/jwks', server.url) });
+				expect((await verify(token, algorithm, resolver)).ok).toBe(true);
+			} finally {
+				await server.stop(true);
+			}
+			expect(selectJwk(jwks(invalid), selector)).toMatchObject({
+				ok: false,
+				code: 'key_unsuitable',
+			});
+			expect(selectJwk(jwks(valid, valid), selector)).toMatchObject({
+				ok: false,
+				code: 'ambiguous_key',
+			});
+		}
+	}
+});

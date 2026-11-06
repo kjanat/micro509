@@ -33,6 +33,7 @@
 
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import { concatBytes } from '#micro509/internal/asn1/der';
+import { PRIME_EC_CURVES } from '#micro509/internal/crypto/prime-ec';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64';
 import type {
@@ -219,24 +220,18 @@ interface CurveInfo {
 const CURVES = {
 	'P-256': {
 		identifier: 'nistp256',
-		size: 32,
 		hash: 'SHA-256',
-		prime: 2n ** 256n - 2n ** 224n + 2n ** 192n + 2n ** 96n - 1n,
-		b: 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn,
+		...PRIME_EC_CURVES['P-256'],
 	},
 	'P-384': {
 		identifier: 'nistp384',
-		size: 48,
 		hash: 'SHA-384',
-		prime: 2n ** 384n - 2n ** 128n - 2n ** 96n + 2n ** 32n - 1n,
-		b: 0xb3312fa7e23ee7e4988e056be3f82d19181d9c6efe8141120314088f5013875ac656398d8a2ed19d2a85c8edd3ec2aefn,
+		...PRIME_EC_CURVES['P-384'],
 	},
 	'P-521': {
 		identifier: 'nistp521',
-		size: 66,
 		hash: 'SHA-512',
-		prime: 2n ** 521n - 1n,
-		b: 0x0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00n,
+		...PRIME_EC_CURVES['P-521'],
 	},
 } as const satisfies Record<EcNamedCurve, CurveInfo>;
 
