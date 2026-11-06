@@ -156,7 +156,7 @@
     "dprint": {
       "@dprint/biome": "^0.15.0",
       "@dprint/formatter": "^0.6.0",
-      "@dprint/json": "^0.25.0",
+      "@dprint/json": "^0.26.0",
     },
     "site": {
       "markdown-it-task-lists": "^2.1.1",
@@ -270,7 +270,7 @@
 
     "@dprint/freebsd-x64": ["@dprint/freebsd-x64@0.64.3", "", { "os": "freebsd", "cpu": "x64" }, "sha512-yfqzdI3Yt4H4AavLyWzE/HjJL17gzh8GIJF5OMNyBb8XeJPeB76U/sv7FgaURQKUr6AhIoPBqp4w+WlVftkCeg=="],
 
-    "@dprint/json": ["@dprint/json@0.25.2", "", {}, "sha512-QpOGNXL3cOunsB7IBPJxlIisMhFcIeMXSAWoavJKwjJjtOZW5sDojlgn2MPYNdHVgknZeQsUqDYyhGqqN1bYuQ=="],
+    "@dprint/json": ["@dprint/json@0.26.0", "", {}, "sha512-yuesFKq2aFAx8VU1I2A3HFVMlX8ED52ZKUKGW6+WKviRFtvgkxxE7zcQ7pqTZURH/TLHj84mHaBjMOqTYR3m6Q=="],
 
     "@dprint/linux-arm64-glibc": ["@dprint/linux-arm64-glibc@0.64.3", "", { "os": "linux", "cpu": "arm64", "libc": "glibc" }, "sha512-dJQ5PS0+7COmKG0NHy11pEoCfzeL1slrGuHWS0uQmyIbBskbItFnubR9KsD1J/UfYIq62rySvAm2D+MNw7cYOA=="],
 
