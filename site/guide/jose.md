@@ -257,6 +257,29 @@ if (result.ok)
 
 </LiveCode>
 
+## Encode and decode base64url
+
+`base64UrlEncode(bytes)` produces canonical unpadded base64url.
+`base64UrlDecode(text)` returns bytes, or `undefined` for padding, whitespace,
+invalid characters, impossible lengths or nonzero trailing bits. Empty input
+round-trips as an empty string/array. These are byte codecs, not UTF-8 decoders
+or token verification; use `TextEncoder`/`TextDecoder` explicitly for text.
+
+<LiveCode>
+
+```ts
+import { base64UrlEncode, base64UrlDecode } from 'micro509/jose';
+
+const bytes = crypto.getRandomValues(new Uint8Array(32));
+const encoded = base64UrlEncode(bytes);
+const decoded = base64UrlDecode(encoded);
+console.log('URL-safe:', encoded);
+console.log('Round-trip bytes:', decoded?.length);
+console.log('Padding rejected:', base64UrlDecode(encoded + '=') === undefined);
+```
+
+</LiveCode>
+
 ## Choose an algorithm and matching key
 
 The algorithm is explicit when signing, and the verifier accepts only its caller's
