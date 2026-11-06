@@ -99,10 +99,11 @@ describe('verifySignatureWithKey', () => {
 					ok: true,
 					valid: false,
 				});
-				expect(await verifySignatureWithKey({ ...input, signature: raw })).toEqual({
-					ok: true,
-					valid: false,
-				});
+				// Random raw bytes interpreted as DER can also exceed the decoder's
+				// tag-number limit. Both outcomes reject the mislabelled signature.
+				const mislabelled = await verifySignatureWithKey({ ...input, signature: raw });
+				if (mislabelled.ok) expect(mislabelled.valid).toBe(false);
+				else expect(mislabelled.code).toBe('limit_exceeded');
 			} else {
 				expect(await verifySignatureWithKey({ ...input, signatureEncoding: 'der' })).toMatchObject({
 					ok: false,
@@ -115,6 +116,15 @@ describe('verifySignatureWithKey', () => {
 	it('rejects malformed ECDSA DER including trailing bytes', async () => {
 		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const signed = await signData(keys.privateKey, data);
+		expect(
+			await verifySignatureWithKey({
+				publicKey: keys.publicKey,
+				signatureAlgorithm: { oid: signed.algorithmOid },
+				signatureEncoding: 'der',
+				signature: Uint8Array.of(0x1f, ...new Uint8Array(10).fill(0xff), 0x7f, 0),
+				data,
+			}),
+		).toMatchObject({ ok: false, code: 'limit_exceeded' });
 		for (const signature of [
 			Uint8Array.of(0x30, 0),
 			Uint8Array.of(0x30, 0x06, 2, 1, 0x80, 2, 1, 1),
