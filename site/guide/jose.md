@@ -257,6 +257,41 @@ if (result.ok)
 
 </LiveCode>
 
+## Validate an already parsed JWKS
+
+Use `parseJwks(rawTextOrBytes)` for keys received over a transport: it rejects duplicate
+JSON members and invalid UTF-8 before information is lost. Use `validateJwks(value)`
+when a trusted integration already supplies a JavaScript object. Both produce the
+same `Jwks` representation for `createJwksKeyResolver`.
+
+Object validation copies plain JSON data, without invoking getters or `toJSON`.
+It rejects cycles, custom prototypes, accessors, sparse arrays and non-JSON values.
+The copy is detached from subsequent input mutations. Depth, node and key-count
+bounds still apply; `maxBytes` measures the compact JSON data's UTF-8 spelling,
+not the lost original response size. An object cannot reveal duplicate members
+that `JSON.parse` already discarded. Keep raw bytes when that check matters.
+
+<LiveCode data-output="deterministic">
+
+```ts
+import { parseJwks, validateJwks } from 'micro509/jose';
+
+const original = { keys: [{ kty: 'oct', k: 'AA', kid: 'inspection-only' }] };
+const checked = validateJwks(original);
+if (!checked.ok) throw new Error(checked.code);
+original.keys.length = 0;
+if (checked.value.keys.length !== 1) throw new Error('snapshot changed');
+console.log('Owned snapshot keys:', checked.value.keys.length);
+const duplicate = '{"keys":[],"keys":[]}';
+if (parseJwks(duplicate).ok) throw new Error('duplicate accepted');
+console.log(
+  'Duplicate lost by JSON.parse:',
+  validateJwks(JSON.parse(duplicate)).ok,
+);
+```
+
+</LiveCode>
+
 ## Encode and decode base64url
 
 `base64UrlEncode(bytes)` produces canonical unpadded base64url.

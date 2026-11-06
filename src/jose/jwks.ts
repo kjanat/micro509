@@ -7,6 +7,7 @@
 
 import { isPrimeEcPoint } from '#micro509/internal/crypto/prime-ec';
 import { base64UrlDecode } from '#micro509/internal/jose/base64url';
+import { snapshotJsonData } from '#micro509/internal/jose/json-data';
 import type { JsonObject, JsonValue } from '#micro509/internal/jose/strict-json';
 import { isJsonArray, isJsonObject, parseStrictJson } from '#micro509/internal/jose/strict-json';
 import type { JoseErrorResult, JoseResult, KeyResolutionErrorCode } from '#micro509/jose/errors';
@@ -186,6 +187,33 @@ export function parseJwks(
 	return parseWithLimits(input, bounds.value);
 }
 
+/**
+ * Validates already parsed, plain JSON data and owns a detached deep snapshot of it.
+ *
+ * Prefer {@linkcode parseJwks} for untrusted transport text: an object cannot reveal lost duplicate
+ * member names or invalid original UTF-8. No getters or `toJSON` are called. Cycles, non-JSON values,
+ * sparse arrays, accessors, symbols and custom prototypes are refused. `maxBytes` bounds the UTF-8
+ * size of the compact JSON data spelling, not the original transport bytes. Depth and node limits
+ * match the text parser. A changed source object requires a new validation and resolver instance.
+ */
+export function validateJwks(
+	value: unknown,
+	limits?: Partial<JwksLimits>,
+): JoseResult<Jwks, ParseJwksErrorCode> {
+	const bounds = resolveJwksLimits(limits);
+	if (!bounds.ok) return bounds;
+	const snapshot = snapshotJsonData(value, {
+		maxBytes: bounds.value.maxBytes,
+		maxDepth: MAX_JWKS_JSON_DEPTH,
+		maxNodes: bounds.value.maxKeys * 64 + 64,
+	});
+	if (!snapshot.ok)
+		return snapshot.code === 'limit_exceeded'
+			? joseFailure('limit_exceeded', 'JWK Set exceeds its JSON data bounds')
+			: malformed('JWK Set is not plain JSON data');
+	return validateDocument(snapshot.value, bounds.value);
+}
+
 const MAX_JWKS_BYTES_LIMIT = 16_777_216;
 const MAX_JWKS_KEYS_LIMIT = 1024;
 
@@ -243,7 +271,13 @@ function parseWithLimits(
 			? joseFailure('limit_exceeded', `JWK Set: ${parsed.message}`)
 			: malformed(`JWK Set: ${parsed.message}`);
 	}
-	const document = parsed.value;
+	return validateDocument(parsed.value, bounds);
+}
+
+function validateDocument(
+	document: JsonValue,
+	bounds: JwksLimits,
+): JoseResult<Jwks, 'jwks_malformed' | 'limit_exceeded'> {
 	if (!isJsonObject(document)) {
 		return malformed('JWK Set is not an object');
 	}
