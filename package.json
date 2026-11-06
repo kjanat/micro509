@@ -234,7 +234,7 @@
 		"dprint": {
 			"@dprint/biome": "^0.15.0",
 			"@dprint/formatter": "^0.6.0",
-			"@dprint/json": "^0.25.0"
+			"@dprint/json": "^0.26.0"
 		},
 		"site": {
 			"markdown-it-task-lists": "^2.1.1",
