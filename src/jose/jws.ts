@@ -6,7 +6,7 @@
  * @module
  */
 
-import { signData, verifySignatureWithKey } from '#micro509/crypto/crypto';
+import { ecdsaSignatureDerToRaw, signData, verifySignatureWithKey } from '#micro509/crypto/crypto';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { base64UrlDecode, base64UrlEncode } from '#micro509/internal/jose/base64url';
 import type { JsonObject, JsonValue } from '#micro509/internal/jose/strict-json';
@@ -23,13 +23,57 @@ import { joseFailure } from '#micro509/jose/errors';
 import { successResult, throwMicro509Error } from '#micro509/result/result';
 
 /** Signature algorithms this module signs and verifies. */
-export type JwsAlgorithm = 'RS256';
+export type JwsAlgorithm = 'RS256' | 'RS384' | 'RS512' | 'ES256' | 'ES384';
 
 /** Every {@linkcode JwsAlgorithm}. */
-export const JWS_ALGORITHMS: readonly JwsAlgorithm[] = ['RS256'];
+export const JWS_ALGORITHMS: readonly JwsAlgorithm[] = [
+	'RS256',
+	'RS384',
+	'RS512',
+	'ES256',
+	'ES384',
+];
 
 /** Smallest RSA modulus RS256 accepts (RFC 7518 §3.3). */
 export const MIN_RS256_MODULUS_BITS = 2048;
+
+/** Smallest RSA modulus accepted by any implemented RSA JWS algorithm (RFC 7518 §3.3). */
+export const MIN_JWS_RSA_MODULUS_BITS: number = MIN_RS256_MODULUS_BITS;
+
+type JwsAlgorithmProfile =
+	| { readonly kind: 'rsa'; readonly hash: 'SHA-256' | 'SHA-384' | 'SHA-512'; readonly oid: string }
+	| {
+			readonly kind: 'ec';
+			readonly hash: 'SHA-256' | 'SHA-384';
+			readonly curve: 'P-256' | 'P-384';
+			readonly coordinateBytes: number;
+			readonly oid: string;
+	  };
+
+const ALGORITHM_PROFILES: Readonly<Record<JwsAlgorithm, JwsAlgorithmProfile>> = {
+	RS256: { kind: 'rsa', hash: 'SHA-256', oid: OIDS.sha256WithRSAEncryption },
+	RS384: { kind: 'rsa', hash: 'SHA-384', oid: OIDS.sha384WithRSAEncryption },
+	RS512: { kind: 'rsa', hash: 'SHA-512', oid: OIDS.sha512WithRSAEncryption },
+	ES256: {
+		kind: 'ec',
+		hash: 'SHA-256',
+		curve: 'P-256',
+		coordinateBytes: 32,
+		oid: OIDS.ecdsaWithSHA256,
+	},
+	ES384: {
+		kind: 'ec',
+		hash: 'SHA-384',
+		curve: 'P-384',
+		coordinateBytes: 48,
+		oid: OIDS.ecdsaWithSHA384,
+	},
+};
+
+/** The exact key and signature profile for an admitted JWS algorithm. */
+export function jwsAlgorithmProfile(algorithm: JwsAlgorithm): JwsAlgorithmProfile {
+	return ALGORITHM_PROFILES[algorithm];
+}
 
 /** Size and structure bounds enforced before any expensive parsing. */
 export interface JoseLimits {
@@ -194,7 +238,7 @@ export interface JwsHeaderInput {
 
 /** Input for {@linkcode signCompactJws}. */
 export interface SignJwsInput {
-	/** An RSASSA-PKCS1-v1_5 SHA-256 private key of at least 2048 bits. */
+	/** A signing key matching the algorithm's RSA hash or ECDSA curve. RSA needs at least 2048 bits. */
 	readonly privateKey: CryptoKey;
 	/** The signature algorithm. */
 	readonly algorithm: JwsAlgorithm;
@@ -480,54 +524,81 @@ export function validRsaPublicExponent(exponent: Uint8Array, modulus?: Uint8Arra
 	return false;
 }
 
-/**
- * Checks a key may verify RS256 (RFC 7518 §3.3, RFC 8725 §3.1) and returns the signature length
- * in bytes it requires (RFC 8017 §8.2.2).
- */
-export function checkRs256VerificationKey(key: CryptoKey): JoseResult<number, 'key_unsuitable'> {
+/** Checks the key profile and returns the exact JOSE signature length (RFC 7518 §§3.3–3.4). */
+export function checkJwsVerificationKey(
+	key: CryptoKey,
+	algorithm: JwsAlgorithm,
+): JoseResult<number, 'key_unsuitable'> {
+	return checkJwsKey(key, algorithm, 'public');
+}
+
+function checkJwsKey(
+	key: CryptoKey,
+	algorithm: JwsAlgorithm,
+	type: 'public' | 'private',
+): JoseResult<number, 'key_unsuitable'> {
 	try {
-		return inspectRs256VerificationKey(key);
+		return inspectJwsKey(key, algorithm, type);
 	} catch {
 		return joseFailure('key_unsuitable', 'The key cannot be inspected');
 	}
 }
 
-function inspectRs256VerificationKey(key: CryptoKey): JoseResult<number, 'key_unsuitable'> {
-	const algorithm = key.algorithm;
-	if (key.type !== 'public' || !key.usages.includes('verify')) {
-		return joseFailure('key_unsuitable', 'RS256 needs a public key with verify usage');
+function inspectJwsKey(
+	key: CryptoKey,
+	algorithm: JwsAlgorithm,
+	type: 'public' | 'private',
+): JoseResult<number, 'key_unsuitable'> {
+	const profile = jwsAlgorithmProfile(algorithm);
+	const usage = type === 'public' ? 'verify' : 'sign';
+	if (key.type !== type || !key.usages.includes(usage)) {
+		return joseFailure('key_unsuitable', `${algorithm} needs a ${type} key with ${usage} usage`);
+	}
+	const keyAlgorithm = key.algorithm;
+	if (profile.kind === 'ec') {
+		if (
+			keyAlgorithm.name !== 'ECDSA' ||
+			!('namedCurve' in keyAlgorithm) ||
+			keyAlgorithm.namedCurve !== profile.curve
+		) {
+			return joseFailure('key_unsuitable', `${algorithm} needs an ECDSA ${profile.curve} key`);
+		}
+		return successResult(profile.coordinateBytes * 2);
 	}
 	if (
-		algorithm.name !== 'RSASSA-PKCS1-v1_5' ||
-		!('hash' in algorithm) ||
-		typeof algorithm.hash !== 'object' ||
-		algorithm.hash === null ||
-		!('name' in algorithm.hash) ||
-		algorithm.hash.name !== 'SHA-256'
-	) {
-		return joseFailure('key_unsuitable', 'RS256 needs an RSASSA-PKCS1-v1_5 SHA-256 key');
-	}
-	if (
-		!('modulusLength' in algorithm) ||
-		typeof algorithm.modulusLength !== 'number' ||
-		algorithm.modulusLength < MIN_RS256_MODULUS_BITS
+		keyAlgorithm.name !== 'RSASSA-PKCS1-v1_5' ||
+		!('hash' in keyAlgorithm) ||
+		typeof keyAlgorithm.hash !== 'object' ||
+		keyAlgorithm.hash === null ||
+		!('name' in keyAlgorithm.hash) ||
+		keyAlgorithm.hash.name !== profile.hash
 	) {
 		return joseFailure(
 			'key_unsuitable',
-			`RS256 needs an RSA modulus of at least ${MIN_RS256_MODULUS_BITS} bits`,
+			`${algorithm} needs an RSASSA-PKCS1-v1_5 ${profile.hash} key`,
 		);
 	}
 	if (
-		!('publicExponent' in algorithm) ||
-		!(algorithm.publicExponent instanceof Uint8Array) ||
-		!validRsaPublicExponent(algorithm.publicExponent)
+		!('modulusLength' in keyAlgorithm) ||
+		typeof keyAlgorithm.modulusLength !== 'number' ||
+		keyAlgorithm.modulusLength < MIN_JWS_RSA_MODULUS_BITS
 	) {
 		return joseFailure(
 			'key_unsuitable',
-			'RS256 needs a valid odd RSA public exponent of at least 3',
+			`${algorithm} needs an RSA modulus of at least ${MIN_JWS_RSA_MODULUS_BITS} bits`,
 		);
 	}
-	return successResult(Math.ceil(algorithm.modulusLength / 8));
+	if (
+		!('publicExponent' in keyAlgorithm) ||
+		!(keyAlgorithm.publicExponent instanceof Uint8Array) ||
+		!validRsaPublicExponent(keyAlgorithm.publicExponent)
+	) {
+		return joseFailure(
+			'key_unsuitable',
+			`${algorithm} needs a valid odd RSA public exponent of at least 3`,
+		);
+	}
+	return successResult(Math.ceil(keyAlgorithm.modulusLength / 8));
 }
 
 /** Verification options validated once and copied, so later changes by the caller cannot alter a run. */
@@ -641,8 +712,9 @@ function resolverDetails(resolved: object): JoseErrorDetails | undefined {
  *
  * The caller's `algorithms` list decides what is accepted; the token's `alg` only selects among
  * them, and `none` is always refused as `unsigned_token`. The `tokenType` policy is applied before
- * any key is resolved. A fixed key or the resolver's key must be an RSASSA-PKCS1-v1_5 SHA-256
- * public key of at least 2048 bits for RS256. Header members such as `jku`, `jwk`, `x5u` and
+ * any key is resolved. The key must match the admitted algorithm's RSA hash (at least 2048 bits)
+ * or ECDSA curve. ECDSA signatures must be fixed-width raw R || S, with no DER retry.
+ * Header members such as `jku`, `jwk`, `x5u` and
  * `x5c` are never used to find a key. A resolver that throws or returns something other than a
  * result is reported as `key_resolution_failed` without its message.
  *
@@ -683,12 +755,16 @@ export async function verifyPrepared(
 	const header: JwsHeader<JwsAlgorithm> = { ...unverified.header, alg };
 	const key = await resolveKey(prepared, header);
 	if (!key.ok) return key;
-	const signatureBytes = checkRs256VerificationKey(key.value);
+	const signatureBytes = checkJwsVerificationKey(key.value, alg);
 	if (!signatureBytes.ok) return signatureBytes;
 	if (unverified.signature.length !== signatureBytes.value) {
-		return joseFailure('invalid_signature', 'The signature length differs from the modulus', {
-			alg,
-		});
+		return joseFailure(
+			'invalid_signature',
+			'The signature length does not match the algorithm and key',
+			{
+				alg,
+			},
+		);
 	}
 	const failure = joseFailure('invalid_signature', 'The signature does not verify', {
 		alg,
@@ -696,7 +772,7 @@ export async function verifyPrepared(
 	});
 	const verification = await verifySignatureWithKey({
 		publicKey: key.value,
-		signatureAlgorithm: { oid: OIDS.sha256WithRSAEncryption },
+		signatureAlgorithm: { oid: jwsAlgorithmProfile(alg).oid },
 		signatureEncoding: 'raw',
 		signature: unverified.signature,
 		data: unverified.signingInput,
@@ -706,27 +782,12 @@ export async function verifyPrepared(
 }
 
 function assertSigningKey(input: SignJwsInput): void {
-	const algorithm = input.privateKey.algorithm;
 	if (!JWS_ALGORITHMS.includes(input.algorithm)) {
 		throwMicro509Error('unsupported_algorithm', 'Unsupported JWS algorithm');
 	}
-	if (
-		input.privateKey.type !== 'private' ||
-		!input.privateKey.usages.includes('sign') ||
-		algorithm.name !== 'RSASSA-PKCS1-v1_5' ||
-		!('hash' in algorithm) ||
-		typeof algorithm.hash !== 'object' ||
-		algorithm.hash === null ||
-		!('name' in algorithm.hash) ||
-		algorithm.hash.name !== 'SHA-256' ||
-		!('modulusLength' in algorithm) ||
-		typeof algorithm.modulusLength !== 'number' ||
-		algorithm.modulusLength < MIN_RS256_MODULUS_BITS
-	) {
-		throwMicro509Error(
-			'incompatible_key',
-			`RS256 signing needs an RSASSA-PKCS1-v1_5 SHA-256 private key of at least ${MIN_RS256_MODULUS_BITS} bits`,
-		);
+	const suitable = checkJwsKey(input.privateKey, input.algorithm, 'private');
+	if (!suitable.ok) {
+		throwMicro509Error('incompatible_key', suitable.message);
 	}
 }
 
@@ -739,6 +800,7 @@ function assertSigningKey(input: SignJwsInput): void {
  */
 export async function signCompactJws(input: SignJwsInput): Promise<string> {
 	assertSigningKey(input);
+	const profile = jwsAlgorithmProfile(input.algorithm);
 	const header: Record<string, string> = { alg: input.algorithm };
 	for (const name of ['typ', 'kid', 'cty'] as const) {
 		const value = input.header?.[name];
@@ -750,5 +812,7 @@ export async function signCompactJws(input: SignJwsInput): Promise<string> {
 	}
 	const signingInput = `${base64UrlEncode(textEncoder.encode(JSON.stringify(header)))}.${base64UrlEncode(input.payload)}`;
 	const { signature } = await signData(input.privateKey, textEncoder.encode(signingInput));
-	return `${signingInput}.${base64UrlEncode(signature)}`;
+	const joseSignature =
+		profile.kind === 'ec' ? ecdsaSignatureDerToRaw(signature, profile.curve) : signature;
+	return `${signingInput}.${base64UrlEncode(joseSignature)}`;
 }

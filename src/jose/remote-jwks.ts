@@ -8,9 +8,10 @@
 
 import type { JoseErrorResult, JoseResult, KeyResolutionErrorCode } from '#micro509/jose/errors';
 import { joseFailure } from '#micro509/jose/errors';
-import type { JwkSelector, Jwks, RsaJwkEntry } from '#micro509/jose/jwks';
-import { importJwkEntry, parseJwks, selectJwk } from '#micro509/jose/jwks';
-import type { JwsKeyRequest, JwsKeyResolver } from '#micro509/jose/jws';
+import type { JwkSelector, Jwks, SupportedJwkEntry } from '#micro509/jose/jwks';
+import { importJwkEntry, jwkEntryCacheKey, parseJwks, selectJwk } from '#micro509/jose/jwks';
+import type { JwsAlgorithm, JwsKeyRequest, JwsKeyResolver } from '#micro509/jose/jws';
+import { JWS_ALGORITHMS } from '#micro509/jose/jws';
 import { successResult, throwMicro509Error } from '#micro509/result/result';
 
 /** The request {@linkcode JwksTransport} must issue. */
@@ -371,15 +372,15 @@ async function fetchJwks(
 	}
 }
 
-function entryKey(entry: RsaJwkEntry): string {
-	return `${entry.n}.${entry.e}`;
-}
-
 function carryOver(fetched: Fetched, previous: Snapshot | undefined): Snapshot {
 	const imported = new Map<string, Promise<JoseResult<CryptoKey, 'key_unsuitable'>>>();
 	for (const entry of fetched.jwks.keys) {
-		const carried = entry.kind === 'rsa' ? previous?.imported.get(entryKey(entry)) : undefined;
-		if (entry.kind === 'rsa' && carried !== undefined) imported.set(entryKey(entry), carried);
+		if (entry.kind === 'unsupported') continue;
+		for (const algorithm of JWS_ALGORITHMS) {
+			const key = jwkEntryCacheKey(entry, algorithm);
+			const carried = previous?.imported.get(key);
+			if (carried !== undefined) imported.set(key, carried);
+		}
 	}
 	return { jwks: fetched.jwks, expiresAt: fetched.expiresAt, imported };
 }
@@ -525,12 +526,13 @@ export function createRemoteJwksKeyResolver(config: RemoteJwksConfig): JwsKeyRes
 
 	async function importFrom(
 		current: Snapshot,
-		entry: RsaJwkEntry,
+		entry: SupportedJwkEntry,
+		algorithm: JwsAlgorithm,
 	): Promise<JoseResult<CryptoKey, 'key_unsuitable'>> {
-		const key = entryKey(entry);
+		const key = jwkEntryCacheKey(entry, algorithm);
 		const cached = current.imported.get(key);
 		if (cached !== undefined) return await cached;
-		const pending = importJwkEntry(entry);
+		const pending = importJwkEntry(entry, algorithm);
 		current.imported.set(key, pending);
 		return await pending;
 	}
@@ -565,7 +567,7 @@ export function createRemoteJwksKeyResolver(config: RemoteJwksConfig): JwsKeyRes
 			}
 		}
 		if (!selected.ok) return selected;
-		const key = await importFrom(source, selected.value);
+		const key = await importFrom(source, selected.value, selector.algorithm);
 		return signal?.aborted === true ? joseFailure('aborted', 'Key resolution was cancelled') : key;
 	}
 

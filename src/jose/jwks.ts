@@ -12,8 +12,10 @@ import type { JoseErrorResult, JoseResult, KeyResolutionErrorCode } from '#micro
 import { joseFailure } from '#micro509/jose/errors';
 import type { JwsAlgorithm, JwsKeyResolver } from '#micro509/jose/jws';
 import {
-	checkRs256VerificationKey,
-	MIN_RS256_MODULUS_BITS,
+	checkJwsVerificationKey,
+	JWS_ALGORITHMS,
+	jwsAlgorithmProfile,
+	MIN_JWS_RSA_MODULUS_BITS,
 	validRsaPublicExponent,
 } from '#micro509/jose/jws';
 import { importPublicJwk } from '#micro509/keys/keys';
@@ -61,8 +63,23 @@ export interface RsaJwkEntry extends JwkEntryBase {
 	readonly e: string;
 }
 
+/** An EC public key entry, with its curve and uncompressed affine coordinates. */
+export interface EcJwkEntry extends JwkEntryBase {
+	/** Discriminant. */
+	readonly kind: 'ec';
+	/** The curve identifier, retained even when unsupported. */
+	readonly crv: string;
+	/** Base64url fixed-width affine x coordinate. */
+	readonly x: string;
+	/** Base64url fixed-width affine y coordinate. */
+	readonly y: string;
+}
+
+/** Public key entries whose type this module can select. */
+export type SupportedJwkEntry = RsaJwkEntry | EcJwkEntry;
+
 /**
- * An entry this module never selects: a `kty` other than `RSA`, or an entry with missing or
+ * An entry this module never selects: a `kty` other than `RSA` or `EC`, or an entry with missing or
  * wrongly typed members (RFC 7517 §5). Kept so callers can inspect the whole set.
  */
 export interface UnsupportedJwkEntry extends JwkEntryBase {
@@ -73,7 +90,7 @@ export interface UnsupportedJwkEntry extends JwkEntryBase {
 }
 
 /** One key of a JWK Set. */
-export type JwkEntry = RsaJwkEntry | UnsupportedJwkEntry;
+export type JwkEntry = SupportedJwkEntry | UnsupportedJwkEntry;
 
 /** A parsed JWK Set. */
 export interface Jwks {
@@ -130,19 +147,32 @@ function parseEntry(value: JsonValue): JoseResult<JwkEntry, 'jwks_malformed'> {
 		...(alg === undefined ? {} : { alg }),
 		...(ops === undefined ? {} : { keyOps: ops }),
 	};
-	const n = value.n;
-	const e = value.e;
-	if (kty !== 'RSA' || typeof n !== 'string' || typeof e !== 'string') {
-		return successResult({ kind: 'unsupported', kty, ...metadata, members: value });
+	if (kty === 'RSA' && typeof value.n === 'string' && typeof value.e === 'string') {
+		return successResult({ kind: 'rsa', n: value.n, e: value.e, ...metadata, members: value });
 	}
-	return successResult({ kind: 'rsa', n, e, ...metadata, members: value });
+	if (
+		kty === 'EC' &&
+		typeof value.crv === 'string' &&
+		typeof value.x === 'string' &&
+		typeof value.y === 'string'
+	) {
+		return successResult({
+			kind: 'ec',
+			crv: value.crv,
+			x: value.x,
+			y: value.y,
+			...metadata,
+			members: value,
+		});
+	}
+	return successResult({ kind: 'unsupported', kty, ...metadata, members: value });
 }
 
 /**
  * Parses a JWK Set document.
  *
  * The document must be duplicate-free JSON with a `keys` array within `limits`. Keys with a `kty`
- * other than `RSA`, and keys with missing or wrongly typed members, are kept as `unsupported`
+ * other than `RSA` or `EC`, and keys with missing or wrongly typed members, are kept as `unsupported`
  * entries and never selected (RFC 7517 §5). A set that is not a duplicate-free object with a
  * `keys` array of objects is `jwks_malformed`.
  */
@@ -232,7 +262,9 @@ function parseWithLimits(
 
 /** Why a key entry cannot verify a given algorithm, or `undefined` when it can. */
 function unsuitableReason(entry: JwkEntry, algorithm: JwsAlgorithm): string | undefined {
-	if (entry.kind !== 'rsa') return 'key type does not match the algorithm';
+	if (!JWS_ALGORITHMS.includes(algorithm)) return 'unsupported algorithm';
+	const profile = jwsAlgorithmProfile(algorithm);
+	if (entry.kind !== profile.kind) return 'key type does not match the algorithm';
 	if (entry.use !== undefined && entry.use !== 'sig') return '"use" is not "sig"';
 	if (entry.keyOps !== undefined && !entry.keyOps.includes('verify')) {
 		return '"key_ops" does not include "verify"';
@@ -241,6 +273,20 @@ function unsuitableReason(entry: JwkEntry, algorithm: JwsAlgorithm): string | un
 		return '"use" and "key_ops" are inconsistent';
 	}
 	if (entry.alg !== undefined && entry.alg !== algorithm) return '"alg" names another algorithm';
+	if (entry.kind === 'ec' && profile.kind === 'ec') {
+		if (entry.crv !== profile.curve) return 'EC curve does not match the algorithm';
+		const x = base64UrlDecode(entry.x);
+		const y = base64UrlDecode(entry.y);
+		return x?.length === profile.coordinateBytes && y?.length === profile.coordinateBytes
+			? undefined
+			: 'EC coordinates must be canonical base64url of the required fixed width';
+	}
+	return entry.kind === 'rsa'
+		? unsuitableRsaParameters(entry)
+		: 'key type does not match the algorithm';
+}
+
+function unsuitableRsaParameters(entry: RsaJwkEntry): string | undefined {
 	const modulus = base64UrlDecode(entry.n);
 	const exponent = base64UrlDecode(entry.e);
 	if (modulus === undefined || exponent === undefined || modulus.length === 0) {
@@ -251,7 +297,7 @@ function unsuitableReason(entry: JwkEntry, algorithm: JwsAlgorithm): string | un
 	}
 	if (modulus.length > MAX_RSA_MODULUS_BYTES) return 'RSA modulus is too large';
 	const modulusBits = (modulus.length - 1) * 8 + 32 - Math.clz32(modulus[0] ?? 0);
-	if (modulusBits < MIN_RS256_MODULUS_BITS) return 'RSA modulus is too small';
+	if (modulusBits < MIN_JWS_RSA_MODULUS_BITS) return 'RSA modulus is too small';
 	if (!validRsaPublicExponent(exponent, modulus)) return 'RSA public exponent is invalid';
 	return undefined;
 }
@@ -267,7 +313,7 @@ export interface JwkSelector {
 /**
  * Selects the one key of a set that can verify `selector`.
  *
- * Keys are filtered by `kid` (when the token has one), key type, `use`, `key_ops`, `alg` and RSA
+ * Keys are filtered by `kid` (when the token has one), key type, `use`, `key_ops`, `alg` and RSA/EC
  * parameters. No match is `key_not_found`, or `key_unsuitable` when `kid` matched only keys that
  * fail the other checks. More than one match is `ambiguous_key`: a token without `kid` therefore
  * resolves only against a set with a single usable key.
@@ -275,15 +321,15 @@ export interface JwkSelector {
 export function selectJwk(
 	jwks: Jwks,
 	selector: JwkSelector,
-): JoseResult<RsaJwkEntry, Exclude<KeyResolutionErrorCode, 'jwks_unavailable' | 'aborted'>> {
+): JoseResult<SupportedJwkEntry, Exclude<KeyResolutionErrorCode, 'jwks_unavailable' | 'aborted'>> {
 	const named = jwks.keys.filter(
 		(entry) => selector.kid === undefined || entry.kid === selector.kid,
 	);
 	const details = selector.kid === undefined ? {} : { kid: selector.kid };
 	if (named.length === 0) return joseFailure('key_not_found', 'No key matches the token', details);
-	const usable: RsaJwkEntry[] = [];
+	const usable: SupportedJwkEntry[] = [];
 	for (const entry of named) {
-		if (entry.kind === 'rsa' && unsuitableReason(entry, selector.algorithm) === undefined) {
+		if (entry.kind !== 'unsupported' && unsuitableReason(entry, selector.algorithm) === undefined) {
 			usable.push(entry);
 		}
 	}
@@ -297,11 +343,15 @@ export function selectJwk(
 	return successResult(only);
 }
 
-/** Imports a selected entry as a verify-only RS256 `CryptoKey`. */
+/**
+ * Imports a selected entry as a verify-only key for `algorithm`. The default remains RS256;
+ * pass the selected algorithm explicitly for every other RSA hash or ECDSA curve.
+ */
 export async function importJwkEntry(
-	entry: RsaJwkEntry,
+	entry: SupportedJwkEntry,
+	algorithm: JwsAlgorithm = 'RS256',
 ): Promise<JoseResult<CryptoKey, 'key_unsuitable'>> {
-	const reason = unsuitableReason(entry, 'RS256');
+	const reason = unsuitableReason(entry, algorithm);
 	if (reason !== undefined) {
 		return joseFailure(
 			'key_unsuitable',
@@ -309,17 +359,39 @@ export async function importJwkEntry(
 			entry.kid === undefined ? undefined : { kid: entry.kid },
 		);
 	}
+	const profile = jwsAlgorithmProfile(algorithm);
+	const jwk: JsonWebKey =
+		entry.kind === 'rsa'
+			? { kty: 'RSA', n: entry.n, e: entry.e, alg: algorithm, key_ops: ['verify'], ext: true }
+			: {
+					kty: 'EC',
+					crv: entry.crv,
+					x: entry.x,
+					y: entry.y,
+					alg: algorithm,
+					key_ops: ['verify'],
+					ext: true,
+				};
 	const imported = await importPublicJwk(
-		{ kty: 'RSA', n: entry.n, e: entry.e, alg: 'RS256', key_ops: ['verify'], ext: true },
-		{ kind: 'rsa', scheme: 'pkcs1-v1_5', hash: 'SHA-256' },
+		jwk,
+		profile.kind === 'rsa'
+			? { kind: 'rsa', scheme: 'pkcs1-v1_5', hash: profile.hash }
+			: { kind: 'ecdsa', curve: profile.curve },
 	);
 	if (!imported.ok) {
-		return joseFailure('key_unsuitable', 'The RSA JWK cannot be imported', {
+		return joseFailure('key_unsuitable', 'The JWK cannot be imported', {
 			...(entry.kid === undefined ? {} : { kid: entry.kid }),
 		});
 	}
-	const suitable = checkRs256VerificationKey(imported.value);
+	const suitable = checkJwsVerificationKey(imported.value, algorithm);
 	return suitable.ok ? successResult(imported.value) : suitable;
+}
+
+/** Cache identity includes the admitted algorithm, which binds the RSA import hash. */
+export function jwkEntryCacheKey(entry: SupportedJwkEntry, algorithm: JwsAlgorithm): string {
+	return entry.kind === 'rsa'
+		? `${algorithm}.rsa.${entry.n}.${entry.e}`
+		: `${algorithm}.ec.${entry.crv}.${entry.x}.${entry.y}`;
 }
 
 /**
@@ -329,17 +401,18 @@ export async function importJwkEntry(
  * verifications reuse the same `CryptoKey`.
  */
 export function createJwksKeyResolver(jwks: Jwks): JwsKeyResolver {
-	const imported = new Map<RsaJwkEntry, Promise<JoseResult<CryptoKey, 'key_unsuitable'>>>();
+	const imported = new Map<string, Promise<JoseResult<CryptoKey, 'key_unsuitable'>>>();
 	return async (request) => {
 		const selected = selectJwk(jwks, {
 			algorithm: request.algorithm,
 			...(request.kid === undefined ? {} : { kid: request.kid }),
 		});
 		if (!selected.ok) return selected;
-		const cached = imported.get(selected.value);
+		const cacheKey = jwkEntryCacheKey(selected.value, request.algorithm);
+		const cached = imported.get(cacheKey);
 		if (cached !== undefined) return await cached;
-		const pending = importJwkEntry(selected.value);
-		imported.set(selected.value, pending);
+		const pending = importJwkEntry(selected.value, request.algorithm);
+		imported.set(cacheKey, pending);
 		return await pending;
 	};
 }

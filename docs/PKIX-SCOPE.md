@@ -580,6 +580,21 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       PBES2 or PBMAC1 count is `malformed`. The PBES2 encoders throw `RangeError`,
       and PBMAC1 creation throws `invalid_iterations`.
 
+## JOSE signature boundary
+
+The optional `micro509/jose` compact JWS/JWT API implements RS256, RS384, RS512,
+ES256 and ES384, including algorithm-aware local and remote JWKS resolution.
+RSA PKCS#1 v1.5 uses the matching SHA-256/384/512 hash and a modulus of at least
+2048 bits. ES256 uses P-256/SHA-256 and 64-byte raw R || S; ES384 uses
+P-384/SHA-384 and 96-byte raw R || S ([RFC 7518 §§3.3–3.4](https://www.rfc-editor.org/rfc/rfc7518.html#section-3.3)).
+Generic signature verification's DER/raw retry does not apply to JWS. Unknown
+algorithms and algorithms outside the explicit caller allowlist are refused.
+Interoperability is exercised against independently signed jose tokens in
+`test/jose-algorithms.test.ts`; shared runtime smokes exercise the same profiles.
+This is not a claim of complete JOSE coverage: JWE, unsecured JWTs, JSON JWS
+serialization, nested JWTs, detached/unencoded payloads and critical-header
+extensions remain unsupported.
+
 ## 16. SSH key formats
 
 `micro509/ssh` reads and writes SSH key material. It is not a PKIX surface and

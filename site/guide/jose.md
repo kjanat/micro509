@@ -5,7 +5,7 @@ outline: [2, 3]
 
 # Sign and verify JWTs
 
-Use `micro509/jose` to sign JWTs with RS256 and verify their signatures, issuer,
+Use `micro509/jose` to sign JWTs with RS256, RS384, RS512, ES256 and ES384 and verify their signatures, issuer,
 audience and expiry. Verification accepts a public `CryptoKey`, a local JWK Set
 (JWKS), or a resolver that fetches an issuer's JWKS.
 
@@ -257,10 +257,65 @@ if (result.ok)
 
 </LiveCode>
 
+## Choose an algorithm and matching key
+
+The algorithm is explicit when signing, and the verifier accepts only its caller's
+non-empty `algorithms` list. Adding library support does not expand an existing
+`['RS256']` policy. RSA keys are bound to their hash at generation/import; an
+RS256 key cannot be reused for RS384 by changing only the token option.
+
+| Algorithm | Key                     | Hash    | Signature encoding   |
+| --------- | ----------------------- | ------- | -------------------- |
+| RS256     | RSA, at least 2048 bits | SHA-256 | RSA signature octets |
+| RS384     | RSA, at least 2048 bits | SHA-384 | RSA signature octets |
+| RS512     | RSA, at least 2048 bits | SHA-512 | RSA signature octets |
+| ES256     | ECDSA P-256             | SHA-256 | 64-byte raw R \|\| S |
+| ES384     | ECDSA P-384             | SHA-384 | 96-byte raw R \|\| S |
+
+These profiles follow [RFC 7518 §§3.3–3.4](https://www.rfc-editor.org/rfc/rfc7518.html#section-3.3).
+ECDSA JWS signatures never use ASN.1 DER or the generic verifier's encoding retry.
+
+<LiveCode>
+
+```ts
+import { generateKeyPair } from 'micro509/keys';
+import { signJwt, verifyJwt } from 'micro509/jose';
+
+const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+const token = await signJwt({
+  algorithm: 'ES256',
+  privateKey: keys.privateKey,
+  claims: {
+    iss: 'https://issuer.example',
+    aud: 'orders',
+    exp: Math.floor(Date.now() / 1000) + 300,
+  },
+});
+const result = await verifyJwt(token, {
+  algorithms: ['ES256'],
+  key: keys.publicKey,
+  tokenType: 'JWT',
+  claims: { issuer: 'https://issuer.example', audience: 'orders' },
+});
+console.log('ES256 token:', token);
+console.log('Verified:', result.ok);
+```
+
+</LiveCode>
+
+Local and remote JWKS resolvers select RSA or EC keys by the admitted algorithm,
+`kid`, `alg`, `use` and `key_ops`. EC JWKs need `crv` and full-width `x` and `y`;
+compressed points are unsupported. Resolvers keep imports separate for each
+algorithm, even when RSA key material is shared. Reuse a resolver across calls.
+When importing a selected entry yourself, pass its admitted algorithm to
+`importJwkEntry(entry, 'ES256')`; the omitted-argument default remains RS256.
+An incompatible key yields `key_unsuitable`, a refused algorithm yields
+`algorithm_not_allowed`, and a failed signature yields `invalid_signature`.
+Signing input errors throw coded `ResultError`s as documented above.
+
 ## Supported formats
 
-The module implements compact JWS and JWT with RS256 and RSA keys of at least
-2048 bits. JWE, JSON JWS serialization, nested JWTs, detached or unencoded
+The module implements compact JWS and JWT with RS256/384/512 and ES256/384. JWE, JSON JWS serialization, nested JWTs, detached or unencoded
 payloads, critical-header extensions and other signature algorithms are unsupported.
 Parsing checks canonical base64url, UTF-8, duplicate JSON members and size/depth
 limits. Configure these bounds through [`JoseLimits`](../api/jose.md).
