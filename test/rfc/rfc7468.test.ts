@@ -3263,7 +3263,9 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				// RFC 5652 §5.3 signs a SET OF authenticated attributes; RFC 2315 §9.2
 				// leaves authenticatedAttributes optional.
 				expect(parsed.signerInfos.map((info) => info.hasSignedAttrs)).toEqual([true]);
-				expect(await verifyPkcs7SignedData(signed.pem)).toMatchObject({ ok: true });
+				expect(await verifyPkcs7SignedData(signed.pem, { expectedContentTypeOid })).toMatchObject({
+					ok: true,
+				});
 			}
 		});
 
@@ -3596,7 +3598,11 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			);
 			const parsed = unwrap(parsePkcs7SignedDataPem(cmsOnly.pem));
 			expect(parsed.encapsulatedContentTypeOid).toBe('1.2.840.113549.1.9.16.1.9');
-			expect(await verifyPkcs7SignedData(cmsOnly.pem)).toMatchObject({ ok: true });
+			expect(
+				await verifyPkcs7SignedData(cmsOnly.pem, {
+					expectedContentTypeOid: '1.2.840.113549.1.9.16.1.9',
+				}),
+			).toMatchObject({ ok: true });
 			// A version 1 SignedData is also an RFC 2315 structure, so §8's label
 			// still describes it, and one file holding both is not one ContentInfo.
 			const dual = await signContent('pkcs7-label.example', content);
@@ -3713,7 +3719,9 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 					Uint8Array.from(implicitAttrs),
 				),
 			).toBe(false);
-			expect(await verifyPkcs7SignedData(signed.pem)).toMatchObject({ ok: true });
+			expect(
+				await verifyPkcs7SignedData(signed.pem, { expectedContentTypeOid: ID_CT_COMPRESSED_DATA }),
+			).toMatchObject({ ok: true });
 		});
 
 		it('omits eContent for an external signature and signs as though it were present', async () => {
@@ -3762,10 +3770,16 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				ok: false,
 				code: 'detached_content_required',
 			});
-			expect(await verifyPkcs7SignedData(detached.pem, { content })).toMatchObject({ ok: true });
+			expect(
+				await verifyPkcs7SignedData(detached.pem, {
+					content,
+					expectedContentTypeOid: ID_CT_COMPRESSED_DATA,
+				}),
+			).toMatchObject({ ok: true });
 			expect(
 				await verifyPkcs7SignedData(detached.pem, {
 					content: new TextEncoder().encode('other bytes'),
+					expectedContentTypeOid: ID_CT_COMPRESSED_DATA,
 				}),
 			).toMatchObject({ ok: false, code: 'message_digest_mismatch' });
 		});
@@ -3797,7 +3811,9 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			);
 			expect(Array.from(digested.value)).toEqual(Array.from(wholeEncoding));
 			expect(Array.from(digested.value)).not.toEqual(Array.from(valueOctets));
-			expect(await verifyPkcs7SignedData(signed.pem)).toMatchObject({ ok: true });
+			expect(
+				await verifyPkcs7SignedData(signed.pem, { expectedContentTypeOid: ID_CT_CONTENT_INFO }),
+			).toMatchObject({ ok: true });
 		});
 	});
 

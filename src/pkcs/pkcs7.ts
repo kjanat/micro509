@@ -272,6 +272,10 @@ export type ParsePkcs7CertBagResult =
  * `no_signers` means the SignedData carries no SignerInfo to verify.
  */
 export type VerifyPkcs7SignedDataErrorCode =
+	| 'invalid_options'
+	| 'content_type_mismatch'
+	| 'signed_attributes_required'
+	| 'signed_attributes_forbidden'
 	| 'no_signers'
 	| 'signer_not_found'
 	| 'signature_invalid'
@@ -288,6 +292,14 @@ export interface VerifyPkcs7SignedDataFailure
 
 /** Options for {@linkcode verifyPkcs7SignedData}. */
 export interface VerifyPkcs7SignedDataOptions {
+	/** Expected eContentType OID. Defaults to id-data (1.2.840.113549.1.7.1). */
+	readonly expectedContentTypeOid?: string;
+	/**
+	 * Signed-attribute policy for every signer. Defaults to 'required'.
+	 * 'allowed' accepts either form for id-data; 'forbidden' accepts only bare
+	 * id-data signatures. RFC 5652 §5.3 always requires attributes for other types.
+	 */
+	readonly signedAttributes?: 'required' | 'allowed' | 'forbidden';
 	/**
 	 * External content for a detached SignedData (RFC 5652 Section 5.2, absent `eContent`).
 	 * Required to verify a detached signature; ignored when the SignedData embeds its own content.
@@ -852,6 +864,10 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
  * Accepts PEM text, raw DER, or an already-parsed {@linkcode ParsedPkcs7SignedData}.
  * For each signer, locates the matching certificate in the embedded set and
  * verifies the signature (including signed-attribute digest checks per RFC 5652 Section 5.4).
+ * Defaults to id-data and requires signed attributes on every signer. Select
+ * `expectedContentTypeOid` from the application's protocol, not the input envelope.
+ * Legacy bare id-data signatures require `signedAttributes: 'allowed'` or 'forbidden'.
+ * Non-id-data always requires attributes (RFC 5652 §5.3).
  *
  * For a detached SignedData (absent `eContent`), pass the externally-held
  * content via `options.content`; without it, verification fails with the
@@ -877,6 +893,19 @@ export async function verifyPkcs7SignedData(
 	input: string | Uint8Array | ParsedPkcs7SignedData,
 	options: VerifyPkcs7SignedDataOptions = {},
 ): Promise<VerifyPkcs7SignedDataResult> {
+	// Snapshot application policy before asynchronous signature verification.
+	let expectedContentTypeOid: string;
+	const signedAttributes = options.signedAttributes ?? 'required';
+	if (!['required', 'allowed', 'forbidden'].includes(signedAttributes)) {
+		return verifyPkcs7Failure('invalid_options', 'Unknown signed-attribute policy');
+	}
+	try {
+		expectedContentTypeOid = decodeObjectIdentifier(
+			readElement(objectIdentifier(options.expectedContentTypeOid ?? OIDS.pkcs7Data)).value,
+		);
+	} catch {
+		return verifyPkcs7Failure('invalid_options', 'Expected content type must be an OID');
+	}
 	const parsedResult = normalizePkcs7SignedDataForVerification(input);
 	if (!parsedResult.ok) return parsedResult;
 	const parsed = parsedResult.value;
@@ -891,6 +920,20 @@ export async function verifyPkcs7SignedData(
 	}
 	if (parsed.signerInfos.length === 0) {
 		return verifyPkcs7Failure('no_signers', 'SignedData contains no signer information');
+	}
+	if (parsed.encapsulatedContentTypeOid !== expectedContentTypeOid) {
+		return verifyPkcs7Failure('content_type_mismatch', 'Unexpected SignedData content type');
+	}
+	for (const signer of parsed.signerInfos) {
+		if (
+			!signer.hasSignedAttrs &&
+			(signedAttributes === 'required' || parsed.encapsulatedContentTypeOid !== OIDS.pkcs7Data)
+		) {
+			return verifyPkcs7Failure('signed_attributes_required', 'Signed attributes are required');
+		}
+		if (signer.hasSignedAttrs && signedAttributes === 'forbidden') {
+			return verifyPkcs7Failure('signed_attributes_forbidden', 'Signed attributes are forbidden');
+		}
 	}
 	const signers: VerifiedPkcs7Signer[] = [];
 	for (const signerInfo of parsed.signerInfos) {

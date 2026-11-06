@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CMS verification defaults to `id-data` content with signed attributes required
+  for every signer. Set `expectedContentTypeOid` for another application content
+  type. Legacy bare `id-data` signatures require explicit `signedAttributes:
+  'allowed'` or `'forbidden'`; non-`id-data` always requires signed attributes
+  under RFC 5652 §5.3. New typed content-type and attribute-policy failures are
+  distinct from invalid signatures. This changes verification defaults. (#216)
+
 ## [0.17.1] - 2026-10-26
 
 Derive Argon2 keys across supported runtimes with the TypeScript implementation,
