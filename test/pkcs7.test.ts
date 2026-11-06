@@ -1029,7 +1029,7 @@ describe('pkcs7', () => {
 			...parsed.value,
 			encapsulatedContent: new TextEncoder().encode('test'),
 		};
-		const result = await verifyPkcs7SignedData(withContent);
+		const result = await verifyPkcs7SignedData(withContent, { signedAttributes: 'allowed' });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
@@ -1376,7 +1376,7 @@ describe('pkcs7: coverage — error paths', () => {
 			setOf([signerInfo]),
 		]);
 		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
-		const result = await verifyPkcs7SignedData(der);
+		const result = await verifyPkcs7SignedData(der, { signedAttributes: 'allowed' });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});

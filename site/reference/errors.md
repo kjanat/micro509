@@ -465,17 +465,21 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 
 ### VerifyPkcs7SignedDataErrorCode
 
-| Code                        | Meaning                                                                   |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `detached_content_required` | SignedData has no `eContent` and no `content` option supplied             |
-| `limit_exceeded`            | A micro509 limit while parsing, see `ParsePkcs7ErrorCode`                 |
-| `malformed`                 | Structure, attributes, or algorithms fail to process                      |
-| `message_digest_mismatch`   | Content digest differs from the `messageDigest` attribute                 |
-| `no_signers`                | `signerInfos` is empty                                                    |
-| `not_signed_data`           | ContentInfo carries a content type other than SignedData                  |
-| `signature_invalid`         | A signer's signature does not verify                                      |
-| `signer_not_found`          | No embedded certificate matches a SignerInfo                              |
-| `unsupported`               | A signer issuer value micro509 does not decode, see `ParsePkcs7ErrorCode` |
+| Code                          | Meaning                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `invalid_options`             | The signed-attribute policy or expected content-type OID is invalid       |
+| `content_type_mismatch`       | The encapsulated content type differs from application policy             |
+| `signed_attributes_required`  | A signer lacks required signed attributes                                 |
+| `signed_attributes_forbidden` | A signer has attributes but application policy requires bare signatures   |
+| `detached_content_required`   | SignedData has no `eContent` and no `content` option supplied             |
+| `limit_exceeded`              | A micro509 limit while parsing, see `ParsePkcs7ErrorCode`                 |
+| `malformed`                   | Structure, attributes, or algorithms fail to process                      |
+| `message_digest_mismatch`     | Content digest differs from the `messageDigest` attribute                 |
+| `no_signers`                  | `signerInfos` is empty                                                    |
+| `not_signed_data`             | ContentInfo carries a content type other than SignedData                  |
+| `signature_invalid`           | A signer's signature does not verify                                      |
+| `signer_not_found`            | No embedded certificate matches a SignerInfo                              |
+| `unsupported`                 | A signer issuer value micro509 does not decode, see `ParsePkcs7ErrorCode` |
 
 ## micro509/jose
 

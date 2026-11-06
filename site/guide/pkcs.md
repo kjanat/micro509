@@ -4,6 +4,35 @@ outline: [2, 3]
 
 # PKCS
 
+## CMS verification policy
+
+`verifyPkcs7SignedData` defaults to the `id-data` content type
+(`1.2.840.113549.1.7.1`) and requires signed attributes on every signer.
+Pass the protocol's expected OID through `expectedContentTypeOid` when it uses
+another content type. Choose this value from application configuration, not
+from the received envelope.
+
+`signedAttributes` accepts `'required'` (default), `'allowed'`, or `'forbidden'`.
+The last two modes support legacy `id-data` protocols using bare signatures.
+For non-`id-data`, attributes are mandatory under RFC 5652 §5.3 regardless of
+this option. Policy is checked for all signers, including mixed envelopes,
+for attached and detached content.
+
+`content_type_mismatch`, `signed_attributes_required`, and
+`signed_attributes_forbidden` identify policy failures separately from
+`signature_invalid`. Invalid policy options return `invalid_options`.
+
+When upgrading from 0.17.1, callers intentionally accepting bare `id-data`
+signatures must opt into `'allowed'` or `'forbidden'`. The default builder
+already generates signed attributes and needs no change.
+
+This prevents interpreting a signed attribute SET as application content under
+the default profile. It does not make cross-protocol key reuse safe: if the
+same key also signs attacker-chosen bare content, an attacker may obtain a
+signature over an attribute SET. Use protocol-specific keys and independently
+validate signer trust, identity and authorization. Signature verification alone
+does not establish those properties.
+
 ## PFX / PKCS#12
 
 ### Create a PFX bundle
