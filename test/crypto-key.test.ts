@@ -126,6 +126,7 @@ describe('verifySignatureWithKey', () => {
 			}),
 		).toMatchObject({ ok: false, code: 'limit_exceeded' });
 		for (const signature of [
+			Uint8Array.of(0x01, 0x3e, ...new Uint8Array(62)),
 			Uint8Array.of(0x30, 0),
 			Uint8Array.of(0x30, 0x06, 2, 1, 0x80, 2, 1, 1),
 			new Uint8Array([...signed.signature, 0]),
