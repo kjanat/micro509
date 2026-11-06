@@ -1175,27 +1175,40 @@ describe('superseded, hung and cancelled refreshes', () => {
 	});
 
 	it('releases the body of a response that arrives after the request was cancelled', async () => {
-		let cancelled = false;
+		const signed = await token('a');
+		const started = Promise.withResolvers<void>();
+		const respond = Promise.withResolvers<void>();
+		const released = Promise.withResolvers<void>();
 		const resolver = createRemoteJwksKeyResolver({
 			url: 'https://issuer.example/jwks.json',
 			transport: async () => {
-				await Bun.sleep(150);
+				started.resolve();
+				await respond.promise;
 				return new Response(
 					new ReadableStream<Uint8Array>({
 						pull: () => new Promise<void>(() => undefined),
 						cancel() {
-							cancelled = true;
+							released.resolve();
 						},
 					}),
 				);
 			},
 		});
 		const controller = new AbortController();
-		const pending = verifyKid('a', resolver, primary, controller.signal);
-		await Bun.sleep(20);
-		controller.abort();
-		expect(await pending).toBe('aborted');
-		expect(await eventually(() => cancelled)).toBe(true);
+		const pending = verifyCompactJws(signed, {
+			algorithms: ['RS256'],
+			key: resolver,
+			tokenType: { unchecked: true },
+			signal: controller.signal,
+		});
+		try {
+			await started.promise;
+			controller.abort();
+			expect(await pending).toMatchObject({ ok: false, code: 'aborted' });
+		} finally {
+			respond.resolve();
+		}
+		await released.promise;
 	});
 
 	it('does not start a fetch for a signal that aborts while the caller yields', async () => {
