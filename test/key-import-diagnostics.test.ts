@@ -14,10 +14,13 @@ import {
 	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Pem,
 	exportEncryptedSec1Pem,
+	exportPkcs1Der,
 	exportPkcs1Pem,
+	exportSec1Der,
 	exportSec1Pem,
 	generateKeyPair,
 	importEncryptedPkcs8Pem,
+	importPkcs1DerOrThrow,
 	importPkcs1Pem,
 	importPkcs8Base64,
 	importPkcs8Der,
@@ -30,6 +33,7 @@ import {
 	importPublicJwk,
 	importPublicJwkOrThrow,
 	importSec1Der,
+	importSec1DerOrThrow,
 	importSpkiDer,
 	importSpkiPem,
 } from '#micro509/keys';
@@ -182,7 +186,7 @@ it('separates ASN.1, unsupported algorithm, explicit mismatch and backend refusa
 	expect(backend).toMatchObject({
 		details: { stage: 'backend', reason: 'backend_rejected', container: 'jwk' },
 	});
-	if (!backend.ok) expect(backend.message).toBe('Key import refused at backend: backend_rejected');
+	expect(JSON.stringify(backend)).not.toContain(invalidPoint.x);
 	const overlongOid = Uint8Array.of(0x06, 66, 42, ...new Array<number>(64).fill(0x81), 0);
 	const limited = sequence([sequence([overlongOid]), bitString(Uint8Array.of(1))]);
 	expect(await importSpkiDer(limited)).toMatchObject({
@@ -284,4 +288,62 @@ it('does not hide a TypeError thrown while preparing developer algorithm paramet
 	}
 	expect(rejected).toBeInstanceOf(TypeError);
 	expect(isResultError(rejected)).toBe(false);
+});
+
+it('returns PEM dispatch refusals as catchable Promise rejections', async () => {
+	for (const pem of [
+		'',
+		'not PEM',
+		'-----BEGIN PRIVATE KEY-----\nAA==\n-----END PUBLIC KEY-----',
+	]) {
+		let caught = false;
+		await importPrivateKeyPemOrThrow(pem).catch((error: unknown) => {
+			caught = true;
+			expect(isResultError(error)).toBe(true);
+			if (!isResultError(error)) throw error;
+			expect(error.code).toBe('malformed');
+		});
+		expect(caught).toBe(true);
+	}
+});
+
+it('retains known encrypted PEM containers in the diagnostic', async () => {
+	const inputs = [
+		[
+			await exportEncryptedPkcs8Pem(ec.privateKey, { password: 'synthetic', iterations: 1 }),
+			'pkcs8',
+		],
+		[await exportEncryptedPkcs1Pem(rsa.privateKey, { password: 'synthetic' }), 'pkcs1'],
+		[await exportEncryptedSec1Pem(ec.privateKey, { password: 'synthetic' }), 'sec1'],
+	] as const;
+	for (const [pem, container] of inputs)
+		expect(await importPrivateKeyPem(pem)).toMatchObject({
+			code: 'malformed',
+			details: { stage: 'container', reason: 'encrypted_key', container },
+		});
+});
+
+it('keeps unknown algorithm kinds outside PEM dispatch and nested import refusal boundaries', async () => {
+	const rsaPem = await exportPkcs1Pem(rsa.privateKey);
+	const ecPem = await exportSec1Pem(ec.privateKey);
+	const rsaDer = await exportPkcs1Der(rsa.privateKey);
+	const ecDer = await exportSec1Der(ec.privateKey);
+	const unknown = { kind: 'unsupported', curve: 'P-256' };
+	for (const run of [
+		() => callUntyped(importPrivateKeyPemOrThrow, rsaPem, unknown),
+		() => callUntyped(importPrivateKeyPemOrThrow, ecPem, unknown),
+		() => callUntyped(importPrivateKeyPem, rsaPem, unknown),
+		() => callUntyped(importPrivateKeyPem, ecPem, unknown),
+		() => callUntyped(importPkcs1DerOrThrow, rsaDer, unknown),
+		() => callUntyped(importSec1DerOrThrow, ecDer, unknown),
+	]) {
+		let rejected: unknown;
+		try {
+			await run();
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect(isResultError(rejected)).toBe(false);
+	}
 });

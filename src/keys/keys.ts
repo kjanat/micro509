@@ -970,10 +970,11 @@ export function importSpkiPem(
  * Without `algorithm`, existing inference applies (RSA defaults to PKCS#1v1.5/SHA-256).
  * An explicit descriptor additionally asserts key family/curve and selects RSA padding/hash.
  */
-export function importPrivateKeyPemOrThrow(
+export async function importPrivateKeyPemOrThrow(
 	pem: string,
 	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
+	assertRuntimeImportKind(algorithm, true);
 	const blocks = importStage(undefined, 'pem', 'invalid_armor', () =>
 		splitPemTextBlocksOrThrow(pem),
 	);
@@ -987,21 +988,27 @@ export function importPrivateKeyPemOrThrow(
 		block.label === 'RSA PRIVATE KEY' ||
 		block.label === 'EC PRIVATE KEY';
 	if (!supported) throwImportFailure(undefined, 'container', 'unsupported_container');
-	const legacy = importStage(undefined, 'pem', 'invalid_armor', () =>
+	const container =
+		block.label === 'RSA PRIVATE KEY'
+			? 'pkcs1'
+			: block.label === 'EC PRIVATE KEY'
+				? 'sec1'
+				: 'pkcs8';
+	const legacy = importStage(container, 'pem', 'invalid_armor', () =>
 		parseTraditionalPemOrThrow(block.pem),
 	);
-	if (legacy.headers.size > 0) throwImportFailure(undefined, 'container', 'encrypted_key');
+	if (legacy.headers.size > 0) throwImportFailure(container, 'container', 'encrypted_key');
 	switch (block.label) {
 		case 'PRIVATE KEY':
-			return importPkcs8PemOrThrow(block.pem, algorithm);
+			return await importPkcs8PemOrThrow(block.pem, algorithm);
 		case 'RSA PRIVATE KEY':
 			if (algorithm !== undefined && algorithm.kind !== 'rsa')
 				throwImportFailure('pkcs1', 'algorithm', 'algorithm_mismatch');
-			return importPkcs1PemOrThrow(block.pem, algorithm);
+			return await importPkcs1PemOrThrow(block.pem, algorithm);
 		case 'EC PRIVATE KEY':
 			if (algorithm !== undefined && algorithm.kind !== 'ecdsa')
 				throwImportFailure('sec1', 'algorithm', 'algorithm_mismatch');
-			return importSec1PemOrThrow(block.pem, algorithm);
+			return await importSec1PemOrThrow(block.pem, algorithm);
 		default:
 			throwImportFailure(undefined, 'container', 'unsupported_container');
 	}
@@ -1325,6 +1332,7 @@ export function importPkcs1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
+	assertRuntimeImportKind(algorithm, true);
 	importStage('pkcs1', 'asn1', 'invalid_asn1', () => parsePkcs1PrivateKey(der));
 	return importAsyncStage('pkcs1', 'backend', 'backend_rejected', () =>
 		importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm),
@@ -1450,6 +1458,7 @@ export async function importSec1DerOrThrow(
 	der: Uint8Array,
 	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
+	assertRuntimeImportKind(algorithm, true);
 	const parsed = importStage('sec1', 'asn1', 'invalid_asn1', () => parseSec1PrivateKey(der));
 	const importInput = importStage(
 		'sec1',
