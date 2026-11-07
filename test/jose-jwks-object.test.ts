@@ -124,3 +124,49 @@ it('counts scalar and escaped JSON data and keeps dangerous names as own members
 	const shared = { x: true };
 	expect(validateJwks({ keys: [], a: shared, b: shared }).ok).toBe(true);
 });
+
+it('maps revoked or throwing reflection proxies to a typed malformed result', () => {
+	const revoked = Proxy.revocable({ keys: [] }, {});
+	revoked.revoke();
+	for (const value of [
+		revoked.proxy,
+		{ keys: [], x: revoked.proxy },
+		new Proxy(
+			{},
+			{
+				getPrototypeOf() {
+					throw new TypeError('external');
+				},
+			},
+		),
+		new Proxy(
+			{ keys: [] },
+			{
+				ownKeys() {
+					throw new Error('external');
+				},
+			},
+		),
+		new Proxy(
+			{ keys: [] },
+			{
+				getOwnPropertyDescriptor() {
+					throw new Error('external');
+				},
+			},
+		),
+	])
+		expect(validateJwks(value)).toMatchObject({ code: 'jwks_malformed' });
+});
+
+it('checks oversized array length before enumerating index properties', () => {
+	let enumerated = false;
+	const huge = new Proxy(new Array(1_000_000), {
+		ownKeys() {
+			enumerated = true;
+			throw new Error('must not enumerate');
+		},
+	});
+	expect(validateJwks({ keys: huge }, { maxKeys: 1 })).toMatchObject({ code: 'limit_exceeded' });
+	expect(enumerated).toBe(false);
+});

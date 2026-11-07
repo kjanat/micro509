@@ -55,14 +55,30 @@ function characterBytes(c: number): number {
 	if (c < 0x20) return [8, 9, 10, 12, 13].includes(c) ? 2 : 6;
 	return c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
 }
+/** Reflection can execute proxy traps or encounter a revoked proxy; that is an input refusal. */
+function inspect<T>(operation: () => T): T {
+	try {
+		return operation();
+	} catch {
+		return refuse('invalid_json');
+	}
+}
+function arrayLength(value: object, budget: Budget): number {
+	const descriptor = inspect(() => Object.getOwnPropertyDescriptor(value, 'length'));
+	const length: unknown = descriptor?.value;
+	if (typeof length !== 'number' || !Number.isSafeInteger(length) || length < 0)
+		refuse('invalid_json');
+	if (length > budget.maxNodes - budget.nodes) refuse('limit_exceeded');
+	return length;
+}
 function dataMember(value: object, name: string): unknown {
-	const descriptor = Object.getOwnPropertyDescriptor(value, name);
+	const descriptor = inspect(() => Object.getOwnPropertyDescriptor(value, name));
 	if (descriptor === undefined || !('value' in descriptor) || !descriptor.enumerable)
 		refuse('invalid_json');
 	return descriptor.value;
 }
 function checkPrototype(value: object, array: boolean): void {
-	const prototype = Object.getPrototypeOf(value);
+	const prototype = inspect(() => Object.getPrototypeOf(value));
 	if (array ? prototype !== Array.prototype : prototype !== null && prototype !== Object.prototype)
 		refuse('invalid_json');
 }
@@ -81,10 +97,12 @@ function copy(value: unknown, budget: Budget, depth: number): JsonValue {
 	if (typeof value !== 'object') refuse('invalid_json');
 	if (depth >= budget.maxDepth) refuse('limit_exceeded');
 	if (budget.active.has(value)) refuse('invalid_json');
-	const array = Array.isArray(value);
+	const array = inspect(() => Array.isArray(value));
 	checkPrototype(value, array);
 	budget.active.add(value);
-	const names = Reflect.ownKeys(value);
+	// Refuse oversized arrays BEFORE allocating the list of all their indices.
+	if (array) arrayLength(value, budget);
+	const names = inspect(() => Reflect.ownKeys(value));
 	if (names.length > budget.maxNodes - budget.nodes + (array ? 1 : 0)) refuse('limit_exceeded');
 	bytes(budget, 2);
 	const result = array
@@ -100,9 +118,7 @@ function copyArray(
 	budget: Budget,
 	depth: number,
 ): JsonValue {
-	const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
-	if (typeof length !== 'number' || length > budget.maxNodes - budget.nodes)
-		refuse('limit_exceeded');
+	const length = arrayLength(value, budget);
 	if (names.length !== length + 1) refuse('invalid_json');
 	const items: JsonValue[] = [];
 	for (let i = 0; i < length; i++) {
