@@ -174,9 +174,10 @@ describe('x509 domain', () => {
 		if (!result.ok) {
 			expect(result.code).toBe('malformed');
 		}
-		expect(x509.getSubjectPublicKeyOrThrow(parsed)).rejects.toThrow(
-			'Unsupported SubjectPublicKeyInfo algorithm',
-		);
+		expect(x509.getSubjectPublicKeyOrThrow(parsed)).rejects.toMatchObject({
+			code: 'malformed',
+			error: { details: { stage: 'algorithm', reason: 'unsupported_algorithm' } },
+		});
 	});
 
 	it('encodeName produces DER bytes from a NameInput', () => {

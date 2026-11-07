@@ -3906,16 +3906,17 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			expect(rejected.ok).toBe(false);
 			if (!rejected.ok) {
 				expect(rejected.code).toBe('malformed');
-				expect(rejected.message).toBe('Malformed PKCS#8 private key');
+				expect(rejected.details).toMatchObject({ stage: 'asn1', reason: 'invalid_asn1' });
 			}
 			const mismatched = await importPkcs8Der(derSequence([derIntegerFromNumber(0), body]), {
 				kind: 'rsa',
 			});
 			expect(mismatched.ok).toBe(false);
 			if (!mismatched.ok) {
-				expect(mismatched.message).toBe(
-					'PKCS#8 private key algorithm does not match requested import algorithm',
-				);
+				expect(mismatched.details).toMatchObject({
+					stage: 'algorithm',
+					reason: 'algorithm_mismatch',
+				});
 			}
 
 			// The pairing runs the other way too: a structure carrying publicKey [1]
@@ -3926,7 +3927,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			);
 			expect(understamped.ok).toBe(false);
 			if (!understamped.ok) {
-				expect(understamped.message).toBe('Malformed PKCS#8 private key');
+				expect(understamped.details).toMatchObject({ stage: 'asn1', reason: 'invalid_asn1' });
 			}
 		});
 
@@ -3954,7 +3955,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			const crossed = await importPkcs8Der(derSequence([derIntegerFromNumber(1), body, foreign]));
 			expect(crossed.ok).toBe(false);
 			if (!crossed.ok) {
-				expect(crossed.message).toBe('PKCS#8 publicKey does not match the private key');
+				expect(crossed.details).toMatchObject({ stage: 'asn1', reason: 'public_key_mismatch' });
 			}
 		});
 
@@ -4012,18 +4013,24 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			expect(inferred.ok).toBe(false);
 			if (!inferred.ok) {
 				expect(inferred.code).toBe('malformed');
-				expect(inferred.message).toBe('Unsupported PKCS#8 private key algorithm');
+				expect(inferred.details).toMatchObject({
+					stage: 'algorithm',
+					reason: 'unsupported_algorithm',
+				});
 			}
 		});
 
 		it('refuses to import it under a curve it is not on', async () => {
-			let message: string | undefined;
+			let rejection: unknown;
 			try {
 				await importPkcs8PemOrThrow(figure12, { kind: 'ecdsa', curve: 'P-256' });
 			} catch (error) {
-				message = error instanceof Error ? error.message : String(error);
+				rejection = error;
 			}
-			expect(message).toContain('does not match requested import algorithm');
+			expect(rejection).toMatchObject({
+				code: 'malformed',
+				error: { details: { stage: 'algorithm', reason: 'algorithm_mismatch' } },
+			});
 		});
 
 		it('refuses a PRIVATE KEY block that does not hold a PrivateKeyInfo', async () => {
@@ -4037,7 +4044,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			expect(imported.ok).toBe(false);
 			if (!imported.ok) {
 				expect(imported.code).toBe('malformed');
-				expect(imported.message).toBe('Malformed PKCS#8 private key');
+				expect(imported.details).toMatchObject({ stage: 'asn1', reason: 'invalid_asn1' });
 			}
 		});
 
@@ -4367,7 +4374,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			expect(asPlain.ok).toBe(false);
 			if (!asPlain.ok) {
 				expect(asPlain.code).toBe('malformed');
-				expect(asPlain.message).toBe('Malformed PKCS#8 private key');
+				expect(asPlain.details).toMatchObject({ stage: 'asn1', reason: 'invalid_asn1' });
 			}
 			expect((await importPkcs8Pem(figure13)).ok).toBe(false);
 		});
@@ -4908,9 +4915,10 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			expect(rejected.ok).toBe(false);
 			if (!rejected.ok) {
 				expect(rejected.code).toBe('malformed');
-				expect(rejected.message).toBe(
-					'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
-				);
+				expect(rejected.details).toMatchObject({
+					stage: 'algorithm',
+					reason: 'algorithm_mismatch',
+				});
 			}
 		});
 
@@ -4926,7 +4934,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			expect(imported.ok).toBe(false);
 			if (!imported.ok) {
 				expect(imported.code).toBe('malformed');
-				expect(imported.message).toBe('Malformed SubjectPublicKeyInfo');
+				expect(imported.details).toMatchObject({ stage: 'asn1', reason: 'invalid_asn1' });
 			}
 		});
 
@@ -4947,7 +4955,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				expect(imported.ok).toBe(false);
 				if (!imported.ok) {
 					expect(imported.code).toBe('malformed');
-					expect(imported.message).toBe('Malformed SubjectPublicKeyInfo');
+					expect(imported.details).toMatchObject({ stage: 'asn1', reason: 'invalid_asn1' });
 				}
 			}
 		});
