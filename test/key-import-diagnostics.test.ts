@@ -347,3 +347,17 @@ it('keeps unknown algorithm kinds outside PEM dispatch and nested import refusal
 		expect(isResultError(rejected)).toBe(false);
 	}
 });
+
+it('preserves catchable Promise rejections for malformed PKCS1 DER', async () => {
+	let caught = false;
+	await importPkcs1DerOrThrow(Uint8Array.of(0x30, 0)).catch((error: unknown) => {
+		caught = true;
+		expect(isResultError(error)).toBe(true);
+		if (!isResultError(error)) throw error;
+		expect(error.error).toMatchObject({
+			code: 'malformed',
+			details: { stage: 'asn1', reason: 'invalid_asn1', container: 'pkcs1' },
+		});
+	});
+	expect(caught).toBe(true);
+});

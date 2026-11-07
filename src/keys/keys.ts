@@ -1328,13 +1328,13 @@ export function importEncryptedPkcs8Pem(
  * @see {@linkcode exportPkcs1Der} for the inverse operation
  * @see {@linkcode importPkcs1Pem} for PEM input
  */
-export function importPkcs1DerOrThrow(
+export async function importPkcs1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	assertRuntimeImportKind(algorithm, true);
 	importStage('pkcs1', 'asn1', 'invalid_asn1', () => parsePkcs1PrivateKey(der));
-	return importAsyncStage('pkcs1', 'backend', 'backend_rejected', () =>
+	return await importAsyncStage('pkcs1', 'backend', 'backend_rejected', () =>
 		importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm),
 	);
 }
