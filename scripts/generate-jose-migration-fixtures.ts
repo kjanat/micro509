@@ -40,8 +40,26 @@ interface Fixture {
 	readonly token: string;
 	readonly micro: 'ok' | VerifyJwtErrorCode;
 	readonly joseAccepts: boolean;
+	readonly joseError?: { readonly code: string; readonly claim?: string };
 	readonly difference?: string;
 }
+const independentErrors: Readonly<
+	Record<string, { readonly code: string; readonly claim?: string }>
+> = {
+	'tampered-payload': { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' },
+	'tampered-signature': { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' },
+	'wrong-key': { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' },
+	'untrusted-issuer': { code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: 'iss' },
+	'audience-mismatch': { code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: 'aud' },
+	expired: { code: 'ERR_JWT_EXPIRED', claim: 'exp' },
+	'exp-at-now': { code: 'ERR_JWT_EXPIRED', claim: 'exp' },
+	'future-nbf': { code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: 'nbf' },
+	'signed-unsupported-PS256': { code: 'ERR_JOSE_ALG_NOT_ALLOWED' },
+	'unsecured-none': { code: 'ERR_JOSE_ALG_NOT_ALLOWED' },
+	'malformed-segments': { code: 'ERR_JWS_INVALID' },
+	'invalid-base64url': { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' },
+	'signed-invalid-utf8': { code: 'ERR_JWT_INVALID' },
+};
 const cases: Fixture[] = [];
 function add(
 	id: string,
@@ -50,11 +68,14 @@ function add(
 	joseAccepts: boolean,
 	difference?: string,
 ): void {
+	if (!joseAccepts && independentErrors[id] === undefined)
+		throw new Error('Missing independent error expectation');
 	cases.push({
 		id,
 		token,
 		micro,
 		joseAccepts,
+		...(joseAccepts ? {} : { joseError: independentErrors[id] }),
 		...(difference === undefined ? {} : { difference }),
 	});
 }

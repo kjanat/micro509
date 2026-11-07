@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test';
-import { importJWK, jwtVerify } from 'jose-v5';
+import { errors, importJWK, jwtVerify } from 'jose-v5';
 import { verifyJwt } from '#micro509/jose';
 import { importPublicJwk } from '#micro509/keys';
 import { unwrap } from '#micro509/result';
@@ -27,18 +27,36 @@ const independentPolicy = {
 	currentDate: new Date(fixtures.now * 1000),
 };
 
+async function oracleFailure(
+	token: string,
+	options: Parameters<typeof jwtVerify>[2],
+	expected: { readonly code: string; readonly claim?: string },
+): Promise<void> {
+	try {
+		await jwtVerify(token, independentPrimary, options);
+	} catch (error) {
+		if (!(error instanceof errors.JOSEError)) throw error;
+		expect(error.code).toBe(expected.code);
+		if (expected.claim !== undefined) {
+			if (!(error instanceof errors.JWTClaimValidationFailed || error instanceof errors.JWTExpired))
+				throw error;
+			expect(error.claim).toBe(expected.claim);
+		}
+		return;
+	}
+	throw new Error('Independent verifier unexpectedly accepted token');
+}
+
 for (const fixture of fixtures.cases) {
 	it(`consumer corpus: ${fixture.id}`, async () => {
 		const result = await verifyJwt(fixture.token, policy);
 		expect(result.ok ? 'ok' : result.code).toBe(fixture.micro);
-		let accepted = false;
-		try {
+		if (fixture.joseAccepts) {
 			await jwtVerify(fixture.token, independentPrimary, independentPolicy);
-			accepted = true;
-		} catch {
-			/* independent verdict */
+		} else {
+			if (fixture.joseError === undefined) throw new Error('missing oracle error expectation');
+			await oracleFailure(fixture.token, independentPolicy, fixture.joseError);
 		}
-		expect(accepted).toBe(fixture.joseAccepts);
 		if (result.ok && fixture.id === 'valid-unicode')
 			expect(result.value.claims).toEqual(fixtures.claims);
 	});
@@ -67,16 +85,10 @@ it('aligns optional policies explicitly without losing default-difference fixtur
 			},
 		});
 		expect(result.ok).toBe(true);
-		let accepted = true;
-		try {
-			await jwtVerify(token, independentPrimary, {
-				...independentPolicy,
-				requiredClaims: ['exp'],
-				maxTokenAge: 600,
-			});
-		} catch {
-			accepted = false;
-		}
-		expect(accepted).toBe(false);
+		await oracleFailure(
+			token,
+			{ ...independentPolicy, requiredClaims: ['exp'], maxTokenAge: 600 },
+			{ code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: id === 'missing-exp' ? 'exp' : 'iat' },
+		);
 	}
 });
