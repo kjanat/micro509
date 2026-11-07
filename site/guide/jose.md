@@ -5,6 +5,9 @@ outline: [2, 3]
 
 # Sign and verify JWTs
 
+Replacing jose? Start with [Migrate from jose](./jose-migration.md) for the
+implemented profiles, policy differences and executable migration checks.
+
 Use `micro509/jose` to sign JWTs with RS256, RS384, RS512, ES256 and ES384 and verify their signatures, issuer,
 audience and expiry. Verification accepts a public `CryptoKey`, a local JWK Set
 (JWKS), or a resolver that fetches an issuer's JWKS.

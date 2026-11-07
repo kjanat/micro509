@@ -313,7 +313,7 @@ const ORDER: SidebarOrder = {
 	guide: [
 		{
 			text: 'Introduction',
-			slugs: ['getting-started', 'why', 'migration'],
+			slugs: ['getting-started', 'why', 'migration', 'jose-migration'],
 		},
 		{
 			text: 'Workflows',

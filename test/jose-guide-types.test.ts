@@ -9,7 +9,7 @@ it('compiles the actual JOSE LiveCode recipes with strict public API types', asy
 	const targets: string[] = [];
 	const directory = path.join(projectRoot, 'node_modules/.cache/jose-guide-types');
 	await fsp.mkdir(directory, { recursive: true });
-	for (const name of ['jose-integration', 'jose-cache', 'jose-jwe']) {
+	for (const name of ['jose-integration', 'jose-cache', 'jose-jwe', 'jose-migration']) {
 		const markdown = readFileSync(path.join(projectRoot, `site/guide/${name}.md`), 'utf8');
 		for (const [index, match] of [
 			...markdown.matchAll(/<LiveCode[^>]*>[\s\S]*?```ts\n([\s\S]*?)```[\s\S]*?<\/LiveCode>/g),
@@ -21,7 +21,7 @@ it('compiles the actual JOSE LiveCode recipes with strict public API types', asy
 			targets.push(target);
 		}
 	}
-	expect(targets.length).toBeGreaterThanOrEqual(4);
+	expect(targets.length).toBeGreaterThanOrEqual(5);
 	const bridge = createTscBridge({ cwd: projectRoot });
 	try {
 		const diagnostics = await bridge.checkProject('tsconfig.src.json', {
