@@ -1,5 +1,8 @@
 # Migration guide
 
+For a migration from the separate jose library, see
+[Migrate from jose](./jose-migration.md).
+
 This guide covers upgrading from **0.14.x to 0.15.0**: certificate issuance,
 CRL creation and freshness, OCSP responder trust, and revocation result types.
 
