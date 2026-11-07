@@ -9,6 +9,7 @@
  */
 
 export type { JsonObject, JsonValue } from '#micro509/internal/jose/strict-json';
+export { base64UrlDecode, base64UrlEncode } from '#micro509/jose/base64url';
 export type {
 	JoseErrorCode,
 	JoseErrorDetails,

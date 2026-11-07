@@ -23,6 +23,7 @@
         "dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
         "importmapify": "catalog:deno",
         "jose": "^6.2.13",
+        "jose-v5": "npm:jose@5",
         "playwright": "^1.63.0",
         "publint": "catalog:build",
         "runner-run": "catalog:",
@@ -821,6 +822,8 @@
     "importmapify": ["importmapify@1.7.0", "", { "dependencies": { "dreamcli": "npm:@kjanat/dreamcli@^3.0.1" }, "bin": { "importmapify": "dist/mod.mjs" } }, "sha512-oAScmWPf0bZLwC1mzsH5hNZ7hV8f6JfcefnJR7ikrnlfkx3dzSnEjK4OWyiCs9eUdA8XLZQb1VF5brDjrTHTuQ=="],
 
     "jose": ["jose@6.2.15", "", {}, "sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA=="],
+
+    "jose-v5": ["jose@5.10.0", "", {}, "sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg=="],
 
     "js-tokens": ["js-tokens@10.0.0", "", {}, "sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q=="],
 

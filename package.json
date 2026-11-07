@@ -164,6 +164,7 @@
 		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
 		"jose": "^6.2.13",
+		"jose-v5": "npm:jose@5",
 		"playwright": "^1.63.0",
 		"publint": "catalog:build",
 		"runner-run": "catalog:",
