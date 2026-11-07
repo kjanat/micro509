@@ -9,7 +9,12 @@
 
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import {
+	failureResult,
+	rethrowIfInvariant,
+	successResult,
+	throwMicro509Error,
+} from '#micro509/result/result';
 
 /** A single decoded PEM block with its label, decoded DER bytes, and original PEM text. */
 export interface PemBlock {
@@ -99,16 +104,26 @@ export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
 		parsePemBoundaryLine(lines[lines.length - 1] ?? '', 'END') !== label ||
 		lines.length - begin < 3
 	) {
-		throw new Error(`Invalid PEM for ${label}`);
+		throwMicro509Error('malformed', `Invalid PEM for ${label}`, {
+			stage: 'pem',
+			reason: 'invalid_armor',
+		} as const);
 	}
 	const bodyLines = normalizePemBodyLines(lines.slice(begin + 1, -1));
 	if (bodyLines === undefined) {
-		throw new Error(`Invalid PEM for ${label}`);
+		throwMicro509Error('malformed', `Invalid PEM for ${label}`, {
+			stage: 'base64',
+			reason: 'invalid_base64',
+		} as const);
 	}
 	try {
 		return base64Decode(bodyLines.join(''));
-	} catch {
-		throw new Error(`Invalid PEM for ${label}`);
+	} catch (error) {
+		rethrowIfInvariant(error);
+		throwMicro509Error('malformed', `Invalid PEM for ${label}`, {
+			stage: 'base64',
+			reason: 'invalid_base64',
+		} as const);
 	}
 }
 
@@ -118,8 +133,22 @@ export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
  * and ignores non-PEM text between blocks.
  */
 export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
+	return splitPemTextBlocksOrThrow(input).map((block) => ({
+		...block,
+		bytes: pemDecodeOrThrow(block.label, block.pem),
+	}));
+}
+
+/** @internal A bounded-by-input PEM block before decoding its body. */
+export interface PemTextBlock {
+	readonly label: string;
+	readonly pem: string;
+}
+
+/** @internal Shares the ordinary boundary scanner, retaining legacy encrypted bodies verbatim. */
+export function splitPemTextBlocksOrThrow(input: string): readonly PemTextBlock[] {
 	const normalized = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-	const blocks: PemBlock[] = [];
+	const blocks: PemTextBlock[] = [];
 	let openBlock: { readonly label: string; readonly start: number } | undefined;
 	let lineStart = 0;
 	while (lineStart < normalized.length) {
@@ -159,14 +188,13 @@ function closePemBlock(
 	openBlock: { readonly label: string; readonly start: number } | undefined,
 	endLabel: string,
 	end: number,
-): PemBlock {
+): PemTextBlock {
 	if (openBlock === undefined || openBlock.label !== endLabel) {
 		throw new Error('Malformed PEM block');
 	}
 	const pem = input.slice(openBlock.start, end);
 	return {
 		label: openBlock.label,
-		bytes: pemDecodeOrThrow(openBlock.label, pem),
 		pem,
 	};
 }

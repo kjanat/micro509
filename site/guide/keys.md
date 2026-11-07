@@ -40,6 +40,93 @@ rsa:     ${rsa.publicKey.algorithm.name} (${rsa.privateKey.usages.join('/')}), s
 
 ## Import and export
 
+### Choose a private-key container by PEM label
+
+`importPrivateKeyPem` recognizes unencrypted PKCS#8 (`PRIVATE KEY`), PKCS#1
+(`RSA PRIVATE KEY`) and SEC1 (`EC PRIVATE KEY`) and delegates to the same importers
+used below. It accepts **exactly one PEM block**: two keys, or a certificate plus
+key, return `malformed` with `details.reason: 'multiple_blocks'`. Surrounding
+non-PEM text follows the ordinary PEM scanner; key selection never uses that text.
+
+An explicit algorithm asserts the family/curve and chooses RSA padding and hash.
+With no descriptor, RSA defaults to PKCS#1v1.5/SHA-256; SEC1 needs an embedded curve.
+Encrypted PKCS#8 or traditional `Proc-Type` PEM returns `encrypted_key`; use the
+existing password-taking `importEncryptedPkcs8Pem`, `importEncryptedPkcs1Pem` or
+`importEncryptedSec1Pem` instead. The dispatcher never guesses or decrypts.
+
+<LiveCode>
+
+```ts
+import {
+  generateKeyPair,
+  exportPkcs1Pem,
+  importPrivateKeyPem,
+} from 'micro509/keys';
+
+const pair = await generateKeyPair({
+  kind: 'rsa',
+  scheme: 'pkcs1-v1_5',
+  hash: 'SHA-256',
+});
+const pem = await exportPkcs1Pem(pair.privateKey);
+const imported = await importPrivateKeyPem(pem, {
+  kind: 'rsa',
+  scheme: 'pkcs1-v1_5',
+  hash: 'SHA-256',
+});
+if (!imported.ok) throw new Error(imported.code);
+console.log('Imported algorithm:', imported.value.algorithm.name);
+console.log('Generated PEM tail:', pem.slice(-100));
+const bundle = await importPrivateKeyPem(pem + pem);
+if (bundle.ok || bundle.details?.reason !== 'multiple_blocks')
+  throw new Error('bundle accepted');
+console.log('Bundle refusal:', bundle.details.reason);
+```
+
+</LiveCode>
+
+### Handle import diagnostics
+
+Ordinary key import keeps the broad `malformed` and `limit_exceeded` codes and
+adds safe `details.stage`, `details.reason` and, when known, `details.container`.
+These fields appear on the failed Result and `result.error`, and survive
+`unwrap` and `*OrThrow` via `isResultError(error)` and `error.error.details`.
+Branch on these fields, rather than parsing human-readable messages.
+
+| Stage       | Representative reasons                                      | Application response                                                             |
+| ----------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `container` | `unsupported_container`, `multiple_blocks`, `encrypted_key` | Select an explicit container or password-taking API.                             |
+| `pem`       | `invalid_armor`                                             | Check the PEM boundaries and body layout.                                        |
+| `base64`    | `invalid_base64`                                            | Fix a malformed/noncanonical encoded body.                                       |
+| `asn1`      | `invalid_asn1`, `decode_limit`, `public_key_mismatch`       | Reject malformed DER or unsupported input size.                                  |
+| `algorithm` | `unsupported_algorithm`, `algorithm_mismatch`               | Check family/curve and the requested descriptor.                                 |
+| `backend`   | `backend_rejected`                                          | Check runtime algorithm support and key mathematics; no native prose is exposed. |
+
+A backend refusal does not promise that a key is valid on another runtime. An
+ASN.1 limit remains `limit_exceeded`. Encrypted-import password/corruption and KDF
+budget semantics remain those of the separate encrypted APIs; diagnostics do not
+turn them into a password oracle. Genuine programmer errors still throw.
+
+For example, map a configuration error to a stable application category:
+
+<LiveCode data-output="deterministic">
+
+```ts
+import { importPrivateKeyPem } from 'micro509/keys';
+
+const result = await importPrivateKeyPem('not PEM');
+if (result.ok) throw new Error('unexpected key');
+const category =
+  result.details?.reason === 'encrypted_key'
+    ? 'password-capable loader required'
+    : result.details?.stage === 'algorithm'
+      ? 'key algorithm configuration error'
+      : 'invalid key file';
+console.log(category, result.code, result.details?.reason);
+```
+
+</LiveCode>
+
 ### PKCS#8 (private keys)
 
 <LiveCode>

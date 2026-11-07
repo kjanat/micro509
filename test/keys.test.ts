@@ -1,6 +1,6 @@
 import { describe, expect, it, test } from 'bun:test';
 import { X509Certificate } from 'node:crypto';
-import type { KeyPairMaterial } from '#micro509';
+import type { ImportKeyErrorDetails, KeyPairMaterial } from '#micro509';
 import {
 	createCertificate,
 	decryptRsaOaep,
@@ -68,13 +68,20 @@ import * as legacyOaep from './fixtures/rsa-oaep-sha1.mjs';
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =
 	| { readonly ok: true; readonly value: CryptoKey }
-	| { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
+	| {
+			readonly ok: false;
+			readonly error: {
+				readonly code: string;
+				readonly message: string;
+				readonly details?: unknown;
+			};
+	  };
 
 /** Assert an import Result failed with the given code and, optionally, a message substring. */
 async function expectImportFailure(
 	pending: Promise<FailableImport>,
 	code: string,
-	messagePart?: string,
+	messagePart?: string | Partial<ImportKeyErrorDetails>,
 ): Promise<void> {
 	const result = await pending;
 	expect(result.ok).toBe(false);
@@ -82,7 +89,8 @@ async function expectImportFailure(
 		return;
 	}
 	expect(result.error.code).toBe(code);
-	if (messagePart !== undefined) expect(result.error.message).toContain(messagePart);
+	if (typeof messagePart === 'string') expect(result.error.message).toContain(messagePart);
+	else if (messagePart !== undefined) expect(result.error).toMatchObject({ details: messagePart });
 }
 
 /** Assert a throwing-variant promise rejected with a message containing `messagePart`. */
@@ -523,15 +531,14 @@ describe('keys', () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const publicJwk = await exportPublicJwk(rsa.publicKey);
 		const privateJwk = await exportPrivateJwk(rsa.privateKey);
-		await expectImportFailure(
-			importPublicJwk(privateJwk, { kind: 'rsa' }),
-			'malformed',
-			'Public JWK must not contain private key material',
-		);
+		await expectImportFailure(importPublicJwk(privateJwk, { kind: 'rsa' }), 'malformed', {
+			stage: 'algorithm',
+			reason: 'algorithm_mismatch',
+		});
 		await expectImportFailure(
 			importPublicJwk(publicJwk, { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'Public JWK algorithm does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
 	});
 
@@ -541,27 +548,30 @@ describe('keys', () => {
 		const rsaPrivateJwk = await exportPrivateJwk(rsa.privateKey);
 		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const ecPrivateJwk = await exportPrivateJwk(ec.privateKey);
-		await expectImportFailure(
-			importPrivateJwk(rsaPublicJwk, { kind: 'rsa' }),
-			'malformed',
-			'Private JWK must contain private key material',
-		);
+		await expectImportFailure(importPrivateJwk(rsaPublicJwk, { kind: 'rsa' }), 'malformed', {
+			stage: 'algorithm',
+			reason: 'algorithm_mismatch',
+		});
 		await expectImportFailure(
 			importPrivateJwk(ecPrivateJwk, { kind: 'ecdsa', curve: 'P-384' }),
 			'malformed',
-			'Private JWK algorithm does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
 		await expectImportFailure(
 			importPrivateJwk(rsaPrivateJwk, { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'Private JWK algorithm does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
-		expect(importPrivateJwkOrThrow(rsaPublicJwk, { kind: 'rsa' })).rejects.toThrow(
-			'Private JWK must contain private key material',
-		);
+		expect(importPrivateJwkOrThrow(rsaPublicJwk, { kind: 'rsa' })).rejects.toMatchObject({
+			code: 'malformed',
+			error: { details: { stage: 'algorithm', reason: 'algorithm_mismatch' } },
+		});
 		expect(
 			importPrivateJwkOrThrow(ecPrivateJwk, { kind: 'ecdsa', curve: 'P-384' }),
-		).rejects.toThrow('Private JWK algorithm does not match requested import algorithm');
+		).rejects.toMatchObject({
+			code: 'malformed',
+			error: { details: { stage: 'algorithm', reason: 'algorithm_mismatch' } },
+		});
 	});
 
 	it('roundtrips EC and Ed25519 private keys through JWK', async () => {
@@ -768,7 +778,7 @@ describe('keys', () => {
 		const result = await importSec1Der(versionTwo, { kind: 'ecdsa', curve: 'P-256' });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
-		expect(result.error.message).toContain('Malformed SEC 1');
+		expect(result.error).toMatchObject({ details: { stage: 'asn1', reason: 'invalid_asn1' } });
 	});
 
 	it('round-trips EC P-521 keys through SEC1', async () => {
@@ -890,11 +900,10 @@ describe('keys: coverage — malformed inputs', () => {
 	});
 
 	it('importSpkiBase64 throws on malformed SubjectPublicKeyInfo', async () => {
-		await expectImportFailure(
-			importSpkiBase64('MAI=', { kind: 'rsa' }),
-			'malformed',
-			'Malformed SubjectPublicKeyInfo',
-		);
+		await expectImportFailure(importSpkiBase64('MAI=', { kind: 'rsa' }), 'malformed', {
+			stage: 'asn1',
+			reason: 'invalid_asn1',
+		});
 	});
 
 	it('importSpkiBase64 throws on SubjectPublicKeyInfo with trailing fields', async () => {
@@ -909,7 +918,7 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSpkiBase64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
 			'malformed',
-			'Malformed SubjectPublicKeyInfo',
+			{ stage: 'asn1', reason: 'invalid_asn1' },
 		);
 	});
 
@@ -922,7 +931,7 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSpkiBase64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
 			'malformed',
-			'Malformed SubjectPublicKeyInfo',
+			{ stage: 'asn1', reason: 'invalid_asn1' },
 		);
 	});
 
@@ -935,7 +944,7 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSpkiBase64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
 			'malformed',
-			'Malformed SubjectPublicKeyInfo',
+			{ stage: 'asn1', reason: 'invalid_asn1' },
 		);
 	});
 
@@ -952,13 +961,13 @@ describe('keys: coverage — malformed inputs', () => {
 					kind: 'ed25519',
 				}),
 				'malformed',
-				'Invalid base64 SubjectPublicKeyInfo',
+				{ stage: 'base64', reason: 'invalid_base64' },
 			);
 		}
 		await expectImportFailure(
 			importSpkiBase64(base64.slice(0, -1), { kind: 'ed25519' }),
 			'malformed',
-			'Invalid base64 SubjectPublicKeyInfo',
+			{ stage: 'base64', reason: 'invalid_base64' },
 		);
 		expect(unwrap(await importSpkiBase64(base64, { kind: 'ed25519' })).type).toBe('public');
 	});
@@ -970,21 +979,19 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSpkiBase64(base64, { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
-		await expectImportFailure(
-			importSpkiPem(pem, { kind: 'ecdsa', curve: 'P-256' }),
-			'malformed',
-			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
-		);
+		await expectImportFailure(importSpkiPem(pem, { kind: 'ecdsa', curve: 'P-256' }), 'malformed', {
+			stage: 'algorithm',
+			reason: 'algorithm_mismatch',
+		});
 	});
 
 	it('importPkcs8Base64 throws on malformed PKCS#8 private key', async () => {
-		await expectImportFailure(
-			importPkcs8Base64('MAI=', { kind: 'rsa' }),
-			'malformed',
-			'Malformed PKCS#8 private key',
-		);
+		await expectImportFailure(importPkcs8Base64('MAI=', { kind: 'rsa' }), 'malformed', {
+			stage: 'asn1',
+			reason: 'invalid_asn1',
+		});
 	});
 
 	/** RFC 5958 §2 v2 `OneAsymmetricKey`: `attributes [0]` empty, `publicKey [1]` present. */
@@ -1066,7 +1073,7 @@ describe('keys: coverage — malformed inputs', () => {
 				await expectImportFailure(
 					importPkcs8Der(der, { kind: 'ecdsa', curve: 'P-256' }),
 					'malformed',
-					'Malformed PKCS#8 private key',
+					{ stage: 'asn1', reason: 'invalid_asn1' },
 				);
 			} catch (cause) {
 				throw new Error(`case "${name}" failed`, { cause });
@@ -1101,15 +1108,14 @@ describe('keys: coverage — malformed inputs', () => {
 			sequence([objectIdentifier('1.2.840.113549.1.1.1'), nullValue()]),
 			integerFromNumber(1),
 		]);
-		await expectImportFailure(
-			importPkcs8Der(malformed, { kind: 'rsa' }),
-			'malformed',
-			'Malformed PKCS#8 private key',
-		);
+		await expectImportFailure(importPkcs8Der(malformed, { kind: 'rsa' }), 'malformed', {
+			stage: 'asn1',
+			reason: 'invalid_asn1',
+		});
 		await expectImportFailure(
 			importPkcs8Base64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
 			'malformed',
-			'Malformed PKCS#8 private key',
+			{ stage: 'asn1', reason: 'invalid_asn1' },
 		);
 	});
 
@@ -1122,11 +1128,10 @@ describe('keys: coverage — malformed inputs', () => {
 			sequence([integerFromNumber(1)]),
 			octetString(Uint8Array.of(0x01)),
 		]);
-		await expectImportFailure(
-			importPkcs8Der(malformed, { kind: 'rsa' }),
-			'malformed',
-			'Malformed PKCS#8 private key',
-		);
+		await expectImportFailure(importPkcs8Der(malformed, { kind: 'rsa' }), 'malformed', {
+			stage: 'asn1',
+			reason: 'invalid_asn1',
+		});
 	});
 
 	it('importPkcs8 base64 and PEM preserve algorithm mismatch errors', async () => {
@@ -1136,13 +1141,12 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importPkcs8Base64(base64, { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'PKCS#8 private key algorithm does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
-		await expectImportFailure(
-			importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-256' }),
-			'malformed',
-			'PKCS#8 private key algorithm does not match requested import algorithm',
-		);
+		await expectImportFailure(importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-256' }), 'malformed', {
+			stage: 'algorithm',
+			reason: 'algorithm_mismatch',
+		});
 	});
 
 	it('importSec1Der cross-checks the embedded RFC 5915 parameters curve', async () => {
@@ -1173,7 +1177,7 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSec1Der(withParameters, { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'SEC 1 private key curve does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
 		await expectImportFailure(
 			importSec1Pem(pemEncode('EC PRIVATE KEY', withParameters), {
@@ -1181,11 +1185,14 @@ describe('keys: coverage — malformed inputs', () => {
 				curve: 'P-256',
 			}),
 			'malformed',
-			'SEC 1 private key curve does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
-		expect(importSec1DerOrThrow(withParameters, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
-			'SEC 1 private key curve does not match requested import algorithm',
-		);
+		expect(
+			importSec1DerOrThrow(withParameters, { kind: 'ecdsa', curve: 'P-256' }),
+		).rejects.toMatchObject({
+			code: 'malformed',
+			error: { details: { stage: 'algorithm', reason: 'algorithm_mismatch' } },
+		});
 	});
 
 	it('importSec1Der reports malformed for bytes that are not an ECPrivateKey', async () => {
@@ -1193,18 +1200,21 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSec1Der(Uint8Array.of(0x01, 0x02, 0x03), { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'Malformed SEC 1 private key',
+			{ stage: 'asn1', reason: 'invalid_asn1' },
 		);
 		// Valid DER SEQUENCE, but not an ECPrivateKey shape.
 		const notEcPrivateKey = sequence([integerFromNumber(1), integerFromNumber(2)]);
 		await expectImportFailure(
 			importSec1Der(notEcPrivateKey, { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'Malformed SEC 1 private key',
+			{ stage: 'asn1', reason: 'invalid_asn1' },
 		);
 		expect(
 			importSec1DerOrThrow(notEcPrivateKey, { kind: 'ecdsa', curve: 'P-256' }),
-		).rejects.toThrow('Malformed SEC 1 private key');
+		).rejects.toMatchObject({
+			code: 'malformed',
+			error: { details: { stage: 'asn1', reason: 'invalid_asn1' } },
+		});
 	});
 
 	it('encryptTraditionalPem throws on non-16-byte IV', async () => {
@@ -1347,7 +1357,7 @@ describe('keys: coverage — malformed inputs', () => {
 		await expectImportFailure(
 			importSpkiDer(await rsa.exportSpkiDer(), { kind: 'ecdsa', curve: 'P-256' }),
 			'malformed',
-			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
+			{ stage: 'algorithm', reason: 'algorithm_mismatch' },
 		);
 	});
 
@@ -1358,11 +1368,10 @@ describe('keys: coverage — malformed inputs', () => {
 			sequence([objectIdentifier('1.2.840.10040.4.1')]),
 			bitString(Uint8Array.of(0x00), 0),
 		]);
-		await expectImportFailure(
-			importSpkiDer(unsupported),
-			'malformed',
-			'Unsupported SubjectPublicKeyInfo algorithm',
-		);
+		await expectImportFailure(importSpkiDer(unsupported), 'malformed', {
+			stage: 'algorithm',
+			reason: 'unsupported_algorithm',
+		});
 	});
 
 	describe('RSA-OAEP', () => {
@@ -1406,7 +1415,12 @@ describe('keys: coverage — malformed inputs', () => {
 		function expectOaepFailure(
 			result:
 				| { readonly ok: true; readonly value: Uint8Array }
-				| { readonly ok: false; readonly code: string; readonly message: string },
+				| {
+						readonly ok: false;
+						readonly code: string;
+						readonly message: string;
+						readonly details?: unknown;
+				  },
 			code: string,
 			messagePart: string,
 		): void {
@@ -1648,11 +1662,10 @@ describe('keys: algorithm inference', () => {
 				.filter((child) => child.tag !== 0xa0)
 				.map((child) => sec1Der.slice(child.start - child.headerLength, child.end)),
 		);
-		await expectImportFailure(
-			importSec1Der(withoutParameters),
-			'malformed',
-			'SEC 1 private key does not encode a supported named curve',
-		);
+		await expectImportFailure(importSec1Der(withoutParameters), 'malformed', {
+			stage: 'algorithm',
+			reason: 'unsupported_algorithm',
+		});
 		// The explicit curve keeps working for minimal encodings.
 		const explicit = unwrap(
 			await importSec1Der(withoutParameters, { kind: 'ecdsa', curve: 'P-256' }),
@@ -1761,19 +1774,18 @@ describe('keys: algorithm inference', () => {
 		await expectImportFailure(
 			importPublicJwk({ kty: 'EC', crv: 'secp256k1', x: 'AA', y: 'AA' }),
 			'malformed',
-			'Unsupported EC JWK curve',
+			{ stage: 'algorithm', reason: 'unsupported_algorithm' },
 		);
 		// Plain 'RSA-OAEP' means OAEP with SHA-1, which this library does not support.
 		await expectImportFailure(
 			importPublicJwk({ kty: 'RSA', alg: 'RSA-OAEP', n: 'AA', e: 'AQAB' }),
 			'malformed',
-			'Unsupported RSA JWK alg',
+			{ stage: 'algorithm', reason: 'unsupported_algorithm' },
 		);
-		await expectImportFailure(
-			importPublicJwk({ kty: 'oct', k: 'AA' }),
-			'malformed',
-			'Unsupported JWK key type',
-		);
+		await expectImportFailure(importPublicJwk({ kty: 'oct', k: 'AA' }), 'malformed', {
+			stage: 'algorithm',
+			reason: 'unsupported_algorithm',
+		});
 	});
 });
 
