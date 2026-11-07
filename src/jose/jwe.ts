@@ -172,6 +172,13 @@ function encryptionHeader(
 	)
 		return joseFailure('invalid_header', 'JWE header conflicts with the requested algorithms');
 	const members = { ...source, alg: input.algorithm, enc: input.encryption };
+	const completed = snapshotJsonData(members, {
+		maxBytes: limits.maxHeaderBytes,
+		maxDepth: limits.maxJsonDepth,
+		maxNodes: limits.maxJsonNodes,
+	});
+	if (!completed.ok)
+		return joseFailure(completed.code, 'JWE completed header exceeds its JSON bounds');
 	const header = headerFromMembers(members);
 	if (!header.ok) return header;
 	const bytes = new TextEncoder().encode(JSON.stringify(members));

@@ -349,3 +349,11 @@ it('validates encryption configuration as data, preserving noncritical parameter
 		'b',
 	]);
 });
+
+it('applies JSON node bounds to the completed encryption header', async () => {
+	const bounded = { ...input, header: { kid: 'one', typ: 'state' }, limits: { maxJsonNodes: 5 } };
+	expect(await encryptCompactJwe(bounded)).toMatchObject({ code: 'limit_exceeded' });
+	const limits = { maxJsonNodes: 9 };
+	const token = unwrap(await encryptCompactJwe({ ...bounded, limits }));
+	expect(unwrap(await decryptCompactJwe(token, { ...policy, limits })).plaintext).toEqual(bytes);
+});
