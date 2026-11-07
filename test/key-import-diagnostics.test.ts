@@ -1,4 +1,5 @@
 import { expect, it } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { importPrivateKeyPem as rootImport } from '#micro509';
 import {
 	bitString,
@@ -17,20 +18,24 @@ import {
 	exportSec1Pem,
 	generateKeyPair,
 	importEncryptedPkcs8Pem,
+	importPkcs1Pem,
 	importPkcs8Base64,
 	importPkcs8Der,
 	importPkcs8Pem,
 	importPkcs8PemOrThrow,
+	importPrivateJwk,
+	importPrivateJwkOrThrow,
 	importPrivateKeyPem,
 	importPrivateKeyPemOrThrow,
 	importPublicJwk,
+	importPublicJwkOrThrow,
 	importSec1Der,
 	importSpkiDer,
 	importSpkiPem,
 } from '#micro509/keys';
 import { pemEncode } from '#micro509/pem';
 import { isResultError, unwrap } from '#micro509/result';
-import { callUntyped, joseTestKeys } from '#test/helpers';
+import { callUntyped, joseTestKeys, openSslAvailable } from '#test/helpers';
 
 const [rsa] = await joseTestKeys();
 const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
@@ -208,4 +213,75 @@ it('keeps encrypted-import codes and lets programmer errors escape', async () =>
 		rejected = error;
 	}
 	expect(rejected).toBeInstanceOf(TypeError);
+});
+
+it.skipIf(!openSslAvailable)(
+	'preserves valid multiprime RSA imports through PKCS1 and label dispatch',
+	async () => {
+		const pem = execFileSync('openssl', ['genrsa', '-traditional', '-primes', '3', '2048'], {
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		for (const result of [await importPkcs1Pem(pem), await importPrivateKeyPem(pem)]) {
+			// Backends may not implement multiprime RSA; the container parser must allow its valid shape.
+			if (!result.ok) {
+				expect(result.details?.stage).toBe('backend');
+				continue;
+			}
+			const signature = await crypto.subtle.sign(
+				'RSASSA-PKCS1-v1_5',
+				result.value,
+				new Uint8Array(1),
+			);
+			expect(signature.byteLength).toBe(256);
+		}
+	},
+);
+
+it('maps native JWK key_ops validation into structured backend refusals', async () => {
+	for (const pair of [rsa, ec]) {
+		const publicJwk = { ...(await pair.exportPublicJwk()), key_ops: ['bogus'] };
+		const privateJwk = { ...(await pair.exportPrivateJwk()), key_ops: ['bogus'] };
+		for (const result of [await importPublicJwk(publicJwk), await importPrivateJwk(privateJwk)]) {
+			expect(result).toMatchObject({
+				code: 'malformed',
+				details: { container: 'jwk', stage: 'backend', reason: 'backend_rejected' },
+			});
+			if (!result.ok) expect(result.error.details).toEqual(result.details);
+		}
+		for (const run of [
+			() => importPublicJwkOrThrow(publicJwk),
+			() => importPrivateJwkOrThrow(privateJwk),
+		]) {
+			let rejected: unknown;
+			try {
+				await run();
+			} catch (error) {
+				rejected = error;
+			}
+			expect(isResultError(rejected)).toBe(true);
+			if (!isResultError(rejected)) throw new Error('expected coded backend refusal');
+			expect(rejected.error).toMatchObject({
+				code: 'malformed',
+				details: { stage: 'backend', reason: 'backend_rejected' },
+			});
+		}
+	}
+});
+
+it('does not hide a TypeError thrown while preparing developer algorithm parameters', async () => {
+	const algorithm = {
+		kind: 'rsa',
+		get hash(): 'SHA-256' {
+			throw new TypeError('broken configuration getter');
+		},
+	} as const;
+	let rejected: unknown;
+	try {
+		await importPublicJwk(await rsa.exportPublicJwk(), algorithm);
+	} catch (error) {
+		rejected = error;
+	}
+	expect(rejected).toBeInstanceOf(TypeError);
+	expect(isResultError(rejected)).toBe(false);
 });

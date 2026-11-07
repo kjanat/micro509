@@ -732,14 +732,11 @@ export async function importSpkiDerOrThrow(
 		},
 	);
 	const webCryptoAlgorithm = toImportAlgorithm(importInput);
-	return await importAsyncStage('spki', 'backend', 'backend_rejected', () =>
-		getCrypto().subtle.importKey(
-			'spki',
-			new Uint8Array(der),
-			webCryptoAlgorithm,
-			true,
-			publicKeyUsages(importInput),
-		),
+	const subtle = getCrypto().subtle;
+	const usages = publicKeyUsages(importInput);
+	const keyData = new Uint8Array(der);
+	return await importBackendStage('spki', () =>
+		subtle.importKey('spki', keyData, webCryptoAlgorithm, true, usages),
 	);
 }
 
@@ -860,6 +857,22 @@ async function importAsyncStage<T>(
 		return refuseImportStage(error, container, stage, reason);
 	}
 }
+/** Only the native import call is inside this boundary. Web IDL key-data validation may
+ * throw TypeError (for example an invalid JWK key_ops enum); that is untrusted input,
+ * not a JavaScript invariant failure. Algorithm/usage/buffer preparation stays outside.
+ */
+async function importBackendStage(
+	container: ImportContainer,
+	run: () => Promise<CryptoKey>,
+): Promise<CryptoKey> {
+	try {
+		return await run();
+	} catch (error) {
+		if (error instanceof TypeError) throwImportFailure(container, 'backend', 'backend_rejected');
+		return refuseImportStage(error, container, 'backend', 'backend_rejected');
+	}
+}
+
 function importPemBytes(container: ImportContainer, label: string, pem: string): Uint8Array {
 	return importStage(container, 'pem', 'invalid_armor', () => pemDecodeOrThrow(label, pem));
 }
@@ -1068,14 +1081,11 @@ export async function importPkcs8DerOrThrow(
 		},
 	);
 	const webCryptoAlgorithm = toImportAlgorithm(importInput);
-	const privateKey = await importAsyncStage('pkcs8', 'backend', 'backend_rejected', () =>
-		getCrypto().subtle.importKey(
-			'pkcs8',
-			new Uint8Array(parsed.v1Der),
-			webCryptoAlgorithm,
-			true,
-			privateKeyUsages(importInput),
-		),
+	const subtle = getCrypto().subtle;
+	const usages = privateKeyUsages(importInput);
+	const keyData = new Uint8Array(parsed.v1Der);
+	const privateKey = await importBackendStage('pkcs8', () =>
+		subtle.importKey('pkcs8', keyData, webCryptoAlgorithm, true, usages),
 	);
 	if (parsed.declaredPublicKey !== undefined) {
 		const declared = parsed.declaredPublicKey;
@@ -1315,11 +1325,7 @@ export function importPkcs1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	importStage('pkcs1', 'asn1', 'invalid_asn1', () => {
-		const fields = readSequenceChildren(der);
-		if (fields.length !== 9 || fields.some((field) => field.tag !== 0x02))
-			throw new Error('Invalid RSA private key');
-	});
+	importStage('pkcs1', 'asn1', 'invalid_asn1', () => parsePkcs1PrivateKey(der));
 	return importAsyncStage('pkcs1', 'backend', 'backend_rejected', () =>
 		importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm),
 	);
@@ -1567,14 +1573,10 @@ export async function importPublicJwkOrThrow(
 		},
 	);
 	const webCryptoAlgorithm = toImportAlgorithm(importInput);
-	return await importAsyncStage('jwk', 'backend', 'backend_rejected', () =>
-		getCrypto().subtle.importKey(
-			'jwk',
-			jwk,
-			webCryptoAlgorithm,
-			true,
-			publicKeyUsages(importInput),
-		),
+	const subtle = getCrypto().subtle;
+	const usages = publicKeyUsages(importInput);
+	return await importBackendStage('jwk', () =>
+		subtle.importKey('jwk', jwk, webCryptoAlgorithm, true, usages),
 	);
 }
 
@@ -1628,14 +1630,10 @@ export async function importPrivateJwkOrThrow(
 		},
 	);
 	const webCryptoAlgorithm = toImportAlgorithm(importInput);
-	return await importAsyncStage('jwk', 'backend', 'backend_rejected', () =>
-		getCrypto().subtle.importKey(
-			'jwk',
-			jwk,
-			webCryptoAlgorithm,
-			true,
-			privateKeyUsages(importInput),
-		),
+	const subtle = getCrypto().subtle;
+	const usages = privateKeyUsages(importInput);
+	return await importBackendStage('jwk', () =>
+		subtle.importKey('jwk', jwk, webCryptoAlgorithm, true, usages),
 	);
 }
 

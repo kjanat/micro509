@@ -120,6 +120,19 @@ async function runKeyImportSmoke(api, pair) {
 		if (JSON.stringify(result.details) !== JSON.stringify(result.error.details))
 			throw new Error('smoke: flattened key import details lost');
 	}
+	// Web IDL may report invalid key_ops with TypeError rather than DOMException.
+	for (const result of [
+		await api.importPublicJwk({ ...(await pair.exportPublicJwk()), key_ops: ['bogus'] }),
+		await api.importPrivateJwk({ ...(await pair.exportPrivateJwk()), key_ops: ['bogus'] }),
+	]) {
+		if (
+			result.ok ||
+			result.code !== 'malformed' ||
+			result.details?.stage !== 'backend' ||
+			result.details.reason !== 'backend_rejected'
+		)
+			throw new Error('smoke: JWK key_ops input escaped the Result boundary');
+	}
 }
 
 /** @param {typeof import('#micro509/kdf')} kdfApi */
