@@ -42,6 +42,7 @@ export {
 	importJwkEntry,
 	parseJwks,
 	selectJwk,
+	validateJwks,
 } from '#micro509/jose/jwks';
 export type {
 	JoseLimits,
