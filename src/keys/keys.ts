@@ -30,6 +30,7 @@ import {
 import {
 	DECODE_LIMIT_CODES,
 	decodeFailureResult,
+	decodeRefusalOf,
 	rethrowDecodeRefusal,
 } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
@@ -62,10 +63,17 @@ import {
 	parseTraditionalPemOrThrow,
 	pemDecodeOrThrow,
 	pemEncode,
+	splitPemTextBlocksOrThrow,
 	trimLwsp,
 } from '#micro509/pem/pem';
 import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import {
+	failureResult,
+	isResultError,
+	rethrowIfInvariant,
+	successResult,
+	throwMicro509Error,
+} from '#micro509/result/result';
 
 export type {
 	KdfLimitOptions,
@@ -220,8 +228,33 @@ export interface LegacyPemEncryptionOptions {
  */
 export type ImportKeyErrorCode = Exclude<DecodeFailureCode, 'unsupported'>;
 
+/** Stage at which an ordinary key import refused input. */
+export type ImportKeyStage = 'container' | 'pem' | 'base64' | 'asn1' | 'algorithm' | 'backend';
+/** Stable diagnostic independent of human-readable messages and native backend errors. */
+export type ImportKeyReason =
+	| 'unsupported_container'
+	| 'multiple_blocks'
+	| 'encrypted_key'
+	| 'invalid_armor'
+	| 'invalid_base64'
+	| 'invalid_asn1'
+	| 'decode_limit'
+	| 'unsupported_algorithm'
+	| 'algorithm_mismatch'
+	| 'public_key_mismatch'
+	| 'backend_rejected';
+/** Safe structured context: names only, never input bytes, passwords or backend prose. */
+export interface ImportKeyErrorDetails {
+	/** Stage that refused the input. */
+	readonly stage: ImportKeyStage;
+	/** Stable refusal reason within the stage. */
+	readonly reason: ImportKeyReason;
+	/** Container selected by the importer, when known. */
+	readonly container?: 'pkcs8' | 'pkcs1' | 'sec1' | 'spki' | 'jwk';
+}
+
 /** Structured failure payload for key import. */
-export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
+export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode, ImportKeyErrorDetails> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -230,13 +263,13 @@ export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
  * Success-or-failure result returned by the public `import*` key functions.
  *
  * On failure, `code` is `'malformed'` for structurally invalid input,
- * algorithm mismatches, and wrong-password decryption failures alike (see the
- * throwing `*OrThrow` variants for raw error messages), and `'limit_exceeded'`
+ * algorithm mismatches and backend refusal. `details` provides a stable stage/reason
+ * through the Result and `*OrThrow`/`unwrap` forms, without backend messages. `'limit_exceeded'` is
  * for an implementation limit.
  */
 export type ImportKeyResult<T> =
 	| { readonly ok: true; readonly value: T }
-	| ErrorResult<ImportKeyErrorCode, Record<never, never>, ImportKeyFailure>;
+	| ErrorResult<ImportKeyErrorCode, ImportKeyErrorDetails, ImportKeyFailure>;
 
 /**
  * Machine-readable failure reason for the `importEncrypted*` key functions.
@@ -686,25 +719,152 @@ export async function importSpkiDerOrThrow(
 	der: Uint8Array,
 	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	const parsedSpki = parseSpkiDer(der);
-	let importInput: PublicKeyImportInput;
-	if (algorithm === undefined) {
-		importInput = inferKeyImportInput(parsedSpki, 'Unsupported SubjectPublicKeyInfo algorithm');
-	} else {
-		assertSpkiMatchesRequestedAlgorithm(parsedSpki, algorithm);
-		importInput = algorithm;
-	}
-	try {
-		return await getCrypto().subtle.importKey(
+	assertRuntimeImportKind(algorithm, false);
+	const parsedSpki = importStage('spki', 'asn1', 'invalid_asn1', () => parseSpkiDer(der));
+	const importInput = importStage(
+		'spki',
+		'algorithm',
+		algorithm === undefined ? 'unsupported_algorithm' : 'algorithm_mismatch',
+		() => {
+			if (algorithm === undefined) return inferKeyImportInput(parsedSpki, 'Unsupported algorithm');
+			assertSpkiMatchesRequestedAlgorithm(parsedSpki, algorithm);
+			return algorithm;
+		},
+	);
+	const webCryptoAlgorithm = toImportAlgorithm(importInput);
+	return await importAsyncStage('spki', 'backend', 'backend_rejected', () =>
+		getCrypto().subtle.importKey(
 			'spki',
 			new Uint8Array(der),
-			toImportAlgorithm(importInput),
+			webCryptoAlgorithm,
 			true,
 			publicKeyUsages(importInput),
+		),
+	);
+}
+
+function assertRuntimeImportKind(
+	algorithm: PublicKeyImportInput | undefined,
+	privateKey: boolean,
+): void {
+	if (
+		algorithm !== undefined &&
+		algorithm.kind !== 'rsa' &&
+		algorithm.kind !== 'ecdsa' &&
+		algorithm.kind !== 'ed25519'
+	) {
+		throw new Error(
+			`Unhandled ${privateKey ? 'PrivateKeyImportInput' : 'PublicKeyImportInput'} kind: ${String(algorithm)}`,
 		);
-	} catch {
-		throw new Error('Malformed SubjectPublicKeyInfo');
 	}
+}
+
+type ImportContainer = ImportKeyErrorDetails['container'];
+const IMPORT_STAGES: readonly ImportKeyStage[] = [
+	'container',
+	'pem',
+	'base64',
+	'asn1',
+	'algorithm',
+	'backend',
+];
+const IMPORT_REASONS: readonly ImportKeyReason[] = [
+	'unsupported_container',
+	'multiple_blocks',
+	'encrypted_key',
+	'invalid_armor',
+	'invalid_base64',
+	'invalid_asn1',
+	'decode_limit',
+	'unsupported_algorithm',
+	'algorithm_mismatch',
+	'public_key_mismatch',
+	'backend_rejected',
+];
+
+function importDiagnostic(error: unknown): ImportKeyErrorDetails | undefined {
+	if (!isResultError(error)) return undefined;
+	const details = error.error.details;
+	if (
+		typeof details !== 'object' ||
+		details === null ||
+		!('stage' in details) ||
+		!('reason' in details)
+	)
+		return undefined;
+	const stage = IMPORT_STAGES.find((value) => value === details.stage);
+	const reason = IMPORT_REASONS.find((value) => value === details.reason);
+	const container =
+		'container' in details
+			? (['pkcs8', 'pkcs1', 'sec1', 'spki', 'jwk'] as const).find(
+					(value) => value === details.container,
+				)
+			: undefined;
+	return stage === undefined || reason === undefined
+		? undefined
+		: { stage, reason, ...(container === undefined ? {} : { container }) };
+}
+function throwImportFailure(
+	container: ImportContainer,
+	stage: ImportKeyStage,
+	reason: ImportKeyReason,
+	code: ImportKeyErrorCode = 'malformed',
+): never {
+	return throwMicro509Error(code, `Key import refused at ${stage}: ${reason}`, {
+		stage,
+		reason,
+		...(container === undefined ? {} : { container }),
+	} satisfies ImportKeyErrorDetails);
+}
+function refuseImportStage(
+	error: unknown,
+	container: ImportContainer,
+	stage: ImportKeyStage,
+	reason: ImportKeyReason,
+): never {
+	rethrowIfInvariant(error);
+	const diagnostic = importDiagnostic(error);
+	if (diagnostic !== undefined) {
+		throwImportFailure(
+			container,
+			diagnostic.stage,
+			diagnostic.reason,
+			isResultError(error) && error.code === 'limit_exceeded' ? 'limit_exceeded' : 'malformed',
+		);
+	}
+	if (decodeRefusalOf(error, DECODE_LIMIT_CODES) !== undefined)
+		throwImportFailure(container, stage, 'decode_limit', 'limit_exceeded');
+	throwImportFailure(container, stage, reason);
+}
+function importStage<T>(
+	container: ImportContainer,
+	stage: ImportKeyStage,
+	reason: ImportKeyReason,
+	run: () => T,
+): T {
+	try {
+		return run();
+	} catch (error) {
+		return refuseImportStage(error, container, stage, reason);
+	}
+}
+async function importAsyncStage<T>(
+	container: ImportContainer,
+	stage: ImportKeyStage,
+	reason: ImportKeyReason,
+	run: () => Promise<T>,
+): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		return refuseImportStage(error, container, stage, reason);
+	}
+}
+function importPemBytes(container: ImportContainer, label: string, pem: string): Uint8Array {
+	return importStage(container, 'pem', 'invalid_armor', () => pemDecodeOrThrow(label, pem));
+}
+function importBase64Bytes(container: ImportContainer, value: string): Uint8Array {
+	return importStage(container, 'base64', 'invalid_base64', () => base64Decode(value));
 }
 
 /** Runs a throwing key import and maps an EXPECTED failure to a `'malformed'` or `'limit_exceeded'` result; invariants rethrow. */
@@ -713,7 +873,15 @@ async function importResult(run: () => Promise<CryptoKey>): Promise<ImportKeyRes
 		return successResult(await run());
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed key');
+		const diagnostic = importDiagnostic(error);
+		if (diagnostic !== undefined && isResultError(error)) {
+			return failureResult(
+				error.code === 'limit_exceeded' ? 'limit_exceeded' : 'malformed',
+				error.error.message,
+				diagnostic,
+			);
+		}
+		throw error;
 	}
 }
 
@@ -764,7 +932,7 @@ export function importSpkiPemOrThrow(
 	pem: string,
 	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	return importSpkiDerOrThrow(pemDecodeOrThrow('PUBLIC KEY', pem), algorithm);
+	return importSpkiDerOrThrow(importPemBytes('spki', 'PUBLIC KEY', pem), algorithm);
 }
 
 /**
@@ -780,6 +948,61 @@ export function importSpkiPem(
 }
 
 /**
+ * Imports exactly one unencrypted private-key PEM block by its label: PKCS#8 `PRIVATE KEY`,
+ * PKCS#1 `RSA PRIVATE KEY`, or SEC1 `EC PRIVATE KEY`. Bundles (including a certificate plus key)
+ * are refused rather than selecting an arbitrary block. Non-PEM surrounding text follows the
+ * shared PEM scanner's behavior. Encrypted PKCS#8 and traditional encrypted PEM require the
+ * explicit password-taking import functions. No format guessing or decryption is attempted.
+ *
+ * Without `algorithm`, existing inference applies (RSA defaults to PKCS#1v1.5/SHA-256).
+ * An explicit descriptor additionally asserts key family/curve and selects RSA padding/hash.
+ */
+export function importPrivateKeyPemOrThrow(
+	pem: string,
+	algorithm?: PrivateKeyImportInput,
+): Promise<CryptoKey> {
+	const blocks = importStage(undefined, 'pem', 'invalid_armor', () =>
+		splitPemTextBlocksOrThrow(pem),
+	);
+	if (blocks.length > 1) throwImportFailure(undefined, 'container', 'multiple_blocks');
+	const block = blocks[0];
+	if (block === undefined) throwImportFailure(undefined, 'container', 'unsupported_container');
+	if (block.label === 'ENCRYPTED PRIVATE KEY')
+		throwImportFailure('pkcs8', 'container', 'encrypted_key');
+	const supported =
+		block.label === 'PRIVATE KEY' ||
+		block.label === 'RSA PRIVATE KEY' ||
+		block.label === 'EC PRIVATE KEY';
+	if (!supported) throwImportFailure(undefined, 'container', 'unsupported_container');
+	const legacy = importStage(undefined, 'pem', 'invalid_armor', () =>
+		parseTraditionalPemOrThrow(block.pem),
+	);
+	if (legacy.headers.size > 0) throwImportFailure(undefined, 'container', 'encrypted_key');
+	switch (block.label) {
+		case 'PRIVATE KEY':
+			return importPkcs8PemOrThrow(block.pem, algorithm);
+		case 'RSA PRIVATE KEY':
+			if (algorithm !== undefined && algorithm.kind !== 'rsa')
+				throwImportFailure('pkcs1', 'algorithm', 'algorithm_mismatch');
+			return importPkcs1PemOrThrow(block.pem, algorithm);
+		case 'EC PRIVATE KEY':
+			if (algorithm !== undefined && algorithm.kind !== 'ecdsa')
+				throwImportFailure('sec1', 'algorithm', 'algorithm_mismatch');
+			return importSec1PemOrThrow(block.pem, algorithm);
+		default:
+			throwImportFailure(undefined, 'container', 'unsupported_container');
+	}
+}
+
+/** Result-returning counterpart of {@linkcode importPrivateKeyPemOrThrow}. */
+export function importPrivateKeyPem(
+	pem: string,
+	algorithm?: PrivateKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	return importResult(() => importPrivateKeyPemOrThrow(pem, algorithm));
+}
+
+/**
  * Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers).
  *
  * @see {@linkcode exportBinaryBase64} for the inverse operation
@@ -789,13 +1012,7 @@ export function importSpkiBase64OrThrow(
 	base64: string,
 	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	let decoded: Uint8Array;
-	try {
-		decoded = base64Decode(base64);
-	} catch {
-		throw new Error('Invalid base64 SubjectPublicKeyInfo');
-	}
-	return importSpkiDerOrThrow(decoded, algorithm);
+	return importSpkiDerOrThrow(importBase64Bytes('spki', base64), algorithm);
 }
 
 /**
@@ -838,35 +1055,33 @@ export async function importPkcs8DerOrThrow(
 	der: Uint8Array,
 	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	let parsedPrivateKey: ReturnType<typeof parsePkcs8PrivateKey>;
-	try {
-		parsedPrivateKey = parsePkcs8PrivateKey(der);
-	} catch (error) {
-		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
-		throw new Error('Malformed PKCS#8 private key');
-	}
-	let importInput: PrivateKeyImportInput;
-	if (algorithm === undefined) {
-		importInput = inferKeyImportInput(parsedPrivateKey, 'Unsupported PKCS#8 private key algorithm');
-	} else {
-		assertPkcs8MatchesRequestedAlgorithm(parsedPrivateKey, algorithm);
-		importInput = algorithm;
-	}
-	let privateKey: CryptoKey;
-	try {
-		privateKey = await getCrypto().subtle.importKey(
+	assertRuntimeImportKind(algorithm, true);
+	const parsed = importStage('pkcs8', 'asn1', 'invalid_asn1', () => parsePkcs8PrivateKey(der));
+	const importInput = importStage(
+		'pkcs8',
+		'algorithm',
+		algorithm === undefined ? 'unsupported_algorithm' : 'algorithm_mismatch',
+		() => {
+			if (algorithm === undefined) return inferKeyImportInput(parsed, 'Unsupported algorithm');
+			assertPkcs8MatchesRequestedAlgorithm(parsed, algorithm);
+			return algorithm;
+		},
+	);
+	const webCryptoAlgorithm = toImportAlgorithm(importInput);
+	const privateKey = await importAsyncStage('pkcs8', 'backend', 'backend_rejected', () =>
+		getCrypto().subtle.importKey(
 			'pkcs8',
-			new Uint8Array(parsedPrivateKey.v1Der),
-			toImportAlgorithm(importInput),
+			new Uint8Array(parsed.v1Der),
+			webCryptoAlgorithm,
 			true,
 			privateKeyUsages(importInput),
+		),
+	);
+	if (parsed.declaredPublicKey !== undefined) {
+		const declared = parsed.declaredPublicKey;
+		await importAsyncStage('pkcs8', 'asn1', 'public_key_mismatch', () =>
+			assertDeclaredPublicKeyMatches(privateKey, declared),
 		);
-	} catch {
-		throw new Error('Malformed PKCS#8 private key');
-	}
-	const declaredPublicKey = parsedPrivateKey.declaredPublicKey;
-	if (declaredPublicKey !== undefined) {
-		await assertDeclaredPublicKeyMatches(privateKey, declaredPublicKey);
 	}
 	return privateKey;
 }
@@ -925,7 +1140,7 @@ export function importPkcs8PemOrThrow(
 	pem: string,
 	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return importPkcs8DerOrThrow(pemDecodeOrThrow('PRIVATE KEY', pem), algorithm);
+	return importPkcs8DerOrThrow(importPemBytes('pkcs8', 'PRIVATE KEY', pem), algorithm);
 }
 
 /**
@@ -1100,7 +1315,14 @@ export function importPkcs1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	return importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm);
+	importStage('pkcs1', 'asn1', 'invalid_asn1', () => {
+		const fields = readSequenceChildren(der);
+		if (fields.length !== 9 || fields.some((field) => field.tag !== 0x02))
+			throw new Error('Invalid RSA private key');
+	});
+	return importAsyncStage('pkcs1', 'backend', 'backend_rejected', () =>
+		importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm),
+	);
 }
 
 /**
@@ -1127,7 +1349,7 @@ export function importPkcs1PemOrThrow(
 	pem: string,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	return importPkcs1DerOrThrow(pemDecodeOrThrow('RSA PRIVATE KEY', pem), algorithm);
+	return importPkcs1DerOrThrow(importPemBytes('pkcs1', 'RSA PRIVATE KEY', pem), algorithm);
 }
 
 /**
@@ -1186,13 +1408,7 @@ export function importPkcs8Base64OrThrow(
 	base64: string,
 	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	let decoded: Uint8Array;
-	try {
-		decoded = base64Decode(base64);
-	} catch {
-		throw new Error('Invalid base64 PKCS#8 private key');
-	}
-	return importPkcs8DerOrThrow(decoded, algorithm);
+	return importPkcs8DerOrThrow(importBase64Bytes('pkcs8', base64), algorithm);
 }
 
 /**
@@ -1228,21 +1444,20 @@ export async function importSec1DerOrThrow(
 	der: Uint8Array,
 	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
-	let parsedSec1: ReturnType<typeof parseSec1PrivateKey>;
-	try {
-		parsedSec1 = parseSec1PrivateKey(der);
-	} catch (error) {
-		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
-		throw new Error('Malformed SEC 1 private key');
-	}
-	let importInput: ImportEcKeyInput;
-	if (algorithm === undefined) {
-		importInput = inferSec1ImportInput(parsedSec1);
-	} else {
-		assertSec1MatchesRequestedAlgorithm(parsedSec1, algorithm);
-		importInput = algorithm;
-	}
-	return await importPkcs8DerOrThrow(wrapSec1InPkcs8(der, importInput.curve), importInput);
+	const parsed = importStage('sec1', 'asn1', 'invalid_asn1', () => parseSec1PrivateKey(der));
+	const importInput = importStage(
+		'sec1',
+		'algorithm',
+		algorithm === undefined ? 'unsupported_algorithm' : 'algorithm_mismatch',
+		() => {
+			if (algorithm === undefined) return inferSec1ImportInput(parsed);
+			assertSec1MatchesRequestedAlgorithm(parsed, algorithm);
+			return algorithm;
+		},
+	);
+	return await importAsyncStage('sec1', 'backend', 'backend_rejected', () =>
+		importPkcs8DerOrThrow(wrapSec1InPkcs8(der, importInput.curve), importInput),
+	);
 }
 
 /**
@@ -1271,7 +1486,7 @@ export function importSec1PemOrThrow(
 	pem: string,
 	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
-	return importSec1DerOrThrow(pemDecodeOrThrow('EC PRIVATE KEY', pem), algorithm);
+	return importSec1DerOrThrow(importPemBytes('sec1', 'EC PRIVATE KEY', pem), algorithm);
 }
 
 /**
@@ -1340,19 +1555,27 @@ export async function importPublicJwkOrThrow(
 	jwk: JsonWebKey,
 	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	const importInput = algorithm ?? inferJwkImportInput(jwk);
-	assertPublicJwkMatchesRequestedAlgorithm(jwk, importInput);
-	try {
-		return await getCrypto().subtle.importKey(
+	assertRuntimeImportKind(algorithm, false);
+	const importInput = importStage(
+		'jwk',
+		'algorithm',
+		algorithm === undefined ? 'unsupported_algorithm' : 'algorithm_mismatch',
+		() => {
+			const input = algorithm ?? inferJwkImportInput(jwk);
+			assertPublicJwkMatchesRequestedAlgorithm(jwk, input);
+			return input;
+		},
+	);
+	const webCryptoAlgorithm = toImportAlgorithm(importInput);
+	return await importAsyncStage('jwk', 'backend', 'backend_rejected', () =>
+		getCrypto().subtle.importKey(
 			'jwk',
 			jwk,
-			toImportAlgorithm(importInput),
+			webCryptoAlgorithm,
 			true,
 			publicKeyUsages(importInput),
-		);
-	} catch {
-		throw new Error('Malformed public JWK');
-	}
+		),
+	);
 }
 
 /**
@@ -1393,19 +1616,27 @@ export async function importPrivateJwkOrThrow(
 	jwk: JsonWebKey,
 	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	const importInput = algorithm ?? inferJwkImportInput(jwk);
-	assertPrivateJwkMatchesRequestedAlgorithm(jwk, importInput);
-	try {
-		return await getCrypto().subtle.importKey(
+	assertRuntimeImportKind(algorithm, true);
+	const importInput = importStage(
+		'jwk',
+		'algorithm',
+		algorithm === undefined ? 'unsupported_algorithm' : 'algorithm_mismatch',
+		() => {
+			const input = algorithm ?? inferJwkImportInput(jwk);
+			assertPrivateJwkMatchesRequestedAlgorithm(jwk, input);
+			return input;
+		},
+	);
+	const webCryptoAlgorithm = toImportAlgorithm(importInput);
+	return await importAsyncStage('jwk', 'backend', 'backend_rejected', () =>
+		getCrypto().subtle.importKey(
 			'jwk',
 			jwk,
-			toImportAlgorithm(importInput),
+			webCryptoAlgorithm,
 			true,
 			privateKeyUsages(importInput),
-		);
-	} catch {
-		throw new Error('Malformed private JWK');
-	}
+		),
+	);
 }
 
 /**

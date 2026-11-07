@@ -203,7 +203,7 @@ describe('runtime exhaustiveness guards', () => {
 		},
 		{
 			name: 'WebCrypto import algorithm mapping',
-			expectedMessage: 'Malformed SubjectPublicKeyInfo',
+			expectedMessage: 'Unhandled PublicKeyImportInput kind',
 			run: async () => {
 				const { spki } = await getKeyFixtures();
 				let reads = 0;

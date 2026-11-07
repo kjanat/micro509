@@ -70,10 +70,56 @@ export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi, joseApi) {
 		throw new Error('smoke: independently generated SHA-1 OAEP ciphertext failed');
 	}
 
+	await runKeyImportSmoke(micro509, keyPair);
 	await runArgon2Smoke(kdfApi);
 	await runSshSmoke(micro509, sshApi);
 	await runJoseSmoke(micro509, joseApi);
 	return 'smoke OK';
+}
+
+/**
+ * @param {typeof import('#micro509')} api
+ * @param {import('#micro509/keys').KeyPairMaterial} pair
+ */
+async function runKeyImportSmoke(api, pair) {
+	const pkcs8 = await pair.exportPkcs8Pem();
+	const sec1 = await api.exportSec1Pem(pair.privateKey);
+	for (const pem of [pkcs8, sec1]) {
+		const imported = api.unwrap(await api.importPrivateKeyPem(pem));
+		const data = Uint8Array.of(1, 2, 3);
+		const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, imported, data);
+		if (
+			!(await crypto.subtle.verify(
+				{ name: 'ECDSA', hash: 'SHA-256' },
+				pair.publicKey,
+				signature,
+				data,
+			))
+		)
+			throw new Error('smoke: private PEM dispatch changed key');
+	}
+	const failures = [
+		await api.importPkcs8Pem('broken'),
+		await api.importPkcs8Pem('-----BEGIN PRIVATE KEY-----\nAB==\n-----END PRIVATE KEY-----'),
+		await api.importPkcs8Der(Uint8Array.of(0x30, 0)),
+		await api.importPkcs8Pem(pkcs8, { kind: 'rsa' }),
+		await api.importPublicJwk(
+			{ ...(await pair.exportPublicJwk()), ext: false },
+			{ kind: 'ecdsa', curve: 'P-256' },
+		),
+	];
+	for (const [index, result] of failures.entries()) {
+		if (
+			result.ok ||
+			result.code !== 'malformed' ||
+			result.details?.stage !== ['pem', 'base64', 'asn1', 'algorithm', 'backend'][index]
+		)
+			throw new Error(
+				`smoke: key import diagnostic stage mismatch at ${index}: ${result.ok ? 'success' : result.details?.stage}`,
+			);
+		if (JSON.stringify(result.details) !== JSON.stringify(result.error.details))
+			throw new Error('smoke: flattened key import details lost');
+	}
 }
 
 /** @param {typeof import('#micro509/kdf')} kdfApi */
