@@ -37,6 +37,24 @@ supports the format. micro509 key import and generation are narrower.
 DSA and Brainpool signing and verification are unsupported. micro509 also
 has no ECDH key generation/import or key-agreement API.
 
+## JOSE signatures
+
+The optional `micro509/jose` entrypoint supports these compact JWS/JWT algorithms,
+including local and remote JWKS resolution:
+
+| Algorithms            | Required key                        | Hash                                     | Sign / verify / JWKS |
+| --------------------- | ----------------------------------- | ---------------------------------------- | -------------------- |
+| RS256 / RS384 / RS512 | RSA PKCS#1 v1.5, at least 2048 bits | SHA-256 / SHA-384 / SHA-512 respectively | yes                  |
+| ES256                 | ECDSA P-256                         | SHA-256                                  | yes                  |
+| ES384                 | ECDSA P-384                         | SHA-384                                  | yes                  |
+
+RSA CryptoKeys must have the matching hash; EC CryptoKeys must have the exact
+curve. ECDSA signatures use fixed-width raw R || S, not DER. Verification always
+requires a caller-supplied algorithm allowlist. These profiles use standard
+WebCrypto operations across the [supported runtimes](./runtimes.md).
+JWE, PS256, ES512, EdDSA and unsecured JWTs are outside this JOSE scope even where
+generic key or signature operations support their underlying primitives.
+
 ## Key formats
 
 | Format       | Import through micro509 | Export through micro509 |

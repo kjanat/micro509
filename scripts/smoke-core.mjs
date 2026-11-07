@@ -170,6 +170,7 @@ async function runJoseSmoke(micro509, joseApi) {
 		});
 		if (!viaJwks.ok) throw new Error('smoke: JWKS verification failed');
 		await runExponentOneSmoke(joseApi, keys.publicKey, now);
+		await runJoseAlgorithmSmoke(micro509, joseApi, now);
 
 		const [header, body, signature] = token.split('.');
 		const forged = `${header}.${body}.${signature?.slice(0, -4)}AAAA`;
@@ -187,6 +188,40 @@ async function runJoseSmoke(micro509, joseApi) {
 		if (requests !== 0) throw new Error('smoke: JOSE made a request before it was needed');
 	} finally {
 		if (guarded) Reflect.set(globalThis, 'fetch', originalFetch);
+	}
+}
+
+/**
+ * Exercises each additional JOSE profile against the actual runtime's WebCrypto.
+ * @param {typeof import('#micro509')} micro509
+ * @param {typeof import('#micro509/jose')} joseApi
+ * @param {number} now
+ */
+async function runJoseAlgorithmSmoke(micro509, joseApi, now) {
+	const profiles = /** @type {const} */ ([
+		{ algorithm: 'RS384', key: { kind: 'rsa', hash: 'SHA-384' } },
+		{ algorithm: 'RS512', key: { kind: 'rsa', hash: 'SHA-512' } },
+		{ algorithm: 'ES256', key: { kind: 'ecdsa', curve: 'P-256' } },
+		{ algorithm: 'ES384', key: { kind: 'ecdsa', curve: 'P-384' } },
+	]);
+	for (const { algorithm, key } of profiles) {
+		const keys = await micro509.generateKeyPair(key);
+		const token = await joseApi.signJwt({
+			algorithm,
+			privateKey: keys.privateKey,
+			claims: { iss: 'https://smoke.example', aud: 'smoke', exp: now + 60 },
+		});
+		const set = joseApi.parseJwks(JSON.stringify({ keys: [await keys.exportPublicJwk()] }));
+		if (!set.ok) throw new Error(`smoke: ${algorithm} JWKS parsing failed`);
+		for (const verificationKey of [keys.publicKey, joseApi.createJwksKeyResolver(set.value)]) {
+			const result = await joseApi.verifyJwt(token, {
+				algorithms: [algorithm],
+				key: verificationKey,
+				tokenType: 'JWT',
+				claims: { issuer: 'https://smoke.example', audience: 'smoke' },
+			});
+			if (!result.ok) throw new Error(`smoke: ${algorithm} verification failed: ${result.code}`);
+		}
 	}
 }
 

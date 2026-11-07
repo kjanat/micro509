@@ -57,7 +57,7 @@ describe('parseJwks', () => {
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.value.keys.map((entry) => entry.kind)).toEqual([
 			'rsa',
-			'unsupported',
+			'ec',
 			'unsupported',
 			'unsupported',
 			'unsupported',
@@ -70,7 +70,7 @@ describe('parseJwks', () => {
 			alg: 'RS256',
 			keyOps: ['verify'],
 		});
-		expect(result.value.keys[1]).toMatchObject({ kind: 'unsupported', kty: 'EC', kid: 'ec' });
+		expect(result.value.keys[1]).toMatchObject({ kind: 'ec', crv: 'P-256', kid: 'ec' });
 	});
 
 	it('refuses documents that are not a JWK Set', () => {
@@ -264,7 +264,9 @@ describe('selectJwk', () => {
 				const alone = selectJwk(parsed(invalid), selector);
 				expect(alone.ok ? 'accepted' : alone.code).toBe('key_unsuitable');
 				const selected = selectJwk(parsed(invalid, strong), selector);
-				expect(selected.ok && selected.value.e).toBe(strongExponent);
+				expect(selected.ok && selected.value.kind === 'rsa' && selected.value.e).toBe(
+					strongExponent,
+				);
 			}
 		}
 	});
@@ -410,7 +412,7 @@ describe('parseJwks limits and preservation', () => {
 		}
 	});
 
-	it('keeps every member of the document, of RSA entries and of unsupported entries', async () => {
+	it('keeps every member of the document, of RSA/EC entries and of unsupported entries', async () => {
 		const rsa = {
 			...(await rsaJwkEntry(primary, { kid: 'a' })),
 			x5c: ['AAAA'],
@@ -424,7 +426,7 @@ describe('parseJwks limits and preservation', () => {
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.value.members).toEqual(document);
 		expect(result.value.keys.map((entry) => entry.members)).toEqual([rsa, ec, broken]);
-		expect(result.value.keys[1]).toMatchObject({ kind: 'unsupported', kty: 'EC' });
+		expect(result.value.keys[1]).toMatchObject({ kind: 'ec', crv: 'P-256' });
 		expect(result.value.keys[2]).toMatchObject({ kind: 'unsupported', kty: 'RSA' });
 	});
 
