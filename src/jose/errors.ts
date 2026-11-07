@@ -60,8 +60,27 @@ export type VerifyJwsErrorCode = JwsParseErrorCode | KeyResolutionErrorCode | Jw
 /** Failure codes of {@linkcode verifyJwt}. */
 export type VerifyJwtErrorCode = VerifyJwsErrorCode | JwtClaimsErrorCode;
 
+/** Failures for the compact JWE profile. */
+export type JweErrorCode =
+	| 'invalid_options'
+	| 'token_too_large'
+	| 'malformed_token'
+	| 'invalid_encoding'
+	| 'invalid_utf8'
+	| 'invalid_json'
+	| 'duplicate_member'
+	| 'limit_exceeded'
+	| 'invalid_header'
+	| 'algorithm_not_allowed'
+	| 'encryption_not_allowed'
+	| 'key_unsuitable'
+	| 'unsupported_critical_header'
+	| 'unsupported_compression'
+	| 'encryption_failed'
+	| 'decryption_failed';
+
 /** Every code a JOSE API reports. */
-export type JoseErrorCode = VerifyJwtErrorCode;
+export type JoseErrorCode = VerifyJwtErrorCode | JweErrorCode;
 
 /**
  * Structured context for a failure. Holds names and short identifiers only, never token

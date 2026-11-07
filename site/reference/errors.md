@@ -613,9 +613,32 @@ Failure codes of `verifyJwt`: `VerifyJwsErrorCode` and `JwtClaimsErrorCode`.
 | `unsupported_nested_jwt`        | The `cty` is `JWT`                                                                         |
 | `unsupported_unencoded_payload` | The header requests an unencoded payload (`b64: false`)                                    |
 
+### JweErrorCode
+
+Compact JWE failures; no native backend details, plaintext or encrypted key is exposed.
+
+| Code                          | Meaning                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `invalid_options`             | invalid options.                                                          |
+| `token_too_large`             | token too large.                                                          |
+| `malformed_token`             | malformed token.                                                          |
+| `invalid_encoding`            | invalid encoding.                                                         |
+| `invalid_utf8`                | invalid utf8.                                                             |
+| `invalid_json`                | invalid json.                                                             |
+| `duplicate_member`            | duplicate member.                                                         |
+| `limit_exceeded`              | limit exceeded.                                                           |
+| `invalid_header`              | invalid header.                                                           |
+| `algorithm_not_allowed`       | algorithm not allowed.                                                    |
+| `encryption_not_allowed`      | The JWE content-encryption algorithm is outside the caller policy..       |
+| `key_unsuitable`              | key unsuitable.                                                           |
+| `unsupported_critical_header` | unsupported critical header.                                              |
+| `unsupported_compression`     | The JWE header requests compression..                                     |
+| `encryption_failed`           | The platform encryption operation failed..                                |
+| `decryption_failed`           | RSA unwrap, CEK or GCM authentication failure; deliberately one refusal.. |
+
 ### JoseErrorCode
 
-Every code a JOSE API reports; the same codes as `VerifyJwtErrorCode`.
+Every code a JOSE API reports: `VerifyJwtErrorCode` and `JweErrorCode`.
 
 | Code                            | Meaning                                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -651,6 +674,10 @@ Every code a JOSE API reports; the same codes as `VerifyJwtErrorCode`.
 | `unsupported_critical_header`   | The header lists `crit` extensions                                                         |
 | `unsupported_nested_jwt`        | The `cty` is `JWT`                                                                         |
 | `unsupported_unencoded_payload` | The header requests an unencoded payload (`b64: false`)                                    |
+| `decryption_failed`             | RSA unwrap, CEK or GCM authentication failure; deliberately one refusal.                   |
+| `encryption_failed`             | The platform encryption operation failed.                                                  |
+| `encryption_not_allowed`        | The JWE content-encryption algorithm is outside the caller policy.                         |
+| `unsupported_compression`       | The JWE header requests compression.                                                       |
 
 ### ParseJwksErrorCode
 

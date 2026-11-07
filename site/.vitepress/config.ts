@@ -327,6 +327,7 @@ const ORDER: SidebarOrder = {
 				'revocation',
 				'pkcs',
 				'jose',
+				'jose-jwe',
 				'extensions',
 			],
 		},

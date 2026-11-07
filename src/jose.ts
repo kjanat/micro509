@@ -1,5 +1,5 @@
 /**
- * Optional JOSE surface: signed compact JWS and JWT (RS256/384/512, ES256/384), JWK Sets, and opt-in remote JWKS
+ * Optional JOSE surface: compact JWE plus signed compact JWS and JWT (RS256/384/512, ES256/384), JWK Sets, and opt-in remote JWKS
  * resolution. Importing this entrypoint performs no network access.
  *
  * Start with {@linkcode verifyJwt} for tokens, {@linkcode createJwksKeyResolver} for a local
@@ -16,6 +16,7 @@ export type {
 	JoseErrorResult,
 	JoseFailure,
 	JoseResult,
+	JweErrorCode,
 	JwsParseErrorCode,
 	JwsPolicyErrorCode,
 	JwtClaimsErrorCode,
@@ -23,6 +24,15 @@ export type {
 	VerifyJwsErrorCode,
 	VerifyJwtErrorCode,
 } from '#micro509/jose/errors';
+export type {
+	DecryptedJwe,
+	DecryptJweOptions,
+	EncryptJweInput,
+	JweAlgorithm,
+	JweEncryption,
+	JweHeader,
+} from '#micro509/jose/jwe';
+export { decryptCompactJwe, encryptCompactJwe } from '#micro509/jose/jwe';
 export type {
 	EcJwkEntry,
 	JwkEntry,
