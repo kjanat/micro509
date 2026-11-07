@@ -16,6 +16,10 @@ A JWKS is a JSON document of public keys, usually identified by a `kid`.
 Successful verification returns the authenticated claims for your application to
 use in its authorization decisions.
 
+For key import/signing and routing authenticated claims into an application schema,
+see [JWT application recipes](./jose-integration.md). For an existing shared KV or
+database cache, see [application-owned JWKS caches](./jose-cache.md).
+
 ## Choose your verification inputs
 
 Supply these values from your application's configuration:

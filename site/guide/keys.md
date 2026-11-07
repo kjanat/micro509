@@ -4,6 +4,9 @@ outline: [2, 3]
 
 # Keys
 
+For JOSE key-operation mappings and functional JWT signing, see
+[JWT application recipes](./jose-integration.md).
+
 ## Generate a key pair
 
 <LiveCode>

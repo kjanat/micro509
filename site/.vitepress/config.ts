@@ -328,6 +328,8 @@ const ORDER: SidebarOrder = {
 				'pkcs',
 				'jose',
 				'jose-jwe',
+				'jose-integration',
+				'jose-cache',
 				'extensions',
 			],
 		},
