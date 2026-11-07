@@ -591,9 +591,35 @@ Generic signature verification's DER/raw retry does not apply to JWS. Unknown
 algorithms and algorithms outside the explicit caller allowlist are refused.
 Interoperability is exercised against independently signed jose tokens in
 `test/jose-algorithms.test.ts`; shared runtime smokes exercise the same profiles.
-This is not a claim of complete JOSE coverage: JWE, unsecured JWTs, JSON JWS
+This is not a claim of complete JOSE coverage: unsecured JWTs, JSON JWS
 serialization, nested JWTs, detached/unencoded payloads and critical-header
 extensions remain unsupported.
+
+## JOSE encryption boundary
+
+`encryptCompactJwe` and `decryptCompactJwe` implement single-recipient compact
+JWE with RSA-OAEP-512 (SHA-512 and MGF1-SHA-512, empty label) and A256GCM only.
+The latter fixes a 32-byte CEK, 12-byte IV and 16-byte tag
+([RFC 7518 §5.3](https://www.rfc-editor.org/rfc/rfc7518.html#section-5.3)); both
+CEK and IV are generated fresh. The original protected-header segment is ASCII
+AAD, including its original JSON spelling ([RFC 7516 §5.2](https://www.rfc-editor.org/rfc/rfc7516.html#section-5.2)).
+
+Explicit caller `alg` and `enc` allowlists and the exact OAEP CryptoKey hash,
+operation and key type are checked. Library policy bounds RSA to 2048–8192 bits.
+Existing JOSE bounds apply to token/header/plaintext/ciphertext, with
+`maxSignatureBytes` bounding the encrypted CEK. Duplicate JSON members, `zip`
+and all critical extensions are refused; unknown noncritical parameters remain
+available. RSA unwrap, wrong CEK length and GCM authentication failures have a
+single public error, and unwrap failure continues with a random replacement CEK
+([RFC 7516 §11.5](https://www.rfc-editor.org/rfc/rfc7516.html#section-11.5)). This is
+not a constant-time guarantee for JavaScript or the platform provider.
+
+Encryption authenticates ciphertext under the CEK, not sender identity. It does
+not decode JSON or validate nested JWTs. JSON JWE serialization, multi-recipient
+JWE, compression, external AAD and other key/content algorithms are unsupported.
+`test/jose-jwe.test.ts` covers jose 5 interoperability in both directions using
+independently exported PKCS8/SPKI keys, original AAD spelling, tampering of all
+five components, wrong-key/CEK failures and policy/bounds checks.
 
 ## 16. SSH key formats
 

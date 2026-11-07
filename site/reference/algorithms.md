@@ -52,8 +52,19 @@ RSA CryptoKeys must have the matching hash; EC CryptoKeys must have the exact
 curve. ECDSA signatures use fixed-width raw R || S, not DER. Verification always
 requires a caller-supplied algorithm allowlist. These profiles use standard
 WebCrypto operations across the [supported runtimes](./runtimes.md).
-JWE, PS256, ES512, EdDSA and unsecured JWTs are outside this JOSE scope even where
+PS256, ES512, EdDSA and unsecured JWTs are outside this JOSE scope even where
 generic key or signature operations support their underlying primitives.
+
+## JOSE encryption
+
+| Key management | Content encryption | Required key                                              | Encrypt / decrypt |
+| -------------- | ------------------ | --------------------------------------------------------- | ----------------- |
+| RSA-OAEP-512   | A256GCM            | RSA-OAEP/SHA-512, 2048–8192 bits, correct operation usage | yes               |
+
+The compact profile uses a fresh 32-byte CEK, 12-byte IV and 16-byte tag, protects
+all headers, refuses `zip` and critical extensions, and requires explicit `alg`
+and `enc` allowlists on decryption. Other JWE algorithms, JSON serialization,
+external AAD and compression are unsupported. See [compact JWE](../guide/jose-jwe.md).
 
 ## Key formats
 

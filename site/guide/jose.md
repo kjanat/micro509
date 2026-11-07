@@ -9,6 +9,8 @@ Use `micro509/jose` to sign JWTs with RS256, RS384, RS512, ES256 and ES384 and v
 audience and expiry. Verification accepts a public `CryptoKey`, a local JWK Set
 (JWKS), or a resolver that fetches an issuer's JWKS.
 
+For encrypted payloads, see [compact JWE](./jose-jwe.md).
+
 A JWT carries JSON claims. Its JWS signature covers the encoded header and claims.
 A JWKS is a JSON document of public keys, usually identified by a `kid`.
 Successful verification returns the authenticated claims for your application to

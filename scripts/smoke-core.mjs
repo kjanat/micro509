@@ -74,6 +74,7 @@ export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi, joseApi) {
 	await runArgon2Smoke(kdfApi);
 	await runSshSmoke(micro509, sshApi);
 	await runJoseSmoke(micro509, joseApi);
+	await runJweSmoke(micro509, joseApi);
 	return 'smoke OK';
 }
 
@@ -335,4 +336,45 @@ async function runExponentOneSmoke(joseApi, publicKey, now) {
 	if (direct.ok || direct.code !== 'key_unsuitable') {
 		throw new Error('smoke: CryptoKey accepted a public-material-only exponent-one forgery');
 	}
+}
+
+/**
+ * @param {typeof import('#micro509')} api
+ * @param {typeof import('#micro509/jose')} jose
+ */
+async function runJweSmoke(api, jose) {
+	const pair = await api.generateKeyPair({ kind: 'rsa', scheme: 'oaep', hash: 'SHA-512' });
+	const plaintext = new TextEncoder().encode('café 🦊');
+	const token = api.unwrap(
+		await jose.encryptCompactJwe({
+			publicKey: pair.publicKey,
+			plaintext,
+			algorithm: 'RSA-OAEP-512',
+			encryption: 'A256GCM',
+		}),
+	);
+	const options = {
+		privateKey: pair.privateKey,
+		keyManagementAlgorithms: /** @type {const} */ (['RSA-OAEP-512']),
+		contentEncryptionAlgorithms: /** @type {const} */ (['A256GCM']),
+	};
+	const result = api.unwrap(await jose.decryptCompactJwe(token, options));
+	if (new TextDecoder().decode(result.plaintext) !== 'café 🦊')
+		throw new Error('smoke: compact JWE round trip failed');
+	const parts = token.split('.');
+	const tag = jose.base64UrlDecode(parts[4] ?? '');
+	if (tag === undefined) throw new Error('smoke: invalid generated tag');
+	tag[0] = (tag[0] ?? 0) ^ 1;
+	parts[4] = jose.base64UrlEncode(tag);
+	const badTag = await jose.decryptCompactJwe(parts.join('.'), options);
+	parts[1] = '';
+	const badKeyLength = await jose.decryptCompactJwe(parts.join('.'), options);
+	if (
+		badTag.ok ||
+		badKeyLength.ok ||
+		badTag.code !== 'decryption_failed' ||
+		badKeyLength.code !== badTag.code ||
+		badTag.message !== badKeyLength.message
+	)
+		throw new Error('smoke: JWE authentication failures differ');
 }

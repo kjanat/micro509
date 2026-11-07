@@ -262,10 +262,10 @@ function maxEncodedLength(decodedBytes: number): number {
 	return Math.ceil((decodedBytes * 4) / 3);
 }
 
-function parseFailure(
-	code: JwsParseErrorCode,
+function parseFailure<TCode extends JwsParseErrorCode>(
+	code: TCode,
 	message: string,
-): JoseErrorResult<JwsParseErrorCode> {
+): JoseErrorResult<TCode> {
 	return joseFailure(code, message);
 }
 
@@ -285,28 +285,32 @@ function decodeSegment(
 }
 
 /** Decodes UTF-8 strictly and parses it as a JSON object with no duplicate members. */
-export function decodeJsonObject(
+export function decodeJsonObject<TCode extends 'invalid_header' | 'invalid_payload'>(
 	bytes: Uint8Array,
 	limits: JoseLimits,
 	name: string,
-	notObjectCode: 'invalid_header' | 'invalid_payload',
-): JoseResult<JsonObject, JwsParseErrorCode> {
+	notObjectCode: TCode,
+	serialization: 'JWS' | 'JWE' = 'JWS',
+): JoseResult<
+	JsonObject,
+	TCode | 'invalid_utf8' | 'invalid_json' | 'duplicate_member' | 'limit_exceeded'
+> {
 	let text: string;
 	try {
 		text = strictDecoder.decode(bytes);
 	} catch {
-		return parseFailure('invalid_utf8', `JWS ${name} is not valid UTF-8`);
+		return parseFailure('invalid_utf8', `${serialization} ${name} is not valid UTF-8`);
 	}
 	const parsed = parseStrictJson(text, {
 		maxDepth: limits.maxJsonDepth,
 		maxNodes: limits.maxJsonNodes,
 	});
 	if (!parsed.ok) {
-		return parseFailure(parsed.code, `JWS ${name}: ${parsed.message}`);
+		return parseFailure(parsed.code, `${serialization} ${name}: ${parsed.message}`);
 	}
 	const value = parsed.value;
 	if (!isJsonObject(value)) {
-		return parseFailure(notObjectCode, `JWS ${name} is not a JSON object`);
+		return parseFailure(notObjectCode, `${serialization} ${name} is not a JSON object`);
 	}
 	return successResult(value);
 }
