@@ -434,7 +434,10 @@ export function jwkEntryCacheKey(entry: SupportedJwkEntry, algorithm: JwsAlgorit
  * Creates a key resolver over a fixed JWK Set.
  *
  * The resolver selects with {@linkcode selectJwk} and imports each key once, so repeated
- * verifications reuse the same `CryptoKey`.
+ * verifications reuse the same `CryptoKey`. Keep one resolver per trusted source/snapshot and
+ * replace it when that snapshot changes so removed keys do not survive rotation.
+ *
+ * @see https://micro509.kjanat.dev/guide/jose-cache for application-owned raw JWKS caches.
  */
 export function createJwksKeyResolver(jwks: Jwks): JwsKeyResolver {
 	const imported = new Map<string, Promise<JoseResult<CryptoKey, 'key_unsuitable'>>>();
