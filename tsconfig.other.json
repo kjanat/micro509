@@ -26,6 +26,7 @@
 			"micro509": ["./src/index.ts"]
 		}
 	},
+	"files": ["./site/assets/fixtures/jose-migration.json"],
 	"include": [
 		"bench/argon2",
 		".config",
