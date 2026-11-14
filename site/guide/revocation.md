@@ -482,7 +482,11 @@ reason:     ${reason}`);
 ## Chain-level revocation
 
 `checkChainRevocation()` evaluates CRL **and** OCSP evidence for every
-certificate in a validated chain (the trust anchor is never checked). Each
+certificate in a validated chain (the trust anchor is never checked). When the
+path ends below a bare trust anchor, pass it as `trustAnchor`: the last
+certificate of the chain is then checked too, and the anchor's key signs its
+CRLs and OCSP responses or certifies their signers.
+`verifyCertificateChain()` does this for a path it builds to a bare anchor. Each
 OCSP response is fully validated — signature, responder binding and
 authorization, freshness — before its verdict is trusted, and a validated
 `revoked` verdict from either evidence kind always wins, regardless of

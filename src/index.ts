@@ -402,6 +402,8 @@ export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,
 	CandidatePath,
+	CandidatePathAnchor,
+	CandidatePathCertificates,
 	CertificateSource,
 	ChainRevocationInput,
 	ConstrainedPolicy,

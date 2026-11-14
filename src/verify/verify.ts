@@ -84,7 +84,7 @@ import type {
 	RevocationPolicy,
 	TrustedOcspResponder,
 } from '#micro509/revocation/chain';
-import { checkChainRevocationWith } from '#micro509/revocation/chain';
+import { checkChainRevocation } from '#micro509/revocation/chain';
 import { assertCrlMaxAge } from '#micro509/revocation/crl';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from '#micro509/verify/identity';
@@ -319,22 +319,27 @@ export interface BuildCandidatePathInput {
 }
 
 /** A signature-verified certification path from leaf to root, before constraint validation. */
-export interface CandidatePath {
+export type CandidatePath = CandidatePathCertificates & CandidatePathAnchor;
+
+/** The certificates of a {@linkcode CandidatePath}. */
+export interface CandidatePathCertificates {
 	/** Parsed end-entity certificate. */
 	readonly leaf: ParsedCertificate;
 	/** Full chain in leaf-to-root order (includes both leaf and root). */
 	readonly chain: readonly ParsedCertificate[];
 	/** Trusted root that terminates the path. */
 	readonly root: ParsedCertificate;
-	/**
-	 * `true` when {@linkcode CandidatePath.root} is a trusted root certificate
-	 * included in {@linkcode CandidatePath.chain}; `false` when a bare trust
-	 * anchor verified the terminal certificate, which stays a path certificate.
-	 */
-	readonly anchorCertificateInChain: boolean;
-	/** Selected bare trust anchor, when the path terminates without a root certificate. */
-	readonly trustAnchor?: TrustAnchor;
 }
+
+/**
+ * How a {@linkcode CandidatePath} ends: `anchorCertificateInChain: true` when
+ * {@linkcode CandidatePathCertificates.root} is a trusted root certificate
+ * included in the chain; `false` with the selected bare `trustAnchor` when that
+ * anchor verified the terminal certificate, which stays a path certificate.
+ */
+export type CandidatePathAnchor =
+	| { readonly anchorCertificateInChain: true; readonly trustAnchor?: never }
+	| { readonly anchorCertificateInChain: false; readonly trustAnchor: TrustAnchor };
 
 /** Result of {@linkcode buildCandidatePath}. On success, contains the {@linkcode CandidatePath}. */
 export type BuildCandidatePathResult =
@@ -780,8 +785,9 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 			leaf,
 			chain,
 			root,
-			anchorCertificateInChain: buildResult.anchorCertificateInChain ?? true,
-			...(buildResult.trustAnchor !== undefined && { trustAnchor: buildResult.trustAnchor }),
+			...(buildResult.trustAnchor === undefined
+				? { anchorCertificateInChain: true }
+				: { anchorCertificateInChain: false, trustAnchor: buildResult.trustAnchor }),
 		},
 	};
 }
@@ -1436,31 +1442,26 @@ async function validateVerifiedChainRevocation(
 	path: CandidatePath,
 ): Promise<VerifyChainResult | undefined> {
 	if (input.revocation === undefined) return undefined;
-	const anchorKey =
-		path.anchorCertificateInChain || path.trustAnchor === undefined
-			? undefined
-			: anchorWorkingKey(path.trustAnchor);
-	const revocationResult = await checkChainRevocationWith(
-		{
-			chain: path.chain,
-			...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
-			...(input.revocation.ocspResponses !== undefined
-				? { ocspResponses: input.revocation.ocspResponses }
-				: {}),
-			...(input.revocation.extraCertificates !== undefined
-				? { extraCertificates: input.revocation.extraCertificates }
-				: {}),
-			...(input.revocation.trustedOcspResponders !== undefined
-				? { trustedOcspResponders: input.revocation.trustedOcspResponders }
-				: {}),
-			...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
-			...(input.at !== undefined ? { at: input.at } : {}),
-			...(input.signatureVerifiers !== undefined
-				? { signatureVerifiers: input.signatureVerifiers }
-				: {}),
-		},
-		anchorKey,
-	);
+	const trustAnchor = path.trustAnchor;
+	const revocationResult = await checkChainRevocation({
+		chain: path.chain,
+		...(trustAnchor !== undefined && { trustAnchor }),
+		...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
+		...(input.revocation.ocspResponses !== undefined
+			? { ocspResponses: input.revocation.ocspResponses }
+			: {}),
+		...(input.revocation.extraCertificates !== undefined
+			? { extraCertificates: input.revocation.extraCertificates }
+			: {}),
+		...(input.revocation.trustedOcspResponders !== undefined
+			? { trustedOcspResponders: input.revocation.trustedOcspResponders }
+			: {}),
+		...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
+		...(input.at !== undefined ? { at: input.at } : {}),
+		...(input.signatureVerifiers !== undefined
+			? { signatureVerifiers: input.signatureVerifiers }
+			: {}),
+	});
 	return revocationResult.value.decision === 'deny'
 		? revocationFailureResult(revocationResult.value)
 		: undefined;

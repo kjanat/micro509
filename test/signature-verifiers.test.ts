@@ -189,7 +189,9 @@ describe('signatureVerifiers', () => {
 				trustAnchors: [trustAnchorFromCertificate(unwrap(parseCertificateDer(dsaCa)))],
 				at,
 				signatureVerifiers: dsaSignatureVerifiers,
-				revocation: { crls: [await pkitsCrl('DSAParametersInheritedCACRL')] },
+				revocation: {
+					crls: await Promise.all(['DSACACRL', 'DSAParametersInheritedCACRL'].map(pkitsCrl)),
+				},
 			}),
 		).toMatchObject({ ok: true });
 	});

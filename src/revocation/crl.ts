@@ -84,6 +84,7 @@ import {
 	successResult,
 	throwMicro509Error,
 } from '#micro509/result/result';
+import type { TrustAnchor } from '#micro509/verify/verify';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -949,8 +950,21 @@ async function validateCrlWith(
 	input: ValidateCertificateRevocationListInput,
 	verification: CallerVerification,
 ): Promise<ValidateCertificateRevocationListResult> {
+	return await validateCrlBy(
+		input,
+		{ kind: 'certificate', certificate: input.issuerCertificate },
+		verification,
+	);
+}
+
+/** {@linkcode validateCertificateRevocationList} for a CRL that `authority` signs. */
+async function validateCrlBy(
+	input: Omit<ValidateCertificateRevocationListInput, 'issuerCertificate'>,
+	authority: CrlAuthority,
+	verification: CallerVerification,
+): Promise<ValidateCertificateRevocationListResult> {
 	assertCrlMaxAge(input.maxAgeMs);
-	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate, verification);
+	const authenticated = await authenticateCrl(input.crl, authority, verification);
 	if (!authenticated.ok) {
 		return authenticated;
 	}
@@ -966,14 +980,35 @@ async function validateCrlWith(
 }
 
 /**
+ * The key that signs a CRL: a CA certificate, or a bare trust anchor, which
+ * X.509 (2019) §7.5 lets issue CRLs that its own key verifies.
+ *
+ * @internal
+ */
+export type CrlAuthority =
+	| { readonly kind: 'certificate'; readonly certificate: CrlCertificateSource }
+	| { readonly kind: 'trust_anchor'; readonly trustAnchor: TrustAnchor };
+
+/** The signing key of a resolved {@linkcode CrlAuthority}. */
+type CrlSigningKey = Pick<
+	TrustAnchor,
+	| 'subject'
+	| 'subjectKeyIdentifier'
+	| 'subjectPublicKeyInfoDer'
+	| 'publicKeyAlgorithmOid'
+	| 'publicKeyParametersOid'
+>;
+
+/**
  * Verifies the issuer binding, cRLSign permission and signature of `crl`
- * against `issuerCertificate`, without freshness checks.
+ * against `authority`, without freshness checks. A trust anchor carries no
+ * certificate, so the RFC 10007 §4 key usage check applies to certificates only.
  *
  * @internal
  */
 export async function authenticateCrl(
 	crl: CrlSource,
-	issuerCertificate: CrlCertificateSource,
+	authority: CrlAuthority,
 	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<ValidateCertificateRevocationListResult> {
 	let parsedCrl: ParsedCertificateRevocationList;
@@ -988,18 +1023,9 @@ export async function authenticateCrl(
 				)
 			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
-	let issuer: ParsedCertificate;
-	try {
-		issuer = normalizeCrlCertificate(issuerCertificate);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		return refusal === undefined
-			? validateCertificateRevocationListFailureResult(
-					'signature_invalid',
-					'issuer certificate input is malformed',
-				)
-			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
-	}
+	const resolved = resolveCrlSigningKey(authority);
+	if (!resolved.ok) return resolved;
+	const { issuer, issuerCertificate } = resolved;
 	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
 			'issuer_mismatch',
@@ -1016,18 +1042,9 @@ export async function authenticateCrl(
 			'CRL authority key identifier does not match issuer subject key identifier',
 		);
 	}
-	if (issuer.keyUsage === undefined && issuer.version === 3) {
-		return validateCertificateRevocationListFailureResult(
-			'crl_sign_not_permitted',
-			'v3 issuer certificate has no key usage extension',
-		);
-	}
-	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('cRLSign')) {
-		return validateCertificateRevocationListFailureResult(
-			'crl_sign_not_permitted',
-			'issuer certificate key usage does not permit CRL signing',
-		);
-	}
+	const keyUsageFailure =
+		issuerCertificate === undefined ? undefined : crlSignFailure(issuerCertificate);
+	if (keyUsageFailure !== undefined) return keyUsageFailure;
 	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
 	try {
 		verifiedResult = await verifySignedDataDetailed(
@@ -1069,6 +1086,50 @@ export async function authenticateCrl(
 		);
 	}
 	return { ok: true, value: parsedCrl };
+}
+
+/** The signing key `authority` names, with its certificate when it has one. */
+function resolveCrlSigningKey(authority: CrlAuthority):
+	| {
+			readonly ok: true;
+			readonly issuer: CrlSigningKey;
+			readonly issuerCertificate: ParsedCertificate | undefined;
+	  }
+	| Extract<ValidateCertificateRevocationListResult, { readonly ok: false }> {
+	if (authority.kind === 'trust_anchor') {
+		return { ok: true, issuer: authority.trustAnchor, issuerCertificate: undefined };
+	}
+	try {
+		const issuerCertificate = normalizeCrlCertificate(authority.certificate);
+		return { ok: true, issuer: issuerCertificate, issuerCertificate };
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'issuer certificate input is malformed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
+	}
+}
+
+/** RFC 10007 §4: a v3 CRL issuer certificate must carry key usage asserting cRLSign. */
+function crlSignFailure(
+	issuer: ParsedCertificate,
+): Extract<ValidateCertificateRevocationListResult, { readonly ok: false }> | undefined {
+	if (issuer.keyUsage === undefined && issuer.version === 3) {
+		return validateCertificateRevocationListFailureResult(
+			'crl_sign_not_permitted',
+			'v3 issuer certificate has no key usage extension',
+		);
+	}
+	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('cRLSign')) {
+		return validateCertificateRevocationListFailureResult(
+			'crl_sign_not_permitted',
+			'issuer certificate key usage does not permit CRL signing',
+		);
+	}
+	return undefined;
 }
 
 export function assertCrlMaxAge(maxAgeMs: number | undefined): void {
@@ -1164,7 +1225,29 @@ export async function checkCertificateRevocationAgainstCrlWith(
 				)
 			: checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 	}
-	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate, verification);
+	return await checkCertificateRevocationAgainstCrlBy(
+		certificate,
+		input.crl,
+		{ kind: 'certificate', certificate: input.issuerCertificate },
+		input,
+		verification,
+	);
+}
+
+/**
+ * {@linkcode checkCertificateRevocationAgainstCrl} for a CRL that `authority`
+ * signs, which may be a bare trust anchor.
+ *
+ * @internal
+ */
+export async function checkCertificateRevocationAgainstCrlBy(
+	certificate: ParsedCertificate,
+	crl: CrlSource,
+	authority: CrlAuthority,
+	options: CrlCheckOptions,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	const authenticated = await authenticateCrl(crl, authority, verification);
 	if (!authenticated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(
 			authenticated.code,
@@ -1174,7 +1257,8 @@ export async function checkCertificateRevocationAgainstCrlWith(
 	const outcome = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
 		authenticated.value,
-		input,
+		authority,
+		options,
 		verification,
 	);
 	return outcome.kind === 'checked' ? outcome.result : outcome.failure;
@@ -1199,16 +1283,23 @@ export type AuthenticatedCrlCheckOutcome =
 			readonly complete: CheckCertificateRevocationAgainstCrlResult;
 	  };
 
+/** The options of a CRL check once its certificate, CRL and authority are resolved. */
+export type CrlCheckOptions = Omit<
+	CheckCertificateRevocationAgainstCrlInput,
+	'certificate' | 'issuerCertificate' | 'crl'
+>;
+
 /**
  * Checks `certificate` against a complete CRL that {@linkcode authenticateCrl}
- * accepted for `input.issuerCertificate`, updated by `input.deltaCrl` when given.
+ * accepted for `authority`, updated by `input.deltaCrl` when given.
  *
  * @internal
  */
 export async function checkRevocationAgainstAuthenticatedCrl(
 	certificate: ParsedCertificate,
 	completeCrl: ParsedCertificateRevocationList,
-	input: CheckCertificateRevocationAgainstCrlInput,
+	authority: CrlAuthority,
+	input: CrlCheckOptions,
 	verification: CallerVerification = callerVerification(input.signatureVerifiers),
 ): Promise<AuthenticatedCrlCheckOutcome> {
 	if (input.deltaCrl === undefined) {
@@ -1225,7 +1316,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 			};
 		}
 	}
-	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl, verification);
+	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl, authority, verification);
 	if (!deltaResult.ok) return { kind: 'delta_rejected', failure: deltaResult };
 	const deltaCrl = deltaResult.value;
 	const applicability = checkCrlApplicability(certificate, completeCrl);
@@ -1293,21 +1384,22 @@ function interimReasonsMask(
 
 /** Validates an optional delta CRL and checks compatibility with its complete CRL. */
 async function validateOptionalDeltaCrl(
-	input: CheckCertificateRevocationAgainstCrlInput,
+	input: CrlCheckOptions,
 	completeCrl: ParsedCertificateRevocationList,
+	authority: CrlAuthority,
 	verification: CallerVerification,
 ): Promise<
 	{ readonly ok: true; readonly value?: ParsedCertificateRevocationList } | CrlApplicabilityFailure
 > {
 	if (input.deltaCrl === undefined) return { ok: true };
-	const deltaValidation = await validateCrlWith(
+	const deltaValidation = await validateCrlBy(
 		{
 			crl: input.deltaCrl,
-			issuerCertificate: input.issuerCertificate,
 			...(input.at === undefined ? {} : { at: input.at }),
 			...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 			...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
 		},
+		authority,
 		verification,
 	);
 	if (!deltaValidation.ok) {

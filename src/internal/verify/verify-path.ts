@@ -64,15 +64,14 @@ export interface InternalBuildResult {
 	readonly failure?: VerifyChainFailure;
 }
 
-/** Result of attempting to match a certificate against bare trust anchors. */
-interface TrustAnchorMatchResult {
-	/** `true` if a trust anchor verified the certificate's signature. */
-	readonly matched: boolean;
-	/** Selected bare trust anchor on success. */
-	readonly anchor?: TrustAnchor;
-	/** Failure to report when matching was attempted but signature verification failed. */
-	readonly failure?: VerifyChainFailure;
-}
+/**
+ * Result of attempting to match a certificate against bare trust anchors: the
+ * anchor that verified its signature, or the failure to report when matching
+ * was attempted and no anchor verified it.
+ */
+type TrustAnchorMatchResult =
+	| { readonly matched: true; readonly anchor: TrustAnchor }
+	| { readonly matched: false; readonly failure?: VerifyChainFailure };
 
 type IssuerCandidateEvaluation =
 	| { readonly ok: true; readonly nextCaBelowCount: number }
@@ -281,6 +280,19 @@ export function anchorWorkingKey(anchor: {
 	};
 }
 
+/** Whether `certificate` carries `anchor`'s name and public key: the anchor's own certificate. */
+export function carriesTrustAnchorKey(
+	certificate: ParsedCertificate,
+	anchor: TrustAnchor,
+): boolean {
+	const key = anchor.subjectPublicKeyInfoDer;
+	return (
+		compareDistinguishedNames(certificate.subject, anchor.subject) &&
+		certificate.subjectPublicKeyInfoDer.length === key.length &&
+		certificate.subjectPublicKeyInfoDer.every((byte, index) => byte === key[index])
+	);
+}
+
 /** The working key a certificate used as trust anchor initializes. */
 export function certificateWorkingKey(certificate: ParsedCertificate): WorkingPublicKey {
 	return {
@@ -443,13 +455,12 @@ export async function buildChainInternal(
 	const startFingerprint = fingerprint(leaf);
 	const success = await search(leaf, [leaf], new Set([startFingerprint]), 0, []);
 	if (success !== undefined) {
-		const terminal = success[success.length - 1];
 		return {
 			chain: success,
 			foundTrustedRoot: true,
-			...(selectedAnchor !== undefined && { trustAnchor: selectedAnchor }),
-			anchorCertificateInChain:
-				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
+			...(selectedAnchor === undefined
+				? { anchorCertificateInChain: true }
+				: { anchorCertificateInChain: false, trustAnchor: selectedAnchor }),
 		};
 	}
 	const owner = best.current;
@@ -538,15 +549,12 @@ export async function buildChainInternal(
 			distrust,
 		);
 		if (budget.exhausted) return undefined;
-		if (matchedAnchor.failure !== undefined) {
-			recordFailure(matchedAnchor.failure, path);
+		if (!matchedAnchor.matched) {
+			if (matchedAnchor.failure !== undefined) recordFailure(matchedAnchor.failure, path);
+			return 'open';
 		}
-		if (!matchedAnchor.matched) return 'open';
 		const anchor = matchedAnchor.anchor;
-		if (
-			anchor !== undefined &&
-			!(await verifyInheritedLinks(path, pending, anchorWorkingKey(anchor), path.length - 1))
-		) {
+		if (!(await verifyInheritedLinks(path, pending, anchorWorkingKey(anchor), path.length - 1))) {
 			return 'open';
 		}
 		selectedAnchor = anchor;
