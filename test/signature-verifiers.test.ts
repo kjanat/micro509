@@ -8,6 +8,7 @@ import { unwrap } from '#micro509/result';
 import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
+	checkChainRevocation,
 	validateCertificateRevocationList,
 	validateOcspResponse,
 	verifyCertificateRevocationListSignature,
@@ -17,6 +18,7 @@ import {
 	buildCandidatePath,
 	trustAnchorFromCertificate,
 	validateCandidatePath,
+	validateForTlsServer,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
 } from '#micro509/verify';
@@ -373,11 +375,41 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 		if (validated.ok) expect(validated.value.responses?.[0]?.certStatus).toBe('good');
 	});
 
-	it('checks DSA revocation evidence through verifyCertificateChain', async () => {
-		const base = { leaf: dsaLeaf, roots: [dsaCaCert], signatureVerifiers: dsaSignatureVerifiers };
-		for (const revocation of [{ crls: [dsaCrl] }, { ocspResponses: [dsaOcspResponse] }]) {
-			expect(await verifyCertificateChain({ ...base, revocation })).toMatchObject({ ok: true });
-		}
+	it.each([
+		{ kind: 'CRL', evidence: { crls: [dsaCrl] } },
+		{ kind: 'OCSP', evidence: { ocspResponses: [dsaOcspResponse] } },
+	])('checks DSA $kind evidence for a chain', async ({ evidence }) => {
+		const chain = [unwrap(parseCertificateDer(dsaLeaf)), unwrap(parseCertificateDer(dsaCaCert))];
+		const unchecked = await checkChainRevocation({ chain, ...evidence });
+		expect(unchecked.value.summary.indeterminateCertificates).toHaveLength(1);
+		const checked = await checkChainRevocation({
+			chain,
+			...evidence,
+			signatureVerifiers: dsaSignatureVerifiers,
+		});
+		expect(checked.value).toMatchObject({
+			decision: 'allow',
+			summary: { revokedCertificates: [], indeterminateCertificates: [] },
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: dsaLeaf,
+				roots: [dsaCaCert],
+				signatureVerifiers: dsaSignatureVerifiers,
+				revocation: evidence,
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it('validates a DSA chain through validateForTlsServer', async () => {
+		const input = { leaf: dsaLeaf, roots: [dsaCaCert] };
+		expect(await validateForTlsServer(input)).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		expect(
+			await validateForTlsServer({ ...input, signatureVerifiers: dsaSignatureVerifiers }),
+		).toMatchObject({ ok: true });
 	});
 
 	it('verifies a CRL signed by a CA that inherits its DSA parameters along the chain', async () => {
