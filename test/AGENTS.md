@@ -30,6 +30,7 @@ test/
 | PKCS coverage             | `pkcs7.test.ts`, `pkcs7-signeddata.test.ts`, `pfx.test.ts` | SignedData lifecycle, signer pairing, PFX bundles                                               |
 | Docs example execution    | `guide-examples.test.ts`                                   | runs twice: generated output varies, fixed-fixture output matches                               |
 | README example execution  | `readme-examples.test.ts`                                  | every README ts fence executes and compiles with zero diagnostics                               |
+| TLS client recipe         | `peer-authentication.test.ts`                              | runs the `recipes.md` client-auth function on chains from a real `node:tls` handshake           |
 | JOSE coverage             | `jose-*.test.ts`                                           | codec, JWS, JWT claims, JWKS, remote JWKS over a local `Bun.serve` fixture, interop with `jose` |
 | Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus                                                           |
 | Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries                                                           |
