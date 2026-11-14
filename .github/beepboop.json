@@ -1,69 +1,69 @@
 {
-  "$schema": "https://beepboop.kjanat.dev/schema/v1.json",
-  "streams": {
-    "main": {
-      "packages": ["pkg:npm/micro509", "pkg:jsr/%40kjanat/micro509"],
-      "versionScope": "one-for-stream",
-      "mustPublish": ["pkg:jsr/%40kjanat/micro509", "pkg:npm/micro509"],
-      "workflows": {
-        "publish": {
-          "file": "publish.yml",
-          "mode": "observe",
-          "ref": "refs/tags/v*",
-          "publications": ["pkg:jsr/%40kjanat/micro509", "pkg:npm/micro509"]
-        }
-      },
-      "prepare": {
-        "strategy": "managed",
-        "workflow": {
-          "setup": {
-            "commands": "curl -fsSL https://bun.sh/install | bash\nexport PATH=\"$HOME/.bun/bin:$PATH\"\nbun install\nbun run build\nbun run typecheck"
-          },
-          "file": "prepare-release.yml",
-          "ref": "master"
-        },
-        "versionLands": "via-version-pr"
-      },
-      "promote": {
-        "publishWhen": "version-pr-merged",
-        "workflow": {
-          "setup": {
-            "tagPrefix": "v"
-          },
-          "file": "release.yml",
-          "ref": "master",
-          "publications": [],
-          "refs": {
-            "phase": "version",
-            "prefix": "v"
-          }
-        }
-      },
-      "startFrom": [
-        {
-          "via": "action",
-          "workflow": "start-release.yml"
-        },
-        {
-          "via": "dashboard"
-        },
-        {
-          "via": "cli"
-        }
-      ]
-    },
-    "openssl": {
-      "packages": [],
-      "versionScope": "none",
-      "mustPublish": [],
-      "workflows": {
-        "openssl": {
-          "file": "openssl.yml",
-          "mode": "observe",
-          "publications": []
-        }
-      }
-    }
-  },
-  "managers": ["jsr", "npm", "workflow"]
+	"$schema": "https://beepboop.kjanat.dev/schema/v1.json",
+	"streams": {
+		"main": {
+			"packages": ["pkg:npm/micro509", "pkg:jsr/%40kjanat/micro509"],
+			"versionScope": "one-for-stream",
+			"mustPublish": ["pkg:jsr/%40kjanat/micro509", "pkg:npm/micro509"],
+			"workflows": {
+				"publish": {
+					"file": "publish.yml",
+					"mode": "observe",
+					"ref": "refs/tags/v*",
+					"publications": ["pkg:jsr/%40kjanat/micro509", "pkg:npm/micro509"]
+				}
+			},
+			"prepare": {
+				"strategy": "managed",
+				"workflow": {
+					"setup": {
+						"commands": "curl -fsSL https://bun.sh/install | bash\nexport PATH=\"$HOME/.bun/bin:$PATH\"\nbun install\nbun run build\nbun run typecheck"
+					},
+					"file": "prepare-release.yml",
+					"ref": "master"
+				},
+				"versionLands": "via-version-pr"
+			},
+			"promote": {
+				"publishWhen": "version-pr-merged",
+				"workflow": {
+					"setup": {
+						"tagPrefix": "v"
+					},
+					"file": "release.yml",
+					"ref": "master",
+					"publications": [],
+					"refs": {
+						"phase": "version",
+						"prefix": "v"
+					}
+				}
+			},
+			"startFrom": [
+				{
+					"via": "action",
+					"workflow": "start-release.yml"
+				},
+				{
+					"via": "dashboard"
+				},
+				{
+					"via": "cli"
+				}
+			]
+		},
+		"openssl": {
+			"packages": [],
+			"versionScope": "none",
+			"mustPublish": [],
+			"workflows": {
+				"openssl": {
+					"file": "openssl.yml",
+					"mode": "observe",
+					"publications": []
+				}
+			}
+		}
+	},
+	"managers": ["jsr", "npm", "workflow"]
 }
