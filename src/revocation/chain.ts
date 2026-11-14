@@ -1458,6 +1458,7 @@ function distinctSignedCrls(
 			crl.signatureAlgorithmOid,
 			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
 			toHex(crl.signatureValue),
+			crl.signatureValueUnusedBits,
 			toHex(crl.tbsCertListDer),
 		].join(':');
 		if (seen.has(key)) {

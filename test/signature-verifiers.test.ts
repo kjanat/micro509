@@ -2,7 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { SignatureVerifierInput, SignatureVerifiers } from '#micro509/crypto';
 import { verifySignature } from '#micro509/crypto';
-import { readSequenceChildren } from '#micro509/internal/asn1/der';
+import {
+	bitString,
+	explicitContext,
+	octetString,
+	readSequenceChildren,
+	sequence,
+} from '#micro509/internal/asn1/der';
 import { verifyPkcs7SignedData } from '#micro509/pkcs';
 import { unwrap } from '#micro509/result';
 import {
@@ -23,7 +29,7 @@ import {
 	verifyCertificateSigningRequest,
 } from '#micro509/verify';
 import { parseCertificateDer } from '#micro509/x509';
-import { callUntyped, issueChain } from '#test/helpers';
+import { callUntyped, issueChain, sliceElement, withSignatureValue } from '#test/helpers';
 import { DSA_WITH_SHA1, DSA_WITH_SHA256, dsaSignatureVerifiers } from '#test/oracles/dsa';
 
 const at = new Date('2011-04-15T00:00:00Z');
@@ -122,6 +128,7 @@ describe('signatureVerifiers', () => {
 				signerSpkiDer: unwrap(parseCertificateDer(dsaCa)).subjectPublicKeyInfoDer,
 				signerPublicKeyParametersDer: keyParameters(dsaCa),
 				signature: leaf.signatureValue,
+				signatureUnusedBits: 0,
 				data: leaf.tbsCertificateDer,
 			});
 		}
@@ -504,3 +511,101 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 		).toMatchObject({ ok: false, code: 'invalid_options' });
 	});
 });
+
+function withUnusedSignatureBit(signedDer: Uint8Array): Uint8Array {
+	const signature = readSequenceChildren(signedDer)[2];
+	if (signature?.tag !== 0x03) throw new Error('expected a signatureValue BIT STRING');
+	return withSignatureValue(
+		signedDer,
+		bitString(Uint8Array.of(...signature.value.subarray(1), 0x00), 1),
+	);
+}
+
+function ocspWithUnusedSignatureBit(responseDer: Uint8Array): Uint8Array {
+	const [status, responseBytes] = readSequenceChildren(responseDer);
+	if (status === undefined || responseBytes?.tag !== 0xa0)
+		throw new Error('expected responseBytes');
+	const [responseType, response] = readSequenceChildren(responseBytes.value);
+	if (responseType === undefined || response?.tag !== 0x04) throw new Error('expected response');
+	return sequence([
+		sliceElement(responseDer, status),
+		explicitContext(
+			0,
+			sequence([
+				sliceElement(responseBytes.value, responseType),
+				octetString(withUnusedSignatureBit(response.value)),
+			]),
+		),
+	]);
+}
+
+describe('signatureValue with unused bits (RFC 3279 §2.2)', () => {
+	it('fails a natively verified signature whose bytes verify once the unused bit is dropped', async () => {
+		const chain = await evenSignatureChain();
+		const signature = readSequenceChildren(chain.leaf.der)[2];
+		if (signature === undefined) throw new Error('expected a signatureValue');
+		const leaf = withSignatureValue(chain.leaf.der, bitString(signature.value.subarray(1), 1));
+		const input = { intermediates: [chain.intermediate.der], roots: [chain.root.certificate.der] };
+		expect(await verifyCertificateChain({ ...input, leaf: chain.leaf.der })).toMatchObject({
+			ok: true,
+		});
+		expect(await verifyCertificateChain({ ...input, leaf })).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+			index: 0,
+		});
+	});
+
+	it.each([
+		{
+			kind: 'certificate',
+			verify: (verifiers: SignatureVerifiers) =>
+				verifyCertificateChain({
+					leaf: withUnusedSignatureBit(dsaLeaf),
+					roots: [dsaCaCert],
+					signatureVerifiers: verifiers,
+				}),
+		},
+		{
+			kind: 'CSR',
+			verify: async (verifiers: SignatureVerifiers) =>
+				verifyCertificateSigningRequest(withUnusedSignatureBit(await dsaFixture('leaf-csr')), {
+					signatureVerifiers: verifiers,
+				}),
+		},
+		{
+			kind: 'CRL',
+			verify: (verifiers: SignatureVerifiers) =>
+				verifyCertificateRevocationListSignature(withUnusedSignatureBit(dsaCrl), dsaCaCert, {
+					signatureVerifiers: verifiers,
+				}),
+		},
+		{
+			kind: 'OCSP response',
+			verify: (verifiers: SignatureVerifiers) =>
+				verifyOcspResponseSignature(ocspWithUnusedSignatureBit(dsaOcspResponse), dsaCaCert, {
+					signatureVerifiers: verifiers,
+				}),
+		},
+	])('parses a DSA $kind and hands the verifier its unused bits', async ({ verify }) => {
+		const inputs: SignatureVerifierInput[] = [];
+		const verifiers: SignatureVerifiers = {
+			[DSA_WITH_SHA256]: (input) => {
+				inputs.push(input);
+				return dsaSignatureVerifiers[DSA_WITH_SHA256]?.(input) ?? Promise.resolve(false);
+			},
+		};
+		expect(await verify(verifiers)).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(inputs.length).toBeGreaterThan(0);
+		for (const input of inputs) expect(input.signatureUnusedBits).toBe(1);
+	});
+});
+
+async function evenSignatureChain(): ReturnType<typeof issueChain> {
+	for (let attempt = 0; attempt < 64; attempt += 1) {
+		const chain = await issueChain();
+		const signature = readSequenceChildren(chain.leaf.der)[2]?.value;
+		if (signature !== undefined && ((signature[signature.length - 1] ?? 1) & 1) === 0) return chain;
+	}
+	throw new Error('no ECDSA signature ending in a zero bit after 64 chains');
+}

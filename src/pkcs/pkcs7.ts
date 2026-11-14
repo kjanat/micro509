@@ -1035,6 +1035,7 @@ async function verifyPkcs7BareSignerInfo(
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,
 			signerInfo.signature,
+			0,
 			content,
 			verification,
 		);
@@ -1661,6 +1662,7 @@ async function verifySignedAttrs(
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,
 			signerInfo.signature,
+			0,
 			signedData,
 			verification,
 		);

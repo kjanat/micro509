@@ -149,6 +149,7 @@ export async function verifySignature(input: VerifySignatureInput): Promise<Veri
 			input.publicKeyAlgorithm.parametersOid,
 			input.signerSpkiDer,
 			input.signature,
+			0,
 			input.data,
 			callerVerification(input.signatureVerifiers),
 		);

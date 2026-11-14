@@ -18,6 +18,7 @@ import {
 	hexToBytes,
 	parseTime,
 	requireElement,
+	signatureBits,
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
@@ -270,8 +271,10 @@ export interface ParsedOcspResponse {
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** Human-readable signature algorithm name. */
 	readonly signatureAlgorithmName?: string;
-	/** Raw signature bytes. */
+	/** Signature bytes: the `signature` BIT STRING content after its unused-bit count. */
 	readonly signatureValue?: Uint8Array;
+	/** Unused bits in the final octet of {@linkcode signatureValue}, 0 through 7. */
+	readonly signatureValueUnusedBits?: number;
 	/** Timestamp when the responder produced this response. */
 	readonly producedAt?: Date;
 	/** Per-certificate status entries. */
@@ -846,7 +849,7 @@ export function parseOcspResponseDerOrThrow(der: Uint8Array): ParsedOcspResponse
 			signatureAlgorithmOid,
 			signatureAlgorithmParametersDer,
 		),
-		signatureValue: extractBitStringValue(signatureValue),
+		...signatureBits(signatureValue),
 		producedAt: signedResponseData.producedAt,
 		responses: signedResponseData.responses,
 		...(signedResponseData.nonce === undefined ? {} : { nonce: signedResponseData.nonce }),
@@ -1083,6 +1086,7 @@ async function verifyOcspResponseSignatureWith(
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,
 			parsed.signatureValue,
+			parsed.signatureValueUnusedBits ?? 0,
 			parsed.responseDataDer,
 			verification,
 		);

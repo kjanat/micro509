@@ -455,7 +455,7 @@ describe('asn1 decoding', () => {
 			'Invalid BIT STRING',
 		);
 		expect(() => extractBitStringValue(readElement(Uint8Array.of(0x03, 0x02, 0x01, 0x80)))).toThrow(
-			'zero unused bits',
+			'not a whole number of octets',
 		);
 	});
 
@@ -1032,6 +1032,7 @@ describe('sig-verify', () => {
 			undefined,
 			Uint8Array.of(0x30, 0x00),
 			Uint8Array.of(0x00),
+			0,
 			Uint8Array.of(0x00),
 		);
 		expect(result).toMatchObject({ ok: false, code: 'verification_error' });

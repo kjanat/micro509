@@ -404,9 +404,10 @@ verifier only for a signature it would otherwise refuse with that code. A key
 for an algorithm micro509 verifies natively throws `RangeError`.
 
 A verifier receives the signature algorithm, the signer's
-SubjectPublicKeyInfo, the key parameters to verify with, the signature and the
-signed bytes. It resolves `true` for a valid signature. Any other resolution,
-or a rejection, counts as an invalid signature. When the signer's key
+SubjectPublicKeyInfo, the key parameters to verify with, the signature, the
+unused bits of its `signatureValue` BIT STRING and the signed bytes. It
+resolves `true` for a valid signature. Any other resolution, or a rejection,
+counts as an invalid signature. When the signer's key
 omits its parameters, `signerPublicKeyParametersDer` carries the parameters it
 inherits along the path, as [RFC 5280 §6.1.4 (e)][rfc5280-section-6.1.4] and
 [RFC 3279 §2.3.2][rfc3279-section-2.3.2] describe for DSA. It is absent when

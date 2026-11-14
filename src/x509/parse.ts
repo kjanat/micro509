@@ -20,6 +20,7 @@ import {
 	extractBitStringValue,
 	parseTime,
 	requireElement,
+	signatureBits,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
@@ -403,8 +404,10 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly tbsCertificateDer: Uint8Array;
 	/** DER encoding of the SubjectPublicKeyInfo, used for key import. */
 	readonly subjectPublicKeyInfoDer: Uint8Array;
-	/** Raw signature bytes (BIT STRING content, padding removed). */
+	/** Signature bytes: the `signatureValue` BIT STRING content after its unused-bit count. */
 	readonly signatureValue: Uint8Array;
+	/** Unused bits in the final octet of {@linkcode signatureValue}, 0 through 7. */
+	readonly signatureValueUnusedBits: number;
 	/** Distinguished name of the certificate issuer. */
 	readonly issuer: ParsedName;
 	/** Distinguished name of the certificate subject. */
@@ -480,8 +483,10 @@ export interface ParsedCertificateSigningRequest<
 	readonly certificationRequestInfoDer: Uint8Array;
 	/** DER encoding of the SubjectPublicKeyInfo. */
 	readonly subjectPublicKeyInfoDer: Uint8Array;
-	/** Raw signature bytes (BIT STRING content, padding removed). */
+	/** Signature bytes: the `signatureValue` BIT STRING content after its unused-bit count. */
 	readonly signatureValue: Uint8Array;
+	/** Unused bits in the final octet of {@linkcode signatureValue}, 0 through 7. */
+	readonly signatureValueUnusedBits: number;
 	/** Distinguished name the requester wants on the certificate. */
 	readonly subject: ParsedName;
 	/** OID of the algorithm used to sign this CSR. */
@@ -610,7 +615,7 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 			fields.subjectPublicKeyInfo.start - fields.subjectPublicKeyInfo.headerLength,
 			fields.subjectPublicKeyInfo.end,
 		),
-		signatureValue: extractBitStringValue(signatureValue),
+		...signatureBits(signatureValue),
 		issuer: parseName(der, fields.issuer),
 		subject: parseName(der, fields.subject),
 		notBefore: parsedValidity.notBefore,
@@ -952,7 +957,7 @@ export function parseCertificateSigningRequestDerOrThrow<
 			fields.subjectPublicKeyInfo.start - fields.subjectPublicKeyInfo.headerLength,
 			fields.subjectPublicKeyInfo.end,
 		),
-		signatureValue: extractBitStringValue(signatureValue),
+		...signatureBits(signatureValue),
 		subject: parseName(der, fields.subject),
 		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
 		signatureAlgorithmName: describeSignatureAlgorithm(

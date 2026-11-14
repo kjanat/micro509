@@ -43,6 +43,7 @@ function publicKey(spkiDer: Uint8Array): bigint {
 
 async function verify(input: SignatureVerifierInput, hash: 'SHA-1' | 'SHA-256'): Promise<boolean> {
 	if (input.signatureAlgorithm.parametersDer !== undefined) return false;
+	if (input.signatureUnusedBits !== 0) return false;
 	if (input.signerPublicKeyParametersDer === undefined) return false;
 	const [p, q, g] = integers(input.signerPublicKeyParametersDer);
 	const [r, s] = integers(input.signature);

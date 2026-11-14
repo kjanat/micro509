@@ -214,17 +214,19 @@ describe('PKITS 4.8.19 oversized explicitText', () => {
 });
 
 describe('PKITS 4.1 DSA through caller signatureVerifiers', () => {
-	it.each(['4.1.4', '4.1.5', '4.1.6'])(
-		'%s validates as the manifest expects',
-		async (testNumber) => {
-			const pkitsCase = PKITS_CASES.find((candidate) => candidate.testNumber === testNumber);
-			if (pkitsCase === undefined) throw new Error(`PKITS manifest lacks ${testNumber}`);
-			const result = await verifyPkitsPath(pkitsCase, {
-				signatureVerifiers: dsaSignatureVerifiers,
-			});
-			expect(result.ok).toBe(pkitsCase.shouldValidate);
-		},
-	);
+	it.each([
+		{ testNumber: '4.1.4', expected: { ok: true } },
+		{ testNumber: '4.1.5', expected: { ok: true } },
+		{ testNumber: '4.1.6', expected: { ok: false, code: 'signature_invalid', index: 0 } },
+	])('$testNumber validates as the manifest expects', async ({ testNumber, expected }) => {
+		const pkitsCase = PKITS_CASES.find((candidate) => candidate.testNumber === testNumber);
+		if (pkitsCase === undefined) throw new Error(`PKITS manifest lacks ${testNumber}`);
+		expect(expected.ok).toBe(pkitsCase.shouldValidate);
+		const result = await verifyPkitsPath(pkitsCase, {
+			signatureVerifiers: dsaSignatureVerifiers,
+		});
+		expect(result).toMatchObject(expected);
+	});
 });
 
 function pkitsLeafName(pkitsCase: PkitsCase): string {

@@ -45,6 +45,11 @@ export interface SignatureVerifierInput {
 	readonly signerPublicKeyParametersDer?: Uint8Array;
 	/** The signature bytes as carried. */
 	readonly signature: Uint8Array;
+	/**
+	 * Unused bits in the final octet of `signature`, from a `signatureValue`
+	 * BIT STRING. `0` for a signature carried as octets.
+	 */
+	readonly signatureUnusedBits: number;
 	/** The exact bytes the signature covers. */
 	readonly data: Uint8Array;
 }
@@ -423,6 +428,7 @@ export async function verifySignedData(
 		publicKeyParametersOid,
 		subjectPublicKeyInfoDer,
 		signature,
+		0,
 		signedData,
 	);
 	if (!result.ok) {
@@ -448,6 +454,7 @@ export async function verifySignedDataDetailed(
 	publicKeyParametersOid: string | undefined,
 	subjectPublicKeyInfoDer: Uint8Array,
 	signature: Uint8Array,
+	signatureUnusedBits: number,
 	signedData: Uint8Array,
 	caller: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<VerifySignedDataResult> {
@@ -478,8 +485,12 @@ export async function verifySignedDataDetailed(
 				? {}
 				: { signerPublicKeyParametersDer: new Uint8Array(signerParametersDer) }),
 			signature: new Uint8Array(signature),
+			signatureUnusedBits,
 			data: new Uint8Array(signedData),
 		});
+	}
+	if (signatureUnusedBits !== 0) {
+		return { ok: true, valid: false };
 	}
 	try {
 		const key = await importSpkiDerOrThrow(subjectPublicKeyInfoDer, config.value.importAlgorithm);

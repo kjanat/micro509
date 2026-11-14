@@ -539,7 +539,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       are expected-fail per the WebCrypto algorithm boundary and tracked with
       `it.failing`. With a caller DSA verifier in `signatureVerifiers`,
       4.1.4–4.1.6 match their expected results, 4.1.5 through RFC 5280 §6.1.4 (e)
-      parameter inheritance. See [`test/pkits.test.ts`](../test/pkits.test.ts).
+      parameter inheritance and 4.1.6 as `signature_invalid`. See [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [x] Add malformed DER / fuzz tests.
 - [x] Differential-test against at least one mature implementation. See [`test/differential.test.ts`](../test/differential.test.ts).
 - [x] Run the validator against **NIST PKITS** as a gap-report harness, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])

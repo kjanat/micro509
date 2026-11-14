@@ -1572,6 +1572,7 @@ export async function verifyCertificateSigningRequest(
 			parsed.publicKeyParametersOid,
 			parsed.subjectPublicKeyInfoDer,
 			parsed.signatureValue,
+			parsed.signatureValueUnusedBits,
 			parsed.certificationRequestInfoDer,
 			verification,
 		);

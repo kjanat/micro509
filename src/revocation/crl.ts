@@ -15,10 +15,10 @@ import {
 	decodeNonNegativeIntegerBigInt,
 	decodeObjectIdentifier,
 	decodeString,
-	extractBitStringValue,
 	hexToBytes,
 	parseTime,
 	requireElement,
+	signatureBits,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
@@ -244,8 +244,10 @@ export interface ParsedCertificateRevocationList {
 	readonly version: number;
 	/** DER-encoded TBSCertList — the signed payload for signature verification. */
 	readonly tbsCertListDer: Uint8Array;
-	/** Raw signature bytes from the CRL outer wrapper. */
+	/** Signature bytes: the `signatureValue` BIT STRING content after its unused-bit count. */
 	readonly signatureValue: Uint8Array;
+	/** Unused bits in the final octet of {@linkcode signatureValue}, 0 through 7. */
+	readonly signatureValueUnusedBits: number;
 	/** CRL issuer distinguished name. */
 	readonly issuer: ParsedName;
 	/** Issue date of this CRL. */
@@ -772,7 +774,7 @@ export function parseCertificateRevocationListDerOrThrow(
 		der: new Uint8Array(der),
 		version: signedFields.version,
 		tbsCertListDer: der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
-		signatureValue: extractBitStringValue(signatureValue),
+		...signatureBits(signatureValue),
 		issuer: signedFields.issuer,
 		thisUpdate: signedFields.thisUpdate,
 		...(signedFields.nextUpdate === undefined ? {} : { nextUpdate: signedFields.nextUpdate }),
@@ -895,6 +897,7 @@ export async function verifyCertificateRevocationListSignature(
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
 			parsedCrl.signatureValue,
+			parsedCrl.signatureValueUnusedBits,
 			parsedCrl.tbsCertListDer,
 			verification,
 		);
@@ -1034,6 +1037,7 @@ export async function authenticateCrl(
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
 			parsedCrl.signatureValue,
+			parsedCrl.signatureValueUnusedBits,
 			parsedCrl.tbsCertListDer,
 			verification,
 		);
