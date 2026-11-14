@@ -1623,13 +1623,19 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 
 		// The signature is an octet string encoded directly, so a BIT STRING holding
 		// a bit count that is not a whole number of octets does not hold one.
-		it('does not parse a certificate whose signatureValue declares an unused bit', () => {
+		it('does not verify a signatureValue that declares an unused bit', async () => {
 			const certificate = parseCertificatePemOrThrow(blockAt(717));
 			const truncated = new Uint8Array(certificate.signatureValue);
 			truncated[63] = (truncated[63] ?? 0) & 0xfe;
-			expect(
-				parseCertificateDer(withSignatureValue(certificate.der, bitString(truncated, 1))),
-			).toMatchObject({ ok: false, code: 'malformed' });
+			const der = withSignatureValue(certificate.der, bitString(truncated, 1));
+			expect(parseCertificateDer(der)).toMatchObject({
+				ok: true,
+				value: { signatureValue: truncated, signatureValueUnusedBits: 1 },
+			});
+			expect(await verifyWithSection101Key(der)).toMatchObject({
+				ok: false,
+				code: 'signature_invalid',
+			});
 		});
 
 		// "Signatures can be placed in a number of different ASN.1 structures", the
