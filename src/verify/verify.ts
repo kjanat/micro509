@@ -78,8 +78,13 @@ import {
 	indexedMicro509Error,
 	micro509Error,
 } from '#micro509/result/result';
-import type { CrlSource, RevocationPolicy, TrustedOcspResponder } from '#micro509/revocation/chain';
-import { checkChainRevocation } from '#micro509/revocation/chain';
+import type {
+	CheckChainRevocationValue,
+	CrlSource,
+	RevocationPolicy,
+	TrustedOcspResponder,
+} from '#micro509/revocation/chain';
+import { checkChainRevocationWith } from '#micro509/revocation/chain';
 import { assertCrlMaxAge } from '#micro509/revocation/crl';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from '#micro509/verify/identity';
@@ -1387,7 +1392,7 @@ export async function verifyCertificateChain(
 
 	// Revocation checking (optional)
 	if (input.revocation !== undefined) {
-		const revocationFailure = await validateVerifiedChainRevocation(input, buildResult.value.chain);
+		const revocationFailure = await validateVerifiedChainRevocation(input, buildResult.value);
 		if (revocationFailure !== undefined) return revocationFailure;
 	}
 
@@ -1428,35 +1433,40 @@ function chainBuildInput(
 /** Applies optional revocation evidence to an otherwise verified certificate chain. */
 async function validateVerifiedChainRevocation(
 	input: VerifyCertificateChainInput,
-	chain: readonly ParsedCertificate[],
+	path: CandidatePath,
 ): Promise<VerifyChainResult | undefined> {
 	if (input.revocation === undefined) return undefined;
-	const revocationResult = await checkChainRevocation({
-		chain,
-		...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
-		...(input.revocation.ocspResponses !== undefined
-			? { ocspResponses: input.revocation.ocspResponses }
-			: {}),
-		...(input.revocation.extraCertificates !== undefined
-			? { extraCertificates: input.revocation.extraCertificates }
-			: {}),
-		...(input.revocation.trustedOcspResponders !== undefined
-			? { trustedOcspResponders: input.revocation.trustedOcspResponders }
-			: {}),
-		...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
-		...(input.at !== undefined ? { at: input.at } : {}),
-		...(input.signatureVerifiers !== undefined
-			? { signatureVerifiers: input.signatureVerifiers }
-			: {}),
-	});
+	const anchorKey =
+		path.anchorCertificateInChain || path.trustAnchor === undefined
+			? undefined
+			: anchorWorkingKey(path.trustAnchor);
+	const revocationResult = await checkChainRevocationWith(
+		{
+			chain: path.chain,
+			...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
+			...(input.revocation.ocspResponses !== undefined
+				? { ocspResponses: input.revocation.ocspResponses }
+				: {}),
+			...(input.revocation.extraCertificates !== undefined
+				? { extraCertificates: input.revocation.extraCertificates }
+				: {}),
+			...(input.revocation.trustedOcspResponders !== undefined
+				? { trustedOcspResponders: input.revocation.trustedOcspResponders }
+				: {}),
+			...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
+			...(input.at !== undefined ? { at: input.at } : {}),
+			...(input.signatureVerifiers !== undefined
+				? { signatureVerifiers: input.signatureVerifiers }
+				: {}),
+		},
+		anchorKey,
+	);
 	return revocationResult.value.decision === 'deny'
 		? revocationFailureResult(revocationResult.value)
 		: undefined;
 }
 
-function revocationFailureResult(
-	value: Awaited<ReturnType<typeof checkChainRevocation>>['value'],
-): VerifyChainResult {
+function revocationFailureResult(value: CheckChainRevocationValue): VerifyChainResult {
 	const firstRevoked = value.summary.revokedCertificates[0];
 	if (firstRevoked !== undefined) {
 		return verifyFailureResult(
@@ -1487,7 +1497,7 @@ function revocationFailureResult(
 
 /** Revocation evaluates each non-anchor chain certificate in path order. */
 function revocationFailureIndex(
-	value: Awaited<ReturnType<typeof checkChainRevocation>>['value'],
+	value: CheckChainRevocationValue,
 	status: 'revoked' | 'indeterminate',
 ): number | undefined {
 	const index = value.certificates.findIndex((certificate) => certificate.status === status);

@@ -471,14 +471,14 @@ export async function verifySignedDataDetailed(
 				oid: signatureAlgorithmOid,
 				...(signatureAlgorithmParametersDer === undefined
 					? {}
-					: { parametersDer: signatureAlgorithmParametersDer.slice() }),
+					: { parametersDer: new Uint8Array(signatureAlgorithmParametersDer) }),
 			},
-			signerSpkiDer: subjectPublicKeyInfoDer.slice(),
+			signerSpkiDer: new Uint8Array(subjectPublicKeyInfoDer),
 			...(signerParametersDer === undefined
 				? {}
-				: { signerPublicKeyParametersDer: signerParametersDer.slice() }),
-			signature: signature.slice(),
-			data: signedData.slice(),
+				: { signerPublicKeyParametersDer: new Uint8Array(signerParametersDer) }),
+			signature: new Uint8Array(signature),
+			data: new Uint8Array(signedData),
 		});
 	}
 	try {

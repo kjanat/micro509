@@ -24,7 +24,7 @@ import {
 } from '#micro509/verify';
 import { parseCertificateDer } from '#micro509/x509';
 import { callUntyped, issueChain } from '#test/helpers';
-import { DSA_WITH_SHA1, dsaSignatureVerifiers } from '#test/oracles/dsa';
+import { DSA_WITH_SHA1, DSA_WITH_SHA256, dsaSignatureVerifiers } from '#test/oracles/dsa';
 
 const at = new Date('2011-04-15T00:00:00Z');
 
@@ -173,6 +173,36 @@ describe('signatureVerifiers', () => {
 		});
 	});
 
+	it('checks revocation with the parameters a bare DSA trust anchor passes down', async () => {
+		expect(
+			await verifyCertificateChain({
+				leaf: test5Leaf,
+				intermediates: [inheritedCa],
+				roots: [],
+				trustAnchors: [trustAnchorFromCertificate(unwrap(parseCertificateDer(dsaCa)))],
+				at,
+				signatureVerifiers: dsaSignatureVerifiers,
+				revocation: { crls: [await pkitsCrl('DSAParametersInheritedCACRL')] },
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it('searches past a root whose key leaves an inherited link without parameters', async () => {
+		const result = await verifyCertificateChain({
+			leaf: test5Leaf,
+			roots: [inheritedCa, dsaCa],
+			at,
+			signatureVerifiers: dsaSignatureVerifiers,
+		});
+		expect(result).toMatchObject({ ok: true });
+		if (result.ok)
+			expect(result.value.chain.map((member) => member.der)).toEqual([
+				test5Leaf,
+				inheritedCa,
+				dsaCa,
+			]);
+	});
+
 	it('refuses a path whose deferred inherited-parameter link fails', async () => {
 		expect(
 			await verifyCertificateChain({
@@ -309,6 +339,32 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 				signatureVerifiers: dsaSignatureVerifiers,
 			}),
 		).toEqual({ ok: true, valid: false });
+	});
+
+	it('hands the verifier copies that leave Buffer inputs untouched', async () => {
+		const ca = unwrap(parseCertificateDer(dsaCaCert));
+		const leaf = unwrap(parseCertificateDer(dsaLeaf));
+		const input = {
+			signerSpkiDer: Buffer.from(ca.subjectPublicKeyInfoDer),
+			signatureAlgorithm: { oid: leaf.signatureAlgorithmOid },
+			publicKeyAlgorithm: { oid: ca.publicKeyAlgorithmOid },
+			signature: Buffer.from(leaf.signatureValue),
+			data: Buffer.from(leaf.tbsCertificateDer),
+		};
+		const scribble = async (verifierInput: SignatureVerifierInput): Promise<boolean> => {
+			const valid = (await dsaSignatureVerifiers[DSA_WITH_SHA256]?.(verifierInput)) === true;
+			verifierInput.signerSpkiDer.fill(0);
+			verifierInput.signerPublicKeyParametersDer?.fill(0);
+			verifierInput.signature.fill(0);
+			verifierInput.data.fill(0);
+			return valid;
+		};
+		expect(
+			await verifySignature({ ...input, signatureVerifiers: { [DSA_WITH_SHA256]: scribble } }),
+		).toEqual({ ok: true, valid: true });
+		expect(input.signerSpkiDer).toEqual(Buffer.from(ca.subjectPublicKeyInfoDer));
+		expect(input.signature).toEqual(Buffer.from(leaf.signatureValue));
+		expect(input.data).toEqual(Buffer.from(leaf.tbsCertificateDer));
 	});
 
 	it('verifies a DSA CSR self-signature', async () => {

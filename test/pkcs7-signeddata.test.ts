@@ -281,6 +281,43 @@ describe('createPkcs7SignedData', () => {
 	});
 });
 
+describe('PKCS#7 content snapshot', () => {
+	const original = 'snapshot before the first await';
+
+	it('createPkcs7SignedData keeps the content a Buffer held when it was called', async () => {
+		const signer = await signingIdentity('Snapshot Create');
+		const content = Buffer.from(original);
+		const pending = createPkcs7SignedData({
+			content,
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+		});
+		content.fill(0);
+		const signed = await pending;
+		if (!signed.ok) throw new Error(signed.error.code);
+		const parsed = parsePkcs7SignedDataDer(signed.value.der);
+		if (!parsed.ok) throw new Error(parsed.error.code);
+		expect(parsed.value.encapsulatedContent).toEqual(encoder.encode(original));
+	});
+
+	it('verifyPkcs7SignedData verifies every signer against the detached Buffer it was called with', async () => {
+		const first = await signingIdentity('Snapshot Verify A');
+		const second = await signingIdentity('Snapshot Verify B');
+		const signed = await createPkcs7SignedData({
+			content: encoder.encode(original),
+			detached: true,
+			signers: [first, second].map((signer) => ({
+				certificate: signer.certificate.pem,
+				privateKey: signer.keyPair.privateKey,
+			})),
+		});
+		if (!signed.ok) throw new Error(signed.error.code);
+		const content = Buffer.from(original);
+		const pending = verifyPkcs7SignedData(signed.value.der, { content });
+		content.fill(0);
+		expect(await pending).toMatchObject({ ok: true });
+	});
+});
+
 describe('createPkcs7SignedData: detached (RFC 5652 §5.2)', () => {
 	it('omits eContent and verifies against externally supplied content', async () => {
 		const signer = await signingIdentity('Detached Signer');

@@ -574,6 +574,7 @@ function signerVerification(
  */
 function chainWorkingKeys(
 	chain: readonly ParsedCertificate[],
+	anchorKey: WorkingPublicKey | undefined,
 ): (certificate: ParsedCertificate) => WorkingPublicKey {
 	const top = chain[chain.length - 1];
 	return (certificate) => {
@@ -581,12 +582,10 @@ function chainWorkingKeys(
 		if (top === undefined || index < 0) return certificateWorkingKey(certificate);
 		return {
 			algorithmOid: certificate.publicKeyAlgorithmOid,
-			parametersDer: workingParametersAt(
-				chain,
-				index,
-				chain.length - 2,
-				certificateWorkingKey(top),
-			),
+			parametersDer:
+				anchorKey === undefined
+					? workingParametersAt(chain, index, chain.length - 2, certificateWorkingKey(top))
+					: workingParametersAt(chain, index, chain.length - 1, anchorKey),
 		};
 	};
 }
@@ -1825,8 +1824,21 @@ function revocationSkipReason(
  * }
  * ```
  */
-export async function checkChainRevocation(
+export function checkChainRevocation(
 	input: CheckChainRevocationInput,
+): Promise<CheckChainRevocationResult> {
+	return checkChainRevocationWith(input, undefined);
+}
+
+/**
+ * {@linkcode checkChainRevocation} with the bare trust anchor's working key,
+ * which initializes the key parameters the chain inherits.
+ *
+ * @internal
+ */
+export async function checkChainRevocationWith(
+	input: CheckChainRevocationInput,
+	anchorKey: WorkingPublicKey | undefined,
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
@@ -1858,7 +1870,7 @@ export async function checkChainRevocation(
 		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
 		signatureVerifiers: input.signatureVerifiers,
 		verifiers,
-		workingKeyOf: chainWorkingKeys(chain),
+		workingKeyOf: chainWorkingKeys(chain, anchorKey),
 	};
 	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
 

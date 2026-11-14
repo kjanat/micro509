@@ -522,7 +522,7 @@ export async function createPkcs7SignedData(
 	// same bytes; reading input.content across awaits could otherwise observe a
 	// caller mutation and yield a SignedData whose digest disagrees with its own
 	// encapsulated content.
-	const content = input.content.slice();
+	const content = new Uint8Array(input.content);
 
 	const certificateDers: Uint8Array[] = [];
 	const seenCertificates = new Set<string>();
@@ -913,7 +913,9 @@ export async function verifyPkcs7SignedData(
 	const parsed = parsedResult.value;
 	// Snapshot caller-owned external content before any await so every signer
 	// verifies against the same bytes (mirrors the create-side content copy).
-	const content = parsed.encapsulatedContent ?? options.content?.slice();
+	const content =
+		parsed.encapsulatedContent ??
+		(options.content === undefined ? undefined : new Uint8Array(options.content));
 	if (content === undefined) {
 		return verifyPkcs7Failure(
 			'detached_content_required',

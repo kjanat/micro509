@@ -525,7 +525,7 @@ export async function buildChainInternal(
 	): Promise<readonly ParsedCertificate[] | undefined | 'open'> {
 		if (rootFingerprints.has(fingerprint(current))) {
 			const start = certificateWorkingKey(current);
-			return (await verifyInheritedLinks(path, pending, start, path.length - 2)) ? path : undefined;
+			return (await verifyInheritedLinks(path, pending, start, path.length - 2)) ? path : 'open';
 		}
 		const matchedAnchor = await matchTrustAnchor(
 			current,
@@ -546,7 +546,7 @@ export async function buildChainInternal(
 			anchor !== undefined &&
 			!(await verifyInheritedLinks(path, pending, anchorWorkingKey(anchor), path.length - 1))
 		) {
-			return undefined;
+			return 'open';
 		}
 		selectedAnchor = anchor;
 		return path;
