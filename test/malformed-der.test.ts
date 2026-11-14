@@ -7,6 +7,7 @@ import {
 	createOcspResponse,
 	createSelfSignedCertificate,
 	generateKeyPair,
+	importSpkiDer,
 	parseCertificateDer,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateSigningRequestDer,
@@ -14,6 +15,7 @@ import {
 	parseOcspResponseDerOrThrow,
 	unwrap,
 } from '#micro509';
+import { assertDerMaxDepth, decodeDerBitString, derChildren, readDerRoot } from '#micro509/der';
 import {
 	bitString,
 	explicitContext,
@@ -833,4 +835,58 @@ describe('malformed DER corpus', () => {
 			expectDeterministicParseFailure(testCase);
 		}
 	});
+});
+
+describe('primitive BIT STRING contents stay opaque (GHSA-rhr8-3pm8-cq29)', () => {
+	const nestedBitStrings = (levels: number) => {
+		let der = tlv(0x05, new Uint8Array());
+		for (let level = 0; level < levels; level += 1) der = bitString(der);
+		return der;
+	};
+	const chain = nestedBitStrings(2000);
+	const wide = sequence(Array.from({ length: 20 }, () => chain));
+
+	it('reads the advisory input as one BIT STRING whose contents are its raw octets', () => {
+		expect(chain).toHaveLength(9886);
+		expect(() => assertDerMaxDepth(chain)).not.toThrow();
+		const root = unwrap(readDerRoot(chain));
+		expect(root.tag).toBe(0x03);
+		const value = unwrap(decodeDerBitString(root));
+		expect(value.unusedBits).toBe(0);
+		expect(value.bytes).toEqual(chain.subarray(chain.length - value.bytes.length));
+		expect(value.bytes).toHaveLength(chain.length - 5);
+		expect(() => assertDerMaxDepth(wide)).not.toThrow();
+		const children = unwrap(derChildren(wide, unwrap(readDerRoot(wide))));
+		expect(children.map((child) => child.tag)).toEqual(new Array(20).fill(0x03));
+	}, 1000);
+
+	it('keeps the nested payload as an opaque extension value and refuses it as a public key', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'nested-bit-string.example' },
+			extensions: {
+				customExtensions: [{ oid: '1.3.6.1.4.1.55555.1', critical: false, value: wide }],
+			},
+		});
+		const parsed = unwrap(parseCertificateDer(certificate.der));
+		expect(
+			parsed.extensions.find((extension) => extension.oid === '1.3.6.1.4.1.55555.1'),
+		).toMatchObject({
+			valueDer: wide,
+		});
+		for (const [algorithm, input] of [
+			[
+				sequence([objectIdentifier(OIDS.rsaEncryption), tlv(0x05, new Uint8Array())]),
+				{ kind: 'rsa' },
+			],
+			[
+				sequence([objectIdentifier(OIDS.ecPublicKey), objectIdentifier(OIDS.prime256v1)]),
+				{ kind: 'ecdsa', curve: 'P-256' },
+			],
+		] as const) {
+			expect(await importSpkiDer(sequence([algorithm, bitString(chain)]), input)).toMatchObject({
+				ok: false,
+				code: 'malformed',
+			});
+		}
+	}, 1000);
 });

@@ -10,6 +10,7 @@ import {
 	isResultError,
 	matchServiceIdentity,
 	parseCertificateChainPem,
+	parseCertificateDer,
 	parseCertificatePem,
 	pemDecodeOrThrow,
 	trustAnchorFromCertificate,
@@ -54,6 +55,7 @@ import {
 	issueChain,
 	legacyMailboxNameConstraints,
 	reissueSelfSignedCertificateWithName,
+	replaceCertificateExtension,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
 	rewriteCertificateSubject,
@@ -212,6 +214,80 @@ describe('chain verification', () => {
 		}
 		expect(result.value.chain).toHaveLength(3);
 		expect(result.value.root.subject.values.commonName).toBe('Root CA');
+	});
+
+	it('RFC 5280 §6.1.4 (l)-(m) enforce pathLenConstraint on a CA without keyUsage (GHSA-h46v-rmh6-fq4f)', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Path Length Root' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const issue = async (
+			subject: string,
+			issuer: { readonly name: string; readonly der: Uint8Array; readonly key: CryptoKey },
+			extensions: Parameters<typeof createCertificate>[0]['extensions'],
+		) => {
+			const keys = await generateKeyPair();
+			const certificate = await createCertificate({
+				issuer: { commonName: issuer.name },
+				subject: { commonName: subject },
+				publicKey: keys.publicKey,
+				signerPrivateKey: issuer.key,
+				issuerCertificate: issuer.der,
+				extensions,
+			});
+			return { name: subject, der: certificate.der, key: keys.privateKey };
+		};
+		const anchor = {
+			name: 'Path Length Root',
+			der: root.certificate.der,
+			key: root.keyPair.privateKey,
+		};
+		const leafExtensions = { keyUsage: ['digitalSignature'] } as const;
+		for (const keyUsage of [undefined, ['keyCertSign', 'cRLSign'] as const]) {
+			const unconstrained = await issue('Constrained CA', anchor, {
+				basicConstraints: { ca: true },
+				...(keyUsage === undefined ? {} : { keyUsage }),
+			});
+			const constrained = {
+				...unconstrained,
+				der: await replaceCertificateExtension(unconstrained.der, anchor.key, {
+					oid: OIDS.basicConstraints,
+					critical: true,
+					value: sequence([tlv(0x01, Uint8Array.of(0xff)), integerFromNumber(0)]),
+				}),
+			};
+			const parsedConstrained = unwrap(parseCertificateDer(constrained.der));
+			expect(parsedConstrained.basicConstraints).toEqual({ ca: true, pathLength: 0 });
+			expect(parsedConstrained.keyUsage === undefined).toBe(keyUsage === undefined);
+			const subordinate = await issue('Subordinate CA', constrained, {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			});
+			const directLeaf = await issue('direct.example', constrained, leafExtensions);
+			const deepLeaf = await issue('deep.example', subordinate, leafExtensions);
+			expect(
+				await verifyCertificateChain({
+					leaf: directLeaf.der,
+					intermediates: [constrained.der],
+					roots: [root.certificate.der],
+				}),
+			).toMatchObject({ ok: true });
+			const deepInput = {
+				leaf: deepLeaf.der,
+				intermediates: [subordinate.der, constrained.der],
+				roots: [root.certificate.der],
+			};
+			const exceeded = { ok: false, code: 'path_length_exceeded', index: 2 } as const;
+			expect(await buildCandidatePath(deepInput)).toMatchObject(exceeded);
+			expect(
+				await validateCandidatePath({
+					chain: [deepLeaf.der, subordinate.der, constrained.der, root.certificate.der].map((der) =>
+						unwrap(parseCertificateDer(der)),
+					),
+				}),
+			).toMatchObject(exceeded);
+			expect(await verifyCertificateChain(deepInput)).toMatchObject(exceeded);
+		}
 	});
 
 	it('returns structured verification errors', async () => {

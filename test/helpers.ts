@@ -723,10 +723,42 @@ export async function createSelfSignedCertificateWithRawExtensions(
 }
 
 /** Append encoded extensions to a certificate's TBS extensions and re-sign it. */
-export async function appendCertificateExtensions(
+export function appendCertificateExtensions(
 	certificateDer: Uint8Array,
 	signerPrivateKey: CryptoKey,
 	extensionDers: readonly Uint8Array[],
+	signature?: SignatureProfileInput,
+): Promise<Uint8Array> {
+	return rewriteCertificateExtensions(
+		certificateDer,
+		signerPrivateKey,
+		(existing) => [...existing, ...extensionDers],
+		signature,
+	);
+}
+
+/** Replace the extension carrying `extension.oid` in a certificate's TBS extensions and re-sign it. */
+export function replaceCertificateExtension(
+	certificateDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	extension: { readonly oid: string; readonly value: Uint8Array; readonly critical: boolean },
+): Promise<Uint8Array> {
+	const replacement = encodeExtension(extension.oid, extension.value, extension.critical);
+	return rewriteCertificateExtensions(certificateDer, signerPrivateKey, (existing) => {
+		const index = existing.findIndex(
+			(current) => decodeObjectIdentifier(fieldAt(current, 0).value) === extension.oid,
+		);
+		if (index === -1) {
+			throw new Error(`Certificate has no ${extension.oid} extension`);
+		}
+		return existing.with(index, replacement);
+	});
+}
+
+async function rewriteCertificateExtensions(
+	certificateDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	rewrite: (existing: readonly Uint8Array[]) => readonly Uint8Array[],
 	signature?: SignatureProfileInput,
 ): Promise<Uint8Array> {
 	const top = readSequenceChildren(certificateDer);
@@ -754,7 +786,7 @@ export async function appendCertificateExtensions(
 	const rebuiltTbsDer = sequence(
 		tbsChildren.map((child, childIndex) =>
 			childIndex === extensionsIndex
-				? explicitContext(3, sequence([...existing, ...extensionDers]))
+				? explicitContext(3, sequence(rewrite(existing)))
 				: sliceElement(tbsDer, child),
 		),
 	);
