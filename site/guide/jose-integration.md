@@ -138,7 +138,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 const source: unknown = await (
-  await fetch(new URL('/fixtures/jose-migration.json', import.meta.url))
+  await fetch(new URL('../fixtures/jose-migration.json', import.meta.url))
 ).json();
 if (
   !record(source) ||
