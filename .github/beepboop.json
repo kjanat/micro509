@@ -22,7 +22,8 @@
 					"file": "prepare-release.yml",
 					"ref": "master"
 				},
-				"versionLands": "via-version-pr"
+				"versionLands": "via-version-pr",
+				"versionPrMerge": "squash"
 			},
 			"promote": {
 				"publishWhen": "version-pr-merged",
