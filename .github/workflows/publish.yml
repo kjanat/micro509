@@ -141,7 +141,7 @@ jobs:
 
           $release = gh release view $env:TAG --json isDraft,isImmutable,assets 2>$null | ConvertFrom-Json
           $attached = $release.assets.name -contains $asset
-          $needsAsset = $outputs.is_stable -eq 'true' -and -not $attached
+          $needsAsset = -not $attached
 
           if ($needsAsset -and $release -and -not $release.isDraft -and $release.isImmutable) {
             "::error::{0} is published and immutable, and carries no {1}" -f $env:TAG, $asset
