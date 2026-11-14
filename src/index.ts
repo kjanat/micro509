@@ -360,8 +360,10 @@ export type {
 	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
 	VerifyCertificateRevocationListSignatureFailure,
+	VerifyCertificateRevocationListSignatureOptions,
 	VerifyCertificateRevocationListSignatureResult,
 	VerifyOcspResponseSignatureFailure,
+	VerifyOcspResponseSignatureOptions,
 	VerifyOcspResponseSignatureResult,
 } from '#micro509/revocation';
 export {
@@ -436,6 +438,7 @@ export type {
 	ValidateForTlsServerInput,
 	VerifiedCertificateChain,
 	VerifyCertificateChainInput,
+	VerifyCertificateSigningRequestOptions,
 	VerifyChainFailure,
 	VerifyChainResult,
 	VerifyErrorCode,

@@ -25,6 +25,7 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import type { SignatureVerifier, SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
 import {
+	callerVerification,
 	resolveSignatureVerifiers,
 	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify';
@@ -467,8 +468,8 @@ export interface VerifyCertificateChainInput
 	 * calls one only where the signature algorithm would otherwise fail with
 	 * `unsupported_signature_algorithm_parameters`. Defaults to none. A key that
 	 * micro509 verifies natively, a key that is no OID, or a value that is no
-	 * function throws `RangeError`. CRL and OCSP signatures checked through
-	 * `revocation` go through WebCrypto only.
+	 * function throws `RangeError`. The same verifiers check CRL and OCSP
+	 * signatures under `revocation`.
 	 */
 	readonly signatureVerifiers?: SignatureVerifiers;
 	/** Leaf purpose constraint to enforce during validation. */
@@ -922,7 +923,7 @@ async function validateSelfSignedLeafAllowed(
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
 		return undefined;
-	const selfSignature = await verifyCertificateSignature(leaf, leaf, verifiers);
+	const selfSignature = await verifyCertificateSignature(leaf, leaf, { verifiers });
 	if (!selfSignature.ok || !selfSignature.valid) return undefined;
 	return failure(
 		'self_signed_leaf_not_allowed',
@@ -1205,12 +1206,10 @@ async function validateIssuerAtPathIndex(
 			}),
 		);
 	}
-	const signatureResult = await verifyCertificateSignature(
-		current,
-		issuer,
+	const signatureResult = await verifyCertificateSignature(current, issuer, {
 		verifiers,
-		workingParametersDer,
-	);
+		workingParameters: { parametersDer: workingParametersDer },
+	});
 	if (!signatureResult.ok) {
 		return failure(
 			signatureResult.code,
@@ -1446,6 +1445,9 @@ async function validateVerifiedChainRevocation(
 			: {}),
 		...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
 		...(input.at !== undefined ? { at: input.at } : {}),
+		...(input.signatureVerifiers !== undefined
+			? { signatureVerifiers: input.signatureVerifiers }
+			: {}),
 	});
 	return revocationResult.value.decision === 'deny'
 		? revocationFailureResult(revocationResult.value)
@@ -1494,6 +1496,19 @@ function revocationFailureIndex(
 
 // verifyCertificateSigningRequest
 
+/** Options for {@linkcode verifyCertificateSigningRequest}. */
+export interface VerifyCertificateSigningRequestOptions {
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the result would otherwise be
+	 * `unsupported_signature_algorithm_parameters`. A key that micro509 verifies
+	 * natively, a key that is no OID, or a value that is no function throws
+	 * `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
+
 /**
  * Verifies the self-signature of a PKCS#10 certificate signing request.
  *
@@ -1512,7 +1527,9 @@ function revocationFailureIndex(
  */
 export async function verifyCertificateSigningRequest(
 	input: CsrSource,
+	options: VerifyCertificateSigningRequestOptions = {},
 ): Promise<VerifyRequestResult> {
+	const verification = callerVerification(options.signatureVerifiers);
 	let parsed: ParsedCertificateSigningRequest;
 	try {
 		parsed =
@@ -1546,6 +1563,7 @@ export async function verifyCertificateSigningRequest(
 			parsed.subjectPublicKeyInfoDer,
 			parsed.signatureValue,
 			parsed.certificationRequestInfoDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);

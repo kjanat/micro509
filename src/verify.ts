@@ -56,6 +56,7 @@ export type {
 	ValidateForTlsServerInput,
 	VerifiedCertificateChain,
 	VerifyCertificateChainInput,
+	VerifyCertificateSigningRequestOptions,
 	VerifyChainFailure,
 	VerifyChainResult,
 	VerifyErrorCode,

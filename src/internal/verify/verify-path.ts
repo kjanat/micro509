@@ -9,17 +9,18 @@
  */
 
 import { toHex } from '#micro509/internal/asn1/asn1';
-import {
-	DECODE_LIMIT_CODES,
-	decodeRefusalOf,
-	rethrowDecodeRefusal,
-} from '#micro509/internal/asn1/decode-refusal';
-import { readSequenceChildren } from '#micro509/internal/asn1/der';
+import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import type {
+	CallerVerification,
 	SignatureVerifier,
 	VerifySignedDataResult,
 } from '#micro509/internal/crypto/sig-verify';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import {
+	explicitParameters,
+	NO_CALLER_VERIFICATION,
+	spkiAlgorithmParametersDer,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import type {
 	CertificateSource,
@@ -85,13 +86,13 @@ type IssuerCandidateEvaluation =
 export interface VerifyPathSignatureChecks {
 	/**
 	 * Verifies a certificate against a candidate issuer certificate.
-	 * `workingParametersDer` replaces the issuer's own key parameters for a
+	 * `workingParameters` replaces the issuer's own key parameters for a
 	 * caller verifier.
 	 */
 	readonly certificate: (
 		certificate: ParsedCertificate,
 		issuer: ParsedCertificate,
-		workingParametersDer?: Uint8Array,
+		workingParameters?: WorkingParameters,
 	) => Promise<VerifyCertificateSignatureResult>;
 	/** Verifies a certificate against a bare trust anchor. */
 	readonly trustAnchor: (
@@ -201,10 +202,7 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 export function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
-	verifiers?: ReadonlyMap<string, SignatureVerifier>,
-	workingParametersDer: Uint8Array | undefined = explicitParameters(
-		issuer.publicKeyAlgorithmParametersDer,
-	),
+	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<VerifyCertificateSignatureResult> {
 	return signatureCheck(() =>
 		verifySignedDataDetailed(
@@ -215,8 +213,7 @@ export function verifyCertificateSignature(
 			issuer.subjectPublicKeyInfoDer,
 			certificate.signatureValue,
 			certificate.tbsCertificateDer,
-			verifiers,
-			workingParametersDer,
+			verification,
 		),
 	);
 }
@@ -248,20 +245,21 @@ export function signatureChecksWith(
 	verifiers: ReadonlyMap<string, SignatureVerifier>,
 ): VerifyPathSignatureChecks {
 	return {
-		certificate: (certificate, issuer, workingParametersDer) =>
-			verifyCertificateSignature(
-				certificate,
-				issuer,
+		certificate: (certificate, issuer, workingParameters) =>
+			verifyCertificateSignature(certificate, issuer, {
 				verifiers,
-				workingParametersDer ?? explicitParameters(issuer.publicKeyAlgorithmParametersDer),
-			),
+				...(workingParameters !== undefined && { workingParameters }),
+			}),
 		trustAnchor: (certificate, anchor) =>
-			verifyTrustAnchorSignature(certificate, anchor, verifiers),
+			verifyTrustAnchorSignature(certificate, anchor, { verifiers }),
 		inheritsParameters: (certificate, issuer) =>
 			verifiers.has(certificate.signatureAlgorithmOid) &&
 			explicitParameters(issuer.publicKeyAlgorithmParametersDer) === undefined,
 	};
 }
+
+/** RFC 5280 §6.1 `working_public_key_parameters`, absent once the path leaves none. */
+export type WorkingParameters = NonNullable<CallerVerification['workingParameters']>;
 
 /** RFC 5280 §6.1 `working_public_key_algorithm` and `working_public_key_parameters`. */
 export interface WorkingPublicKey {
@@ -271,14 +269,6 @@ export interface WorkingPublicKey {
 	readonly parametersDer: Uint8Array | undefined;
 }
 
-/** DER key parameters, or `undefined` when they are absent or NULL (RFC 5280 §6.1.4 (e)). */
-export function explicitParameters(parametersDer: Uint8Array | undefined): Uint8Array | undefined {
-	if (parametersDer === undefined) return undefined;
-	return parametersDer.length === 2 && parametersDer[0] === 0x05 && parametersDer[1] === 0x00
-		? undefined
-		: parametersDer;
-}
-
 /** The working key a trust anchor initializes (RFC 5280 §6.1.2 (g)-(i)). */
 export function anchorWorkingKey(anchor: {
 	readonly publicKeyAlgorithmOid: string;
@@ -286,24 +276,8 @@ export function anchorWorkingKey(anchor: {
 }): WorkingPublicKey {
 	return {
 		algorithmOid: anchor.publicKeyAlgorithmOid,
-		parametersDer: explicitParameters(spkiAlgorithmParameters(anchor.subjectPublicKeyInfoDer)),
+		parametersDer: explicitParameters(spkiAlgorithmParametersDer(anchor.subjectPublicKeyInfoDer)),
 	};
-}
-
-/** The AlgorithmIdentifier parameters of a SubjectPublicKeyInfo; a malformed one has none. */
-function spkiAlgorithmParameters(spkiDer: Uint8Array): Uint8Array | undefined {
-	try {
-		const [algorithm] = readSequenceChildren(spkiDer);
-		if (algorithm === undefined) return undefined;
-		const algorithmDer = spkiDer.subarray(algorithm.start - algorithm.headerLength, algorithm.end);
-		const [, parameters] = readSequenceChildren(algorithmDer);
-		return parameters === undefined
-			? undefined
-			: algorithmDer.subarray(parameters.start - parameters.headerLength, parameters.end);
-	} catch (error) {
-		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
-		return undefined;
-	}
 }
 
 /** The working key a certificate used as trust anchor initializes. */
@@ -629,7 +603,7 @@ export async function buildChainInternal(
 				`c:${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}:${
 					parametersDer === undefined ? '-' : toHex(parametersDer)
 				}`,
-				() => signatureChecks.certificate(certificate, issuer, parametersDer),
+				() => signatureChecks.certificate(certificate, issuer, { parametersDer }),
 			);
 			const signatureFailure = signatureResultFailure(
 				result,
@@ -1119,7 +1093,7 @@ function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnc
 export function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
-	verifiers?: ReadonlyMap<string, SignatureVerifier>,
+	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<VerifyCertificateSignatureResult> {
 	return signatureCheck(() =>
 		verifySignedDataDetailed(
@@ -1130,10 +1104,7 @@ export function verifyTrustAnchorSignature(
 			anchor.subjectPublicKeyInfoDer,
 			certificate.signatureValue,
 			certificate.tbsCertificateDer,
-			verifiers,
-			verifiers?.has(certificate.signatureAlgorithmOid) === true
-				? anchorWorkingKey(anchor).parametersDer
-				: undefined,
+			verification,
 		),
 	);
 }

@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { SignatureVerifierInput, SignatureVerifiers } from '#micro509/crypto';
+import { verifySignature } from '#micro509/crypto';
 import { readSequenceChildren } from '#micro509/internal/asn1/der';
+import { verifyPkcs7SignedData } from '#micro509/pkcs';
 import { unwrap } from '#micro509/result';
+import {
+	checkCertificateRevocation,
+	checkCertificateRevocationAgainstCrl,
+	validateCertificateRevocationList,
+	validateOcspResponse,
+	verifyCertificateRevocationListSignature,
+	verifyOcspResponseSignature,
+} from '#micro509/revocation';
 import {
 	buildCandidatePath,
 	trustAnchorFromCertificate,
 	validateCandidatePath,
 	verifyCertificateChain,
+	verifyCertificateSigningRequest,
 } from '#micro509/verify';
 import { parseCertificateDer } from '#micro509/x509';
 import { callUntyped, issueChain } from '#test/helpers';
@@ -253,3 +264,155 @@ describe('signatureVerifiers', () => {
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 	return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
+
+async function dsaFixture(name: string): Promise<Uint8Array> {
+	return new Uint8Array(await readFile(new URL(`./fixtures/dsa/${name}.der`, import.meta.url)));
+}
+
+async function pkitsCrl(name: string): Promise<Uint8Array> {
+	return new Uint8Array(
+		await readFile(new URL(`./fixtures/pkits/crls/${name}.crl`, import.meta.url)),
+	);
+}
+
+const dsaCaCert = await dsaFixture('ca');
+const dsaLeaf = await dsaFixture('leaf');
+const dsaCrl = await dsaFixture('ca-crl');
+const dsaOcspRequest = await dsaFixture('ocsp-request');
+const dsaOcspResponse = await dsaFixture('ocsp-response');
+
+describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', () => {
+	it('verifySignature dispatches an unsupported algorithm to the caller verifier', async () => {
+		const ca = unwrap(parseCertificateDer(dsaCaCert));
+		const leaf = unwrap(parseCertificateDer(dsaLeaf));
+		const input = {
+			signerSpkiDer: ca.subjectPublicKeyInfoDer,
+			signatureAlgorithm: { oid: leaf.signatureAlgorithmOid },
+			publicKeyAlgorithm: { oid: ca.publicKeyAlgorithmOid },
+			signature: leaf.signatureValue,
+			data: leaf.tbsCertificateDer,
+		};
+		expect(await verifySignature(input)).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		expect(await verifySignature({ ...input, signatureVerifiers: dsaSignatureVerifiers })).toEqual({
+			ok: true,
+			valid: true,
+		});
+		expect(
+			await verifySignature({
+				...input,
+				data: Uint8Array.of(0),
+				signatureVerifiers: dsaSignatureVerifiers,
+			}),
+		).toEqual({ ok: true, valid: false });
+	});
+
+	it('verifies a DSA CSR self-signature', async () => {
+		const csr = await dsaFixture('leaf-csr');
+		expect(await verifyCertificateSigningRequest(csr)).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		expect(
+			await verifyCertificateSigningRequest(csr, { signatureVerifiers: dsaSignatureVerifiers }),
+		).toMatchObject({ ok: true });
+	});
+
+	it('verifies, validates and checks against a DSA CRL', async () => {
+		const options = { signatureVerifiers: dsaSignatureVerifiers };
+		expect(await verifyCertificateRevocationListSignature(dsaCrl, dsaCaCert)).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+		});
+		expect(
+			await verifyCertificateRevocationListSignature(dsaCrl, dsaCaCert, options),
+		).toMatchObject({ ok: true });
+		expect(
+			await validateCertificateRevocationList({
+				crl: dsaCrl,
+				issuerCertificate: dsaCaCert,
+				...options,
+			}),
+		).toMatchObject({ ok: true });
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: dsaLeaf,
+				issuerCertificate: dsaCaCert,
+				crl: dsaCrl,
+				...options,
+			}),
+		).toMatchObject({ ok: true, value: { status: 'good' } });
+		expect(
+			await checkCertificateRevocation({
+				certificate: dsaLeaf,
+				issuerCertificate: dsaCaCert,
+				evidence: [{ kind: 'crl', crl: dsaCrl }],
+				...options,
+			}),
+		).toMatchObject({ ok: true, value: { status: 'good' } });
+	});
+
+	it('verifies and validates a DSA-signed OCSP response', async () => {
+		const options = { signatureVerifiers: dsaSignatureVerifiers };
+		expect(await verifyOcspResponseSignature(dsaOcspResponse, dsaCaCert, options)).toMatchObject({
+			ok: true,
+		});
+		const input = {
+			response: dsaOcspResponse,
+			issuerCertificate: dsaCaCert,
+			request: dsaOcspRequest,
+		};
+		expect(await validateOcspResponse(input)).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+		});
+		const validated = await validateOcspResponse({ ...input, ...options });
+		expect(validated).toMatchObject({ ok: true });
+		if (validated.ok) expect(validated.value.responses?.[0]?.certStatus).toBe('good');
+	});
+
+	it('checks DSA revocation evidence through verifyCertificateChain', async () => {
+		const base = { leaf: dsaLeaf, roots: [dsaCaCert], signatureVerifiers: dsaSignatureVerifiers };
+		for (const revocation of [{ crls: [dsaCrl] }, { ocspResponses: [dsaOcspResponse] }]) {
+			expect(await verifyCertificateChain({ ...base, revocation })).toMatchObject({ ok: true });
+		}
+	});
+
+	it('verifies a CRL signed by a CA that inherits its DSA parameters along the chain', async () => {
+		const inheritedCrl = await pkitsCrl('DSAParametersInheritedCACRL');
+		expect(
+			await verifyCertificateRevocationListSignature(inheritedCrl, inheritedCa, {
+				signatureVerifiers: dsaSignatureVerifiers,
+			}),
+		).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(
+			await verifyCertificateChain({
+				leaf: test5Leaf,
+				intermediates: [inheritedCa, dsaCa],
+				roots: [root],
+				at,
+				signatureVerifiers: dsaSignatureVerifiers,
+				revocation: {
+					crls: await Promise.all(
+						['TrustAnchorRootCRL', 'DSACACRL', 'DSAParametersInheritedCACRL'].map(pkitsCrl),
+					),
+				},
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it('verifies a DSA CMS SignerInfo and rejects invalid verifiers as invalid_options', async () => {
+		const cms = await dsaFixture('cms');
+		expect(await verifyPkcs7SignedData(cms)).toMatchObject({ ok: false });
+		expect(
+			await verifyPkcs7SignedData(cms, { signatureVerifiers: dsaSignatureVerifiers }),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyPkcs7SignedData(cms, {
+				signatureVerifiers: { '1.2.840.113549.1.1.11': () => Promise.resolve(true) },
+			}),
+		).toMatchObject({ ok: false, code: 'invalid_options' });
+	});
+});

@@ -53,6 +53,7 @@ export type {
 	ValidateCertificateRevocationListInput,
 	ValidateCertificateRevocationListResult,
 	VerifyCertificateRevocationListSignatureFailure,
+	VerifyCertificateRevocationListSignatureOptions,
 	VerifyCertificateRevocationListSignatureResult,
 } from '#micro509/revocation/crl';
 export {
@@ -100,6 +101,7 @@ export type {
 	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
 	VerifyOcspResponseSignatureFailure,
+	VerifyOcspResponseSignatureOptions,
 	VerifyOcspResponseSignatureResult,
 } from '#micro509/revocation/ocsp';
 export {

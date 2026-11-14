@@ -48,7 +48,12 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import type { CallerVerification, SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import {
+	callerVerification,
+	NO_CALLER_VERIFICATION,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
@@ -318,6 +323,19 @@ export type VerifyCertificateRevocationListSignatureResult =
 			VerifyCertificateRevocationListSignatureFailure
 	  >;
 
+/** Options for {@linkcode verifyCertificateRevocationListSignature}. */
+export interface VerifyCertificateRevocationListSignatureOptions {
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the CRL signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the issuer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
+
 /**
  * Input for {@linkcode validateCertificateRevocationList}.
  */
@@ -341,6 +359,15 @@ export interface ValidateCertificateRevocationListInput {
 	 * to local policy.
 	 */
 	readonly maxAgeMs?: number;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the CRL signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the issuer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /**
@@ -411,6 +438,15 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	 * fails the check with `reason_code_unrecognized`. Defaults to `'revoked'`.
 	 */
 	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the CRL signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the issuer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocationAgainstCrl} may return. */
@@ -827,7 +863,9 @@ export function parseCertificateRevocationListPem(
 export async function verifyCertificateRevocationListSignature(
 	crl: string | Uint8Array,
 	issuerCertificate: string | Uint8Array,
+	options: VerifyCertificateRevocationListSignatureOptions = {},
 ): Promise<VerifyCertificateRevocationListSignatureResult> {
+	const verification = callerVerification(options.signatureVerifiers);
 	let parsedCrl: ParsedCertificateRevocationList;
 	let issuer: ParsedCertificate;
 	try {
@@ -858,6 +896,7 @@ export async function verifyCertificateRevocationListSignature(
 			issuer.subjectPublicKeyInfoDer,
 			parsedCrl.signatureValue,
 			parsedCrl.tbsCertListDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
@@ -899,8 +938,16 @@ export async function verifyCertificateRevocationListSignature(
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
 ): Promise<ValidateCertificateRevocationListResult> {
+	return await validateCrlWith(input, callerVerification(input.signatureVerifiers));
+}
+
+/** {@linkcode validateCertificateRevocationList} with resolved caller verification. */
+async function validateCrlWith(
+	input: ValidateCertificateRevocationListInput,
+	verification: CallerVerification,
+): Promise<ValidateCertificateRevocationListResult> {
 	assertCrlMaxAge(input.maxAgeMs);
-	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
+	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate, verification);
 	if (!authenticated.ok) {
 		return authenticated;
 	}
@@ -924,6 +971,7 @@ export async function validateCertificateRevocationList(
 export async function authenticateCrl(
 	crl: CrlSource,
 	issuerCertificate: CrlCertificateSource,
+	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<ValidateCertificateRevocationListResult> {
 	let parsedCrl: ParsedCertificateRevocationList;
 	try {
@@ -987,6 +1035,7 @@ export async function authenticateCrl(
 			issuer.subjectPublicKeyInfoDer,
 			parsedCrl.signatureValue,
 			parsedCrl.tbsCertListDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
@@ -1082,6 +1131,22 @@ export function isCurrentDeltaCrl(
 export async function checkCertificateRevocationAgainstCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
 ): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	return await checkCertificateRevocationAgainstCrlWith(
+		input,
+		callerVerification(input.signatureVerifiers),
+	);
+}
+
+/**
+ * {@linkcode checkCertificateRevocationAgainstCrl} with resolved caller
+ * verification, which can carry the issuer's inherited key parameters.
+ *
+ * @internal
+ */
+export async function checkCertificateRevocationAgainstCrlWith(
+	input: CheckCertificateRevocationAgainstCrlInput,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
 	assertCrlMaxAge(input.maxAgeMs);
 	let certificate: ParsedCertificate;
 	try {
@@ -1095,7 +1160,7 @@ export async function checkCertificateRevocationAgainstCrl(
 				)
 			: checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 	}
-	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
+	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate, verification);
 	if (!authenticated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(
 			authenticated.code,
@@ -1106,6 +1171,7 @@ export async function checkCertificateRevocationAgainstCrl(
 		certificate,
 		authenticated.value,
 		input,
+		verification,
 	);
 	return outcome.kind === 'checked' ? outcome.result : outcome.failure;
 }
@@ -1139,6 +1205,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 	certificate: ParsedCertificate,
 	completeCrl: ParsedCertificateRevocationList,
 	input: CheckCertificateRevocationAgainstCrlInput,
+	verification: CallerVerification = callerVerification(input.signatureVerifiers),
 ): Promise<AuthenticatedCrlCheckOutcome> {
 	if (input.deltaCrl === undefined) {
 		const freshnessFailure = crlFreshnessFailure(
@@ -1154,7 +1221,7 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 			};
 		}
 	}
-	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl);
+	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl, verification);
 	if (!deltaResult.ok) return { kind: 'delta_rejected', failure: deltaResult };
 	const deltaCrl = deltaResult.value;
 	const applicability = checkCrlApplicability(certificate, completeCrl);
@@ -1224,17 +1291,21 @@ function interimReasonsMask(
 async function validateOptionalDeltaCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
 	completeCrl: ParsedCertificateRevocationList,
+	verification: CallerVerification,
 ): Promise<
 	{ readonly ok: true; readonly value?: ParsedCertificateRevocationList } | CrlApplicabilityFailure
 > {
 	if (input.deltaCrl === undefined) return { ok: true };
-	const deltaValidation = await validateCertificateRevocationList({
-		crl: input.deltaCrl,
-		issuerCertificate: input.issuerCertificate,
-		...(input.at === undefined ? {} : { at: input.at }),
-		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-		...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
-	});
+	const deltaValidation = await validateCrlWith(
+		{
+			crl: input.deltaCrl,
+			issuerCertificate: input.issuerCertificate,
+			...(input.at === undefined ? {} : { at: input.at }),
+			...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+			...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
+		},
+		verification,
+	);
 	if (!deltaValidation.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(
 			deltaValidation.code,

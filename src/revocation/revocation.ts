@@ -6,6 +6,8 @@
  */
 
 import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import type { SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import { resolveSignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
 import type { DecodeRefusalCode, Result } from '#micro509/result/result';
 import { rethrowIfInvariant } from '#micro509/result/result';
 import type {
@@ -123,6 +125,13 @@ export interface CheckCertificateRevocationInput {
 	 * settling the status as `good`. Defaults to `'revoked'`.
 	 */
 	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID, for the CRL and
+	 * OCSP evidence. A key that micro509 verifies natively, a key that is no OID,
+	 * or a value that is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
@@ -333,6 +342,7 @@ export async function checkCertificateRevocation(
 	input: CheckCertificateRevocationInput,
 ): Promise<CheckCertificateRevocationResult> {
 	assertCrlMaxAge(input.crlMaxAgeMs);
+	resolveSignatureVerifiers(input.signatureVerifiers);
 	const evidence = input.evidence ?? [];
 	const checkedSources = evidence.map((entry) => entry.kind);
 	if (evidence.length === 0) {
@@ -480,6 +490,9 @@ async function checkCertificateRevocationWithCrl(
 		...(input.unrecognizedReasonCode === undefined
 			? {}
 			: { unrecognizedReasonCode: input.unrecognizedReasonCode }),
+		...(input.signatureVerifiers === undefined
+			? {}
+			: { signatureVerifiers: input.signatureVerifiers }),
 	});
 	if (result.ok) {
 		if (result.value.status === 'revoked') {
@@ -533,6 +546,9 @@ async function checkCertificateRevocationWithOcsp(
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 		...(input.ocspProfile === undefined ? {} : { profile: input.ocspProfile }),
+		...(input.signatureVerifiers === undefined
+			? {}
+			: { signatureVerifiers: input.signatureVerifiers }),
 	});
 	if (!response.ok) {
 		return {

@@ -8,8 +8,12 @@
 
 import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import { derEcdsaSignatureToRaw, rawEcdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
-import type { VerifySignedDataResult } from '#micro509/internal/crypto/sig-verify';
+import type {
+	SignatureVerifiers,
+	VerifySignedDataResult,
+} from '#micro509/internal/crypto/sig-verify';
 import {
+	callerVerification,
 	verifySignedDataDetailed,
 	verifySignedDataWithKeyDetailed,
 } from '#micro509/internal/crypto/sig-verify';
@@ -63,6 +67,15 @@ export interface VerifySignatureInput {
 	readonly signature: Uint8Array;
 	/** The exact bytes the signature covers. */
 	readonly data: Uint8Array;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the result would otherwise be
+	 * `unsupported_signature_algorithm_parameters`, with the parameters in
+	 * `signerSpkiDer`. A key that micro509 verifies natively, a key that is no OID,
+	 * or a value that is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** Input for {@linkcode verifySignatureWithKey}. */
@@ -137,6 +150,7 @@ export async function verifySignature(input: VerifySignatureInput): Promise<Veri
 			input.signerSpkiDer,
 			input.signature,
 			input.data,
+			callerVerification(input.signatureVerifiers),
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);

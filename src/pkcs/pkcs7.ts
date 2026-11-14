@@ -40,7 +40,9 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
+import type { CallerVerification, SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
 import {
+	callerVerification,
 	getVerifySignatureConfigResult,
 	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify';
@@ -305,6 +307,15 @@ export interface VerifyPkcs7SignedDataOptions {
 	 * Required to verify a detached signature; ignored when the SignedData embeds its own content.
 	 */
 	readonly content?: Uint8Array;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where a SignerInfo signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the signer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function fails with `invalid_options`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** A SignerInfo paired with the certificate that verified its signature. */
@@ -894,18 +905,9 @@ export async function verifyPkcs7SignedData(
 	options: VerifyPkcs7SignedDataOptions = {},
 ): Promise<VerifyPkcs7SignedDataResult> {
 	// Snapshot application policy before asynchronous signature verification.
-	let expectedContentTypeOid: string;
-	const signedAttributes = options.signedAttributes ?? 'required';
-	if (!['required', 'allowed', 'forbidden'].includes(signedAttributes)) {
-		return verifyPkcs7Failure('invalid_options', 'Unknown signed-attribute policy');
-	}
-	try {
-		expectedContentTypeOid = decodeObjectIdentifier(
-			readElement(objectIdentifier(options.expectedContentTypeOid ?? OIDS.pkcs7Data)).value,
-		);
-	} catch {
-		return verifyPkcs7Failure('invalid_options', 'Expected content type must be an OID');
-	}
+	const policy = resolvePkcs7VerifyPolicy(options);
+	if (!policy.ok) return policy;
+	const { expectedContentTypeOid, signedAttributes, verification } = policy;
 	const parsedResult = normalizePkcs7SignedDataForVerification(input);
 	if (!parsedResult.ok) return parsedResult;
 	const parsed = parsedResult.value;
@@ -937,7 +939,7 @@ export async function verifyPkcs7SignedData(
 	}
 	const signers: VerifiedPkcs7Signer[] = [];
 	for (const signerInfo of parsed.signerInfos) {
-		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, content);
+		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, content, verification);
 		if (!result.ok) return result;
 		signers.push({ signerInfo, certificate: result.certificate });
 	}
@@ -957,10 +959,41 @@ function normalizePkcs7SignedDataForVerification(
 }
 
 /** Resolves and verifies one signer entry in a parsed PKCS#7 SignedData value. */
+/** Validates the caller policy in {@linkcode VerifyPkcs7SignedDataOptions}. */
+function resolvePkcs7VerifyPolicy(options: VerifyPkcs7SignedDataOptions):
+	| {
+			readonly ok: true;
+			readonly expectedContentTypeOid: string;
+			readonly signedAttributes: NonNullable<VerifyPkcs7SignedDataOptions['signedAttributes']>;
+			readonly verification: CallerVerification;
+	  }
+	| Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }> {
+	const signedAttributes = options.signedAttributes ?? 'required';
+	if (!['required', 'allowed', 'forbidden'].includes(signedAttributes)) {
+		return verifyPkcs7Failure('invalid_options', 'Unknown signed-attribute policy');
+	}
+	let expectedContentTypeOid: string;
+	try {
+		expectedContentTypeOid = decodeObjectIdentifier(
+			readElement(objectIdentifier(options.expectedContentTypeOid ?? OIDS.pkcs7Data)).value,
+		);
+	} catch {
+		return verifyPkcs7Failure('invalid_options', 'Expected content type must be an OID');
+	}
+	try {
+		const verification = callerVerification(options.signatureVerifiers);
+		return { ok: true, expectedContentTypeOid, signedAttributes, verification };
+	} catch (error) {
+		if (error instanceof RangeError) return verifyPkcs7Failure('invalid_options', error.message);
+		throw error;
+	}
+}
+
 async function verifyPkcs7SignerInfo(
 	parsed: ParsedPkcs7SignedData,
 	signerInfo: ParsedPkcs7SignerInfo,
 	content: Uint8Array,
+	verification: CallerVerification,
 ): Promise<
 	| { readonly ok: true; readonly certificate: ParsedCertificate }
 	| Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>
@@ -975,8 +1008,14 @@ async function verifyPkcs7SignerInfo(
 		);
 	}
 	const result = signerInfo.hasSignedAttrs
-		? await verifySignedAttrs(signerInfo, signer, content, parsed.encapsulatedContentTypeOid)
-		: await verifyPkcs7BareSignerInfo(signerInfo, signer, content);
+		? await verifySignedAttrs(
+				signerInfo,
+				signer,
+				content,
+				parsed.encapsulatedContentTypeOid,
+				verification,
+			)
+		: await verifyPkcs7BareSignerInfo(signerInfo, signer, content, verification);
 	return result.ok ? { ok: true, certificate: signer } : result;
 }
 
@@ -984,6 +1023,7 @@ async function verifyPkcs7BareSignerInfo(
 	signerInfo: ParsedPkcs7SignerInfo,
 	signer: ParsedCertificate,
 	content: Uint8Array,
+	verification: CallerVerification,
 ): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
 	try {
 		const verificationResult = await verifySignedDataDetailed(
@@ -994,6 +1034,7 @@ async function verifyPkcs7BareSignerInfo(
 			signer.subjectPublicKeyInfoDer,
 			signerInfo.signature,
 			content,
+			verification,
 		);
 		if (!verificationResult.ok) {
 			return verificationResult.code === 'verification_error'
@@ -1564,6 +1605,7 @@ async function verifySignedAttrs(
 	signer: ParsedCertificate,
 	content: Uint8Array,
 	encapsulatedContentTypeOid: string,
+	verification: CallerVerification,
 ): Promise<
 	| { readonly ok: true }
 	| ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure>
@@ -1618,6 +1660,7 @@ async function verifySignedAttrs(
 			signer.subjectPublicKeyInfoDer,
 			signerInfo.signature,
 			signedData,
+			verification,
 		);
 		if (!verificationResult.ok) {
 			if (verificationResult.code === 'verification_error') {

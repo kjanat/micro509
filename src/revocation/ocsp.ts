@@ -49,8 +49,15 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
 import {
+	callerVerification,
 	getVerifySignatureConfigResult,
+	resolveSignatureVerifiers,
 	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify';
 import {
@@ -61,6 +68,8 @@ import {
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import type { WorkingPublicKey } from '#micro509/internal/verify/verify-path';
+import { certificateWorkingKey, workingParametersAt } from '#micro509/internal/verify/verify-path';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type {
 	DecodeFailureCode,
@@ -82,7 +91,7 @@ import type {
 } from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
-	checkCertificateRevocationAgainstCrl,
+	checkCertificateRevocationAgainstCrlWith,
 	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
@@ -477,6 +486,39 @@ export interface ValidateOcspResponseInput {
 	 * single response omits `nextUpdate`.
 	 */
 	readonly profile?: 'rfc6960' | 'rfc9919';
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where a signature would otherwise use unsupported algorithm parameters. A
+	 * key that micro509 verifies natively, a key that is no OID, or a value that
+	 * is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
+
+/** Options for {@linkcode verifyOcspResponseSignature}. */
+export interface VerifyOcspResponseSignatureOptions {
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where a signature would otherwise use unsupported algorithm parameters. A
+	 * key that micro509 verifies natively, a key that is no OID, or a value that
+	 * is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
+
+/**
+ * Caller verifiers for one OCSP validation, with the working key that the
+ * issuer's certification path gives it (RFC 5280 §6.1.4 (e)).
+ *
+ * @internal
+ */
+export interface OcspCallerVerification {
+	/** Resolved caller verifiers. */
+	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
+	/** The issuer's working key; defaults to its own key parameters. */
+	readonly issuerWorkingKey?: WorkingPublicKey;
 }
 
 /** Failure codes produced by {@linkcode validateOcspResponse}. */
@@ -987,6 +1029,19 @@ export async function createOcspResponse(
 export async function verifyOcspResponseSignature(
 	response: string | Uint8Array | ParsedOcspResponse,
 	signerCertificate: OcspCertificateSource,
+	options: VerifyOcspResponseSignatureOptions = {},
+): Promise<VerifyOcspResponseSignatureResult> {
+	return await verifyOcspResponseSignatureWith(
+		response,
+		signerCertificate,
+		callerVerification(options.signatureVerifiers),
+	);
+}
+
+async function verifyOcspResponseSignatureWith(
+	response: string | Uint8Array | ParsedOcspResponse,
+	signerCertificate: OcspCertificateSource,
+	verification: CallerVerification,
 ): Promise<VerifyOcspResponseSignatureResult> {
 	let parsed: ParsedOcspResponse;
 	try {
@@ -1029,6 +1084,7 @@ export async function verifyOcspResponseSignature(
 			signer.subjectPublicKeyInfoDer,
 			parsed.signatureValue,
 			parsed.responseDataDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
@@ -1083,6 +1139,21 @@ export async function verifyOcspResponseSignature(
 export async function validateOcspResponse(
 	input: ValidateOcspResponseInput,
 ): Promise<ValidateOcspResponseResult> {
+	return await validateOcspResponseWith(input, {
+		verifiers: resolveSignatureVerifiers(input.signatureVerifiers),
+	});
+}
+
+/**
+ * {@linkcode validateOcspResponse} with resolved caller verifiers and the
+ * issuer's working key.
+ *
+ * @internal
+ */
+export async function validateOcspResponseWith(
+	input: ValidateOcspResponseInput,
+	context: OcspCallerVerification,
+): Promise<ValidateOcspResponseResult> {
 	assertCrlMaxAge(input.responderRevocationCrlMaxAgeMs);
 	let parsedResponse: ParsedOcspResponse;
 	try {
@@ -1107,7 +1178,15 @@ export async function validateOcspResponse(
 		return normalized;
 	}
 	const { issuer, trustedResponders, signer } = normalized;
-	const signature = await verifyOcspResponseSignature(parsedResponse, signer);
+	const issuerWorkingKey = context.issuerWorkingKey ?? certificateWorkingKey(issuer);
+	const signature = await verifyOcspResponseSignatureWith(parsedResponse, signer, {
+		verifiers: context.verifiers,
+		workingParameters: {
+			parametersDer: isSameOcspCertificate(signer, issuer)
+				? issuerWorkingKey.parametersDer
+				: workingParametersAt([signer], 0, 0, issuerWorkingKey),
+		},
+	});
 	if (!signature.ok) {
 		return validateOcspResponseFailureResult(signature.code, signature.message);
 	}
@@ -1117,6 +1196,7 @@ export async function validateOcspResponse(
 		issuer,
 		signer,
 		trustedResponders,
+		{ verifiers: context.verifiers, issuerWorkingKey },
 	);
 	if (responderAuthorization !== undefined) return responderAuthorization;
 	const at = input.at ?? new Date();
@@ -1206,6 +1286,7 @@ async function validateOcspResponderAuthorization(
 	issuer: ParsedCertificate,
 	signer: ParsedCertificate,
 	trustedResponders: readonly ParsedCertificate[],
+	context: Required<OcspCallerVerification>,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	const responderBinding = await safeValidateOcspResponderIdBinding(parsedResponse, signer);
 	if (!responderBinding.ok) {
@@ -1217,7 +1298,7 @@ async function validateOcspResponderAuthorization(
 	if (isSameOcspCertificate(signer, issuer) || isLocallyTrustedResponder) {
 		return undefined;
 	}
-	return await validateDelegatedOcspResponder(input, parsedResponse, issuer, signer);
+	return await validateDelegatedOcspResponder(input, parsedResponse, issuer, signer, context);
 }
 
 async function safeValidateOcspResponderIdBinding(
@@ -1242,6 +1323,7 @@ async function validateDelegatedOcspResponder(
 	parsedResponse: ParsedOcspResponse,
 	issuer: ParsedCertificate,
 	signer: ParsedCertificate,
+	context: Required<OcspCallerVerification>,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
 	if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
@@ -1257,6 +1339,9 @@ async function validateDelegatedOcspResponder(
 			: [],
 		roots: [issuer.der],
 		...(input.at !== undefined ? { at: input.at } : {}),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
+		}),
 	});
 	if (!chain.ok) {
 		return validateOcspResponseFailureResult(
@@ -1270,7 +1355,12 @@ async function validateDelegatedOcspResponder(
 			'Delegated OCSP responder lacks ocspSigning EKU',
 		);
 	}
-	const responderRevocation = await checkDelegatedResponderRevocation(signer, issuer, input);
+	const responderRevocation = await checkDelegatedResponderRevocation(
+		signer,
+		issuer,
+		input,
+		context,
+	);
 	return responderRevocation.ok ? undefined : responderRevocation;
 }
 
@@ -1496,6 +1586,7 @@ async function checkDelegatedResponderRevocation(
 	signer: ParsedCertificate,
 	issuer: ParsedCertificate,
 	input: ValidateOcspResponseInput,
+	context: Required<OcspCallerVerification>,
 ): Promise<{ readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult>> {
 	const policy = input.responderRevocationPolicy ?? 'honor-nocheck';
 	if (policy === 'skip') {
@@ -1514,7 +1605,13 @@ async function checkDelegatedResponderRevocation(
 		} catch {
 			continue; // Unusable evidence — try remaining CRLs
 		}
-		const result = await checkCertificateRevocationAgainstCrl({ ...crlCheck, crl });
+		const result = await checkCertificateRevocationAgainstCrlWith(
+			{ ...crlCheck, crl },
+			{
+				verifiers: context.verifiers,
+				workingParameters: { parametersDer: context.issuerWorkingKey.parametersDer },
+			},
+		);
 		if (!result.ok) {
 			sawUnrecognizedReason ||= result.code === 'reason_code_unrecognized';
 			continue; // CRL does not apply to the responder certificate

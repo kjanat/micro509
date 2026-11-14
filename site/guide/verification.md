@@ -399,23 +399,28 @@ Supported identity types:
 WebCrypto runs RSA, ECDSA and Ed25519. A certification path signed with
 another algorithm, such as DSA in a legacy PKI, fails with
 `unsupported_signature_algorithm_parameters` by default. To verify one, pass
-`signatureVerifiers` to `verifyCertificateChain`, `buildCandidatePath`,
-`validateCandidatePath` or a `validateFor*` profile, keyed by signature
-algorithm OID. micro509 calls a verifier only for a certificate signature it
-would otherwise refuse with that code. A key for an algorithm micro509
-verifies natively throws `RangeError`.
+`signatureVerifiers`, keyed by signature algorithm OID. micro509 calls a
+verifier only for a signature it would otherwise refuse with that code. A key
+for an algorithm micro509 verifies natively throws `RangeError`.
 
 A verifier receives the signature algorithm, the signer's
 SubjectPublicKeyInfo, the key parameters to verify with, the signature and the
 signed bytes. It resolves `true` for a valid signature. Any other resolution,
-or a rejection, fails the path with `signature_invalid`. When the signer's key
+or a rejection, counts as an invalid signature. When the signer's key
 omits its parameters, `signerPublicKeyParametersDer` carries the parameters it
 inherits along the path, as [RFC 5280 §6.1.4 (e)][rfc5280-section-6.1.4] and
 [RFC 3279 §2.3.2][rfc3279-section-2.3.2] describe for DSA. It is absent when
 the path leaves none, and the verifier then refuses the signature.
 
-The verifiers apply to certificate signatures in the path. CRL and OCSP
-signatures checked through the `revocation` option go through WebCrypto only.
+These APIs accept `signatureVerifiers`:
+
+| Signatures             | APIs                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Certification path     | `verifyCertificateChain`, `buildCandidatePath`, `validateCandidatePath`, `validateFor*` profiles                                                  |
+| CRL                    | `verifyCertificateRevocationListSignature`, `validateCertificateRevocationList`, `checkCertificateRevocationAgainstCrl`                           |
+| OCSP response          | `verifyOcspResponseSignature`, `validateOcspResponse`                                                                                             |
+| Revocation for a chain | `checkChainRevocation`, `checkCertificateRevocation`, and the `revocation` option of `verifyCertificateChain`, which reuses the chain's verifiers |
+| CSR, CMS, detached     | `verifyCertificateSigningRequest`, `verifyPkcs7SignedData`, `verifySignature`                                                                     |
 
 ## Advanced validation policy
 

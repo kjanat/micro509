@@ -7,7 +7,7 @@
 
 import { canonicalizeOid, toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import { DECODE_LIMIT_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
-import { readElement } from '#micro509/internal/asn1/der';
+import { readElement, readSequenceChildren } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	alternateEcdsaSignatureEncoding,
@@ -110,6 +110,49 @@ function canonicalVerifierOid(oid: string): string {
 	} catch (error) {
 		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new RangeError(`signatureVerifiers key is not an OID: ${oid}`);
+	}
+}
+
+/** The caller verifiers for one signature, and the key parameters a certification path gives its signer. */
+export interface CallerVerification {
+	/** Resolved caller verifiers, keyed by canonical signature algorithm OID. */
+	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
+	/**
+	 * RFC 5280 §6.1 `working_public_key_parameters` of the signer along its path.
+	 * Omitted to use the parameters in the signer's own SubjectPublicKeyInfo.
+	 */
+	readonly workingParameters?: { readonly parametersDer: Uint8Array | undefined };
+}
+
+/** No caller verifiers: every signature goes through WebCrypto. */
+export const NO_CALLER_VERIFICATION: CallerVerification = { verifiers: new Map() };
+
+/** Caller verification with `verifiers` and the signer's own key parameters. */
+export function callerVerification(verifiers: SignatureVerifiers | undefined): CallerVerification {
+	return { verifiers: resolveSignatureVerifiers(verifiers) };
+}
+
+/** DER key parameters, or `undefined` when they are absent or NULL (RFC 5280 §6.1.4 (e)). */
+export function explicitParameters(parametersDer: Uint8Array | undefined): Uint8Array | undefined {
+	if (parametersDer === undefined) return undefined;
+	return parametersDer.length === 2 && parametersDer[0] === 0x05 && parametersDer[1] === 0x00
+		? undefined
+		: parametersDer;
+}
+
+/** The AlgorithmIdentifier parameters of a SubjectPublicKeyInfo; a malformed one has none. */
+export function spkiAlgorithmParametersDer(spkiDer: Uint8Array): Uint8Array | undefined {
+	try {
+		const [algorithm] = readSequenceChildren(spkiDer);
+		if (algorithm === undefined) return undefined;
+		const algorithmDer = spkiDer.subarray(algorithm.start - algorithm.headerLength, algorithm.end);
+		const [, parameters] = readSequenceChildren(algorithmDer);
+		return parameters === undefined
+			? undefined
+			: algorithmDer.subarray(parameters.start - parameters.headerLength, parameters.end);
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
+		return undefined;
 	}
 }
 
@@ -406,8 +449,7 @@ export async function verifySignedDataDetailed(
 	subjectPublicKeyInfoDer: Uint8Array,
 	signature: Uint8Array,
 	signedData: Uint8Array,
-	verifiers: ReadonlyMap<string, SignatureVerifier> = new Map(),
-	signerParametersDer?: Uint8Array,
+	caller: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<VerifySignedDataResult> {
 	const config = getVerifySignatureConfigResult(
 		signatureAlgorithmOid,
@@ -416,10 +458,14 @@ export async function verifySignedDataDetailed(
 		publicKeyParametersOid,
 	);
 	if (!config.ok) {
-		const verifier = verifiers.get(signatureAlgorithmOid);
+		const verifier = caller.verifiers.get(signatureAlgorithmOid);
 		if (verifier === undefined) {
 			return config;
 		}
+		const signerParametersDer =
+			caller.workingParameters === undefined
+				? explicitParameters(spkiAlgorithmParametersDer(subjectPublicKeyInfoDer))
+				: caller.workingParameters.parametersDer;
 		return await runCallerVerifier(verifier, {
 			signatureAlgorithm: {
 				oid: signatureAlgorithmOid,

@@ -10,10 +10,19 @@
 
 import { toHex } from '#micro509/internal/asn1/asn1';
 import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
+import { resolveSignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import type { WorkingPublicKey } from '#micro509/internal/verify/verify-path';
+import { certificateWorkingKey, workingParametersAt } from '#micro509/internal/verify/verify-path';
 import type { DecodeFailureCode } from '#micro509/result/result';
 import type {
 	AuthenticatedCrlCheckOutcome,
 	CrlSource,
+	checkCertificateRevocationAgainstCrl,
 	ParsedCertificateRevocationList,
 	ParsedRevocationReason,
 	UnrecognizedReasonCodePolicy,
@@ -21,7 +30,7 @@ import type {
 import {
 	assertCrlMaxAge,
 	authenticateCrl,
-	checkCertificateRevocationAgainstCrl,
+	checkCertificateRevocationAgainstCrlWith,
 	checkRevocationAgainstAuthenticatedCrl,
 	coversAllDistributionPointReasons,
 	isCrlApplicableTo,
@@ -41,7 +50,7 @@ import {
 	carriesOcspNoCheck,
 	parseOcspResponseDerOrThrow,
 	parseOcspResponsePemOrThrow,
-	validateOcspResponse,
+	validateOcspResponseWith,
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import { verifyCertificateChain } from '#micro509/verify/verify';
@@ -162,6 +171,15 @@ export interface CheckChainRevocationInput {
 	readonly at?: Date;
 	/** Revocation policy. */
 	readonly policy?: RevocationPolicy;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID, for CRL and OCSP
+	 * signatures and the signer paths checked here. A CRL or OCSP signer inside
+	 * `chain` verifies with the key parameters it inherits along `chain`
+	 * (RFC 5280 §6.1.4 (e)). A key that micro509 verifies natively, a key that is
+	 * no OID, or a value that is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 // Output Types
@@ -465,6 +483,7 @@ async function crlSignerChainsToAnchor(
 	chain: readonly ParsedCertificate[],
 	extraCertificates: readonly RevocationCertificateSource[],
 	at: Date,
+	signatureVerifiers: SignatureVerifiers | undefined,
 ): Promise<boolean> {
 	if (chain.some((c) => sameCertificate(c, signer))) {
 		return true;
@@ -502,6 +521,7 @@ async function crlSignerChainsToAnchor(
 		intermediates: pool.map((certificate) => certificate.der),
 		roots: [trustAnchor.der],
 		at,
+		...(signatureVerifiers !== undefined && { signatureVerifiers }),
 	});
 	return result.ok;
 }
@@ -531,6 +551,44 @@ interface SignerValidationContext {
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
+	readonly signatureVerifiers: SignatureVerifiers | undefined;
+	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
+	/** The RFC 5280 §6.1 working key of a CRL or OCSP signer. */
+	readonly workingKeyOf: (certificate: ParsedCertificate) => WorkingPublicKey;
+}
+
+/** Caller verification for a signature by `signer`, with its working key parameters. */
+function signerVerification(
+	ctx: SignerValidationContext,
+	signer: ParsedCertificate,
+): CallerVerification {
+	return {
+		verifiers: ctx.verifiers,
+		workingParameters: { parametersDer: ctx.workingKeyOf(signer).parametersDer },
+	};
+}
+
+/**
+ * Working keys along `chain`: a member inherits key parameters from the members
+ * above it (RFC 5280 §6.1.4 (e)); any other certificate keeps its own.
+ */
+function chainWorkingKeys(
+	chain: readonly ParsedCertificate[],
+): (certificate: ParsedCertificate) => WorkingPublicKey {
+	const top = chain[chain.length - 1];
+	return (certificate) => {
+		const index = chain.findIndex((member) => sameCertificate(member, certificate));
+		if (top === undefined || index < 0) return certificateWorkingKey(certificate);
+		return {
+			algorithmOid: certificate.publicKeyAlgorithmOid,
+			parametersDer: workingParametersAt(
+				chain,
+				index,
+				chain.length - 2,
+				certificateWorkingKey(top),
+			),
+		};
+	};
 }
 
 /**
@@ -708,15 +766,18 @@ async function checkSignerAgainstCrl(
 	} catch {
 		return SIGNER_CRL_NO_EVIDENCE;
 	}
-	const result = await checkCertificateRevocationAgainstCrl({
-		certificate: signer,
-		issuerCertificate: issuer,
-		crl,
-		at: ctx.at,
-		...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
-		...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
-		unrecognizedReasonCode: ctx.unrecognizedReasonCode,
-	});
+	const result = await checkCertificateRevocationAgainstCrlWith(
+		{
+			certificate: signer,
+			issuerCertificate: issuer,
+			crl,
+			at: ctx.at,
+			...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
+			...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
+			unrecognizedReasonCode: ctx.unrecognizedReasonCode,
+		},
+		signerVerification(ctx, issuer),
+	);
 	if (!result.ok) {
 		return result.code === 'reason_code_unrecognized'
 			? { kind: 'unrecognized_reason' }
@@ -938,7 +999,12 @@ async function validateOcspResponseWithResponderFallback(
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
 	at: Date,
+	signerCtx: SignerValidationContext,
 ): Promise<ValidateOcspResponseResult> {
+	const context = {
+		verifiers: signerCtx.verifiers,
+		issuerWorkingKey: signerCtx.workingKeyOf(issuer),
+	};
 	const trustedOcspResponders = input.trustedOcspResponders
 		?.filter((trusted) => {
 			const trustedIssuer = parseCertificateSafe(trusted.issuerCertificate);
@@ -962,8 +1028,11 @@ async function validateOcspResponseWithResponderFallback(
 		...(input.policy?.unrecognizedReasonCode !== undefined
 			? { responderRevocationUnrecognizedReasonCode: input.policy.unrecognizedReasonCode }
 			: {}),
+		...(input.signatureVerifiers !== undefined
+			? { signatureVerifiers: input.signatureVerifiers }
+			: {}),
 	};
-	const primary = await validateOcspResponse({ response, ...shared });
+	const primary = await validateOcspResponseWith({ response, ...shared }, context);
 	if (primary.ok || !OCSP_RESPONDER_FAILURE_CODES.has(primary.code)) {
 		return primary;
 	}
@@ -972,11 +1041,10 @@ async function validateOcspResponseWithResponderFallback(
 		if (responder === undefined) {
 			continue;
 		}
-		const retry = await validateOcspResponse({
-			response,
-			...shared,
-			responderCertificate: responder,
-		});
+		const retry = await validateOcspResponseWith(
+			{ response, ...shared, responderCertificate: responder },
+			context,
+		);
 		if (retry.ok) {
 			return retry;
 		}
@@ -997,6 +1065,7 @@ async function evaluateOcspEvidence(
 	cert: ParsedCertificate,
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
+	signerCtx: SignerValidationContext,
 ): Promise<EvidenceEvaluation> {
 	const { ocspResponses = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
@@ -1017,6 +1086,7 @@ async function evaluateOcspEvidence(
 			issuer,
 			input,
 			at,
+			signerCtx,
 		);
 		if (!validation.ok) {
 			state.reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
@@ -1176,11 +1246,20 @@ async function resolveBaseCrlAgainstSigners(
 			unrecognizedReasonCode,
 			budgets: [baseBudget, deltaBudget],
 			state,
+			verification: signerVerification(signerCtx, candidate),
 		});
 		if (resolved.kind === 'unusable_base') {
 			continue;
 		}
-		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
+		if (
+			!(await crlSignerChainsToAnchor(
+				candidate,
+				chain,
+				extraCertificates,
+				at,
+				signerCtx.signatureVerifiers,
+			))
+		) {
 			state.sawCrlSignerNotAuthorized = true;
 			continue;
 		}
@@ -1437,6 +1516,7 @@ interface DeltaCandidateCheck {
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
 	readonly budgets: readonly DeltaCrlBudget[];
 	readonly state: CrlEvidenceState;
+	readonly verification: CallerVerification;
 }
 
 type DeltaCandidateOutcome =
@@ -1476,8 +1556,9 @@ async function checkCrlAgainstDeltaCandidates(
 		unrecognizedReasonCode,
 		budgets,
 		state,
+		verification,
 	} = params;
-	const authenticated = await authenticateCrl(baseCrl, candidate);
+	const authenticated = await authenticateCrl(baseCrl, candidate, verification);
 	if (!authenticated.ok) {
 		return { kind: 'unusable_base' };
 	}
@@ -1493,10 +1574,12 @@ async function checkCrlAgainstDeltaCandidates(
 	for (const deltaCrl of deltaCandidates) {
 		const settled = takeDeltaCrlAttempt(budgets)
 			? settleAuthenticatedCrlOutcome(
-					await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, {
-						...input,
-						deltaCrl,
-					}),
+					await checkRevocationAgainstAuthenticatedCrl(
+						cert,
+						authenticated.value,
+						{ ...input, deltaCrl },
+						verification,
+					),
 					laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
 					state,
 				)
@@ -1508,7 +1591,12 @@ async function checkCrlAgainstDeltaCandidates(
 			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
 		}
 		if (settled.kind === 'retry_limit') {
-			const alone = await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input);
+			const alone = await checkRevocationAgainstAuthenticatedCrl(
+				cert,
+				authenticated.value,
+				input,
+				verification,
+			);
 			return (
 				(alone.kind === 'checked'
 					? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
@@ -1519,7 +1607,7 @@ async function checkCrlAgainstDeltaCandidates(
 	}
 	return (
 		settleAuthenticatedCrlOutcome(
-			await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input),
+			await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input, verification),
 			baseCrl.thisUpdate,
 			state,
 		) ?? { kind: 'unusable_base' }
@@ -1656,7 +1744,7 @@ async function evaluateCertificateRevocation(
 	deltaBudget: DeltaCrlBudget,
 ): Promise<EvidenceEvaluation> {
 	const prefer = input.policy?.prefer ?? 'best-available';
-	const ocsp = await evaluateOcspEvidence(cert, issuer, input);
+	const ocsp = await evaluateOcspEvidence(cert, issuer, input, signerCtx);
 	const crl = await evaluateCrlEvidence(cert, issuer, input, signerCtx, deltaBudget);
 	const executionErrors = [...ocsp.executionErrors, ...crl.executionErrors];
 
@@ -1742,6 +1830,7 @@ export async function checkChainRevocation(
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
+	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
 	const mode = policy?.mode ?? 'hard-fail';
 
 	// Empty chain → allow
@@ -1767,6 +1856,9 @@ export async function checkChainRevocation(
 		crlMaxAgeMs: policy?.crlMaxAgeMs,
 		clockSkewMs: policy?.clockSkewMs,
 		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
+		signatureVerifiers: input.signatureVerifiers,
+		verifiers,
+		workingKeyOf: chainWorkingKeys(chain),
 	};
 	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
 
