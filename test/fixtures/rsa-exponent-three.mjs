@@ -1,7 +1,7 @@
 /**
  * RSASSA-PKCS1-v1_5 vectors for node-forge GHSA-6qrw-m8cv-hcxf. The RSA-2048 key has public
  * exponent 3 and came from
- * `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:3 -outform DER | base64 -w0`.
+ * `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:3 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0`.
  * Never use this key outside tests.
  * @module
  */
