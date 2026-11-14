@@ -747,10 +747,13 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 /**
  * Builds a signature-verified path from a leaf certificate to a trusted root.
  *
- * Parses the supplied certificates, walks the issuer chain, signature-checks
- * each link, and returns the first valid path. Does not enforce time, constraints,
- * or leaf purpose — call {@linkcode validateCandidatePath} or use the all-in-one
- * {@linkcode verifyCertificateChain} for full validation.
+ * Parses the supplied certificates, walks the issuer chain, and returns the
+ * first path whose links pass. Each link checks the signature, the issuer's
+ * validity period, CA and keyCertSign constraints, path length, and key
+ * identifiers. The leaf's validity period, unrecognized critical extensions,
+ * certificate policies, name constraints, leaf purpose, and service identity
+ * are left to {@linkcode validateCandidatePath} or the all-in-one
+ * {@linkcode verifyCertificateChain}.
  *
  * @example
  * ```ts
@@ -1226,6 +1229,12 @@ export async function validateCandidatePath(
  *
  * Equivalent to calling {@linkcode buildCandidatePath} followed by
  * {@linkcode validateCandidatePath} (plus identity matching when configured).
+ *
+ * Success authenticates the certification path of `leaf`. Authenticating a
+ * remote peer also takes the transport's proof that the peer holds the leaf's
+ * private key: pass the certificate the handshake authenticated as `leaf`,
+ * the rest of the peer's chain as `intermediates`, and apply authorization to
+ * `value.leaf`.
  *
  * @example
  * ```ts

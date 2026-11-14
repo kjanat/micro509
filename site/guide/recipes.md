@@ -87,6 +87,97 @@ collections, not the leaf or a completed chain. Some failures, such as
 OCSP evidence your application has. Omitting the input skips revocation
 checking.
 
+## Authenticate a TLS client
+
+A mutual TLS handshake proves that the client holds the private key of the
+first certificate it sent. Validate that certificate for `clientAuth`, then
+authorize the same certificate. The rest of the client's chain only helps build
+the path. This recipe maps the SHA-256 of an authorized client's public key to
+an account.
+
+<LiveCode>
+
+```ts
+import {
+  createCertificate,
+  createSelfSignedCertificate,
+  generateKeyPair,
+  subjectPublicKeyInfoFingerprint,
+  verifyCertificateChain,
+} from 'micro509';
+
+async function authenticateClient(
+  handshakeChain: readonly Uint8Array[],
+  trustedRootPems: readonly string[],
+  accountsBySpkiSha256: ReadonlyMap<string, string>,
+) {
+  const [leaf, ...intermediates] = handshakeChain;
+  if (leaf === undefined) {
+    return { ok: false as const, reason: 'no_client_certificate' };
+  }
+  const result = await verifyCertificateChain({
+    leaf,
+    intermediates,
+    roots: trustedRootPems,
+    purpose: 'clientAuth',
+  });
+  if (!result.ok) {
+    return { ok: false as const, reason: result.error.code };
+  }
+  const { hex } = await subjectPublicKeyInfoFingerprint(result.value.leaf);
+  const account = accountsBySpkiSha256.get(hex);
+  if (account === undefined) {
+    return { ok: false as const, reason: 'not_authorized', spkiSha256: hex };
+  }
+  return { ok: true as const, account, spkiSha256: hex };
+}
+
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Recipe Client CA' },
+  extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+});
+async function issueClient(commonName: string) {
+  const keys = await generateKeyPair();
+  return createCertificate({
+    issuer: { commonName: 'Recipe Client CA' },
+    subject: { commonName },
+    publicKey: keys.publicKey,
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+    extensions: { extendedKeyUsage: ['clientAuth'] },
+  });
+}
+const alice = await issueClient('alice');
+const mallory = await issueClient('mallory');
+const accounts = new Map([
+  [(await subjectPublicKeyInfoFingerprint(alice.der)).hex, 'alice'],
+]);
+const roots = [ca.certificate.pem];
+
+console.log('alice:', await authenticateClient([alice.der], roots, accounts));
+console.log(
+  'mallory:',
+  await authenticateClient([mallory.der], roots, accounts),
+);
+console.log(
+  'mallory appending alice:',
+  await authenticateClient([mallory.der, alice.der], roots, accounts),
+);
+```
+
+</LiveCode>
+
+Mallory holds a valid client certificate, so validation succeeds and
+authorization refuses the account. Appending Alice's public certificate leaves
+Mallory's certificate in first place, and the handshake proved Mallory's key.
+
+With `node:tls`, create the server with `requestCert: true`. After the
+handshake, `socket.getPeerCertificate(true)` returns the client's first
+certificate with its DER in `raw`. Further certificates follow through
+`issuerCertificate` until the link is `undefined` or points back to the same
+certificate. Node.js, Bun and Deno each fill that list differently, and the
+recipe uses those certificates only to build the path.
+
 ## Issue a certificate from a CSR
 
 Verify the CSR signature, then review its subject and requested extensions under

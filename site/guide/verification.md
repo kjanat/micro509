@@ -22,6 +22,34 @@ that require revocation evidence, missing or unusable evidence is indeterminate
 and fails under the default hard-fail policy. See [chain-level revocation](./revocation.md#chain-level-revocation)
 for evidence selection and certificates exempted from checking.
 
+### Authenticating a peer
+
+A successful result shows that the supplied `leaf` chains to one of your roots
+under the options you passed. Certificates are public, so anyone can present a
+copy of one. Authenticating a remote peer also takes proof that the peer holds
+the leaf's private key, and the transport supplies that proof. A TLS handshake
+proves possession of the key in the first certificate of the peer's chain, and
+of that key only.
+
+Pass that first certificate as `leaf` and the rest of the peer's chain as
+`intermediates`. The other certificates serve path building and carry no
+identity: a peer can append any certificate it has seen to its own chain.
+Apply your identity and authorization policy to `result.value.leaf`, the
+certificate the handshake authenticated. The
+[TLS client recipe](./recipes.md#authenticate-a-tls-client) shows the whole
+flow.
+
+Parsing a certificate, matching its fingerprint against an allow-list, and
+`matchCertificatePrivateKey` all work on public material or on a key you
+already hold. Only the transport's proof of possession ties a certificate to
+the peer on the other end of a session.
+
+`buildCandidatePath` builds a path and checks its signatures, issuer validity
+periods, CA and `keyCertSign` constraints, path lengths and key identifiers.
+The leaf's validity period, unrecognized critical extensions, certificate
+policies, name constraints, purpose, service identity and revocation are left
+to `validateCandidatePath` or `verifyCertificateChain`.
+
 ## Chain verification
 
 For existing certificates, pass the leaf, intermediates, and trusted roots to
