@@ -1,0 +1,5 @@
+# Cloudflare Workers static-assets redirects (https://developers.cloudflare.com/workers/static-assets/redirects/).
+# VitePress emits no guide/index.html (cleanUrls, no site/guide/index.md), so the
+# bare section path 404s. Point it at the guide's first page, both slash forms.
+/guide   /guide/getting-started   301
+/guide/  /guide/getting-started   301
