@@ -185,7 +185,10 @@ async function runExponentThreeSmoke(cryptoApi) {
 			throw new Error(`smoke: e=3 DigestInfo "${variant.name}" verified as ${!variant.valid}`);
 		}
 	}
-	const forged = exponentThree.forgeExponentThreeSignature(digest, 256);
+	const forged = exponentThree.forgeExponentThreeSignature(
+		digest,
+		await exponentThree.modulusLength(publicKey),
+	);
 	if ((await verify(forged)).some(Boolean)) {
 		throw new Error('smoke: e=3 cube-root forgery verified');
 	}

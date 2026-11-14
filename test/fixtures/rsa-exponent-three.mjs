@@ -318,13 +318,44 @@ export function forgeExponentThreeSignature(digest, length) {
 }
 
 /**
- * Returns the first message `${label} ${n}` whose SHA-256 digest ends in an odd octet.
+ * Modulus length in octets of an extractable RSA key.
+ * @param {CryptoKey} key
+ */
+export async function modulusLength(key) {
+	const jwk = await crypto.subtle.exportKey('jwk', key);
+	if (typeof jwk.n !== 'string') throw new Error('Fixture requires an extractable RSA key');
+	return fromBase64Url(jwk.n).length;
+}
+
+const oddDigestAttempts = 64;
+
+/**
+ * Calls `build` with attempts 0 to 63 and returns the first value whose signed bytes have a
+ * SHA-256 digest ending in an odd octet, as {@link forgeExponentThreeSignature} requires.
+ * @template T
+ * @param {string} label Names the search in the exhaustion error.
+ * @param {(attempt: number) => Promise<{ readonly value: T, readonly signedBytes: Uint8Array }>} build
+ * @returns {Promise<{ readonly value: T, readonly digest: Uint8Array }>}
+ */
+export async function findOddDigest(label, build) {
+	for (let attempt = 0; attempt < oddDigestAttempts; attempt += 1) {
+		const { value, signedBytes } = await build(attempt);
+		const digest = new Uint8Array(
+			await crypto.subtle.digest('SHA-256', new Uint8Array(signedBytes)),
+		);
+		if (((digest[31] ?? 0) & 1) === 1) return { value, digest };
+	}
+	throw new Error(`${label}: no odd SHA-256 digest in ${oddDigestAttempts} attempts`);
+}
+
+/**
+ * Returns the first message `${label} ${attempt}` whose SHA-256 digest ends in an odd octet.
  * @param {string} label
  */
 export async function oddDigestMessage(label) {
-	for (let counter = 0; ; counter += 1) {
-		const data = new TextEncoder().encode(`${label} ${counter}`);
-		const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
-		if (((digest[31] ?? 0) & 1) === 1) return { data, digest };
-	}
+	const { value, digest } = await findOddDigest(label, async (attempt) => {
+		const data = new TextEncoder().encode(`${label} ${attempt}`);
+		return { value: data, signedBytes: data };
+	});
+	return { data: value, digest };
 }
