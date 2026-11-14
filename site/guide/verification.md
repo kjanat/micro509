@@ -46,9 +46,11 @@ the peer on the other end of a session.
 
 `buildCandidatePath` builds a path and checks its signatures, issuer validity
 periods, CA and `keyCertSign` constraints, path lengths and key identifiers.
-The leaf's validity period, unrecognized critical extensions, certificate
-policies, name constraints, purpose, service identity and revocation are left
-to `validateCandidatePath` or `verifyCertificateChain`.
+`validateCandidatePath` checks the leaf's validity period, unrecognized
+critical extensions, certificate policies, name constraints and purpose.
+`verifyCertificateChain` runs both and then checks service identity and
+revocation. On a path you built and validated yourself, call
+`matchServiceIdentity` and `checkChainRevocation` for those two checks.
 
 ## Chain verification
 

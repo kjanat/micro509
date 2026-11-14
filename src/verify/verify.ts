@@ -750,10 +750,11 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
  * Parses the supplied certificates, walks the issuer chain, and returns the
  * first path whose links pass. Each link checks the signature, the issuer's
  * validity period, CA and keyCertSign constraints, path length, and key
- * identifiers. The leaf's validity period, unrecognized critical extensions,
- * certificate policies, name constraints, leaf purpose, and service identity
- * are left to {@linkcode validateCandidatePath} or the all-in-one
- * {@linkcode verifyCertificateChain}.
+ * identifiers. {@linkcode validateCandidatePath} checks the leaf's validity
+ * period, unrecognized critical extensions, certificate policies, name
+ * constraints, and leaf purpose. The all-in-one
+ * {@linkcode verifyCertificateChain} also checks service identity and
+ * revocation.
  *
  * @example
  * ```ts
