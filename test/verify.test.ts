@@ -10,6 +10,7 @@ import {
 	isResultError,
 	matchServiceIdentity,
 	parseCertificateChainPem,
+	parseCertificateDer,
 	parseCertificatePem,
 	pemDecodeOrThrow,
 	trustAnchorFromCertificate,
@@ -54,6 +55,7 @@ import {
 	issueChain,
 	legacyMailboxNameConstraints,
 	reissueSelfSignedCertificateWithName,
+	replaceCertificateExtension,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
 	rewriteCertificateSubject,
@@ -96,6 +98,70 @@ function buildDirectoryNameDerHex(
 		),
 	);
 	return Buffer.from(encoded).toString('hex');
+}
+
+type PathLengthFixture = Awaited<ReturnType<typeof issuePathLengthFixture>>;
+
+async function issuePathLengthFixture(
+	keyUsage: readonly ('keyCertSign' | 'cRLSign')[] | undefined,
+) {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: 'Path Length Root' },
+		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+	});
+	const issue = async (
+		subject: string,
+		issuer: { readonly name: string; readonly der: Uint8Array; readonly key: CryptoKey },
+		extensions: Parameters<typeof createCertificate>[0]['extensions'],
+	) => {
+		const keys = await generateKeyPair();
+		const certificate = await createCertificate({
+			issuer: { commonName: issuer.name },
+			subject: { commonName: subject },
+			publicKey: keys.publicKey,
+			signerPrivateKey: issuer.key,
+			issuerCertificate: issuer.der,
+			extensions,
+		});
+		return { name: subject, der: certificate.der, key: keys.privateKey };
+	};
+	const anchor = {
+		name: 'Path Length Root',
+		der: root.certificate.der,
+		key: root.keyPair.privateKey,
+	};
+	const unconstrained = await issue('Constrained CA', anchor, {
+		basicConstraints: { ca: true },
+		...(keyUsage === undefined ? {} : { keyUsage }),
+	});
+	const constrained = {
+		...unconstrained,
+		der: await replaceCertificateExtension(unconstrained.der, anchor.key, {
+			oid: OIDS.basicConstraints,
+			critical: true,
+			value: sequence([tlv(0x01, Uint8Array.of(0xff)), integerFromNumber(0)]),
+		}),
+	};
+	const subordinate = await issue('Subordinate CA', constrained, {
+		basicConstraints: { ca: true },
+		keyUsage: ['keyCertSign', 'cRLSign'],
+	});
+	const leafExtensions = { keyUsage: ['digitalSignature'] } as const;
+	return {
+		root: root.certificate.der,
+		constrained,
+		subordinate,
+		directLeaf: await issue('direct.example', constrained, leafExtensions),
+		deepLeaf: await issue('deep.example', subordinate, leafExtensions),
+	};
+}
+
+function deepPathInput(path: PathLengthFixture) {
+	return {
+		leaf: path.deepLeaf.der,
+		intermediates: [path.subordinate.der, path.constrained.der],
+		roots: [path.root],
+	};
 }
 
 describe('chain verification', () => {
@@ -213,6 +279,60 @@ describe('chain verification', () => {
 		expect(result.value.chain).toHaveLength(3);
 		expect(result.value.root.subject.values.commonName).toBe('Root CA');
 	});
+
+	describe.each([
+		['without keyUsage', undefined],
+		['with keyUsage', ['keyCertSign', 'cRLSign']],
+	] as const)(
+		'RFC 5280 §6.1.4 (l)-(m) pathLenConstraint 0 on a non-anchor CA %s (GHSA-h46v-rmh6-fq4f)',
+		(_variant, keyUsage) => {
+			let pending: Promise<PathLengthFixture> | undefined;
+			const fixture = () => (pending ??= issuePathLengthFixture(keyUsage));
+			const exceeded = { ok: false, code: 'path_length_exceeded', index: 2 } as const;
+
+			it('parses the constrained CA as cA with pathLenConstraint 0', async () => {
+				const parsed = unwrap(parseCertificateDer((await fixture()).constrained.der));
+				expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 0 });
+				expect(parsed.keyUsage === undefined).toBe(keyUsage === undefined);
+			});
+
+			it.each(['directLeaf', 'subordinate'] as const)(
+				'accepts %s as the path target',
+				async (target) => {
+					const path = await fixture();
+					expect(
+						await verifyCertificateChain({
+							leaf: path[target].der,
+							intermediates: [path.constrained.der],
+							roots: [path.root],
+						}),
+					).toMatchObject({ ok: true });
+				},
+			);
+
+			it.each([
+				[
+					'buildCandidatePath',
+					(path: PathLengthFixture) => buildCandidatePath(deepPathInput(path)),
+				],
+				[
+					'validateCandidatePath',
+					(path: PathLengthFixture) =>
+						validateCandidatePath({
+							chain: [path.deepLeaf.der, path.subordinate.der, path.constrained.der, path.root].map(
+								(der) => unwrap(parseCertificateDer(der)),
+							),
+						}),
+				],
+				[
+					'verifyCertificateChain',
+					(path: PathLengthFixture) => verifyCertificateChain(deepPathInput(path)),
+				],
+			] as const)('%s refuses a CA below the constrained CA', async (_api, run) => {
+				expect(await run(await fixture())).toMatchObject(exceeded);
+			});
+		},
+	);
 
 	it('returns structured verification errors', async () => {
 		const validChain = await issueChain();

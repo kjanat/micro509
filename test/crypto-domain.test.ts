@@ -4,10 +4,30 @@ import {
 	ecdsaSignatureRawToDer,
 	signData,
 	verifySignature,
+	verifySignatureWithKey,
 } from '#micro509/crypto';
 import { exportSpkiDer, generateKeyPair } from '#micro509/keys';
+import {
+	createPkcs7SignedData,
+	parsePkcs7SignedDataDer,
+	verifyPkcs7SignedData,
+} from '#micro509/pkcs';
 import { unwrap } from '#micro509/result';
-import { createSelfSignedCertificate, parseCertificatePem } from '#micro509/x509';
+import { verifyCertificateChain } from '#micro509/verify';
+import {
+	createCertificate,
+	createSelfSignedCertificate,
+	parseCertificateDer,
+	parseCertificatePem,
+} from '#micro509/x509';
+import {
+	digestInfoVariants,
+	pkcs8 as exponentThreePkcs8,
+	forgeExponentThreeSignature,
+	oddDigestMessage,
+	recoverEncodedMessage,
+	signDigestInfo,
+} from './fixtures/rsa-exponent-three.mjs';
 
 const encoder = new TextEncoder();
 
@@ -165,5 +185,161 @@ describe('crypto domain', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error(result.code);
 		expect(result.valid).toBe(true);
+	});
+});
+
+const rsaEncryption = '1.2.840.113549.1.1.1';
+const sha256WithRsaEncryption = '1.2.840.113549.1.1.11';
+const pkcs1Sha256 = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' } as const;
+
+async function exponentThreeKeys() {
+	const privateKey = await crypto.subtle.importKey(
+		'pkcs8',
+		Uint8Array.from(atob(exponentThreePkcs8), (char) => char.charCodeAt(0)),
+		pkcs1Sha256,
+		true,
+		['sign'],
+	);
+	const { n, e } = await crypto.subtle.exportKey('jwk', privateKey);
+	const publicKey = await crypto.subtle.importKey('jwk', { kty: 'RSA', n, e }, pkcs1Sha256, true, [
+		'verify',
+	]);
+	return { privateKey, publicKey, spki: await exportSpkiDer(publicKey) };
+}
+
+async function verifyBothWays(
+	keys: Awaited<ReturnType<typeof exponentThreeKeys>>,
+	signature: Uint8Array,
+	data: Uint8Array,
+) {
+	const bySpki = await verifySignature({
+		signerSpkiDer: keys.spki,
+		signatureAlgorithm: { oid: sha256WithRsaEncryption },
+		publicKeyAlgorithm: { oid: rsaEncryption },
+		signature,
+		data,
+	});
+	const byKey = await verifySignatureWithKey({
+		publicKey: keys.publicKey,
+		signatureAlgorithm: { oid: sha256WithRsaEncryption },
+		signatureEncoding: 'raw',
+		signature,
+		data,
+	});
+	if (!bySpki.ok) throw new Error(bySpki.code);
+	if (!byKey.ok) throw new Error(byKey.code);
+	return { bySpki: bySpki.valid, byKey: byKey.valid };
+}
+
+describe('RFC 8017 §8.2.2 RSASSA-PKCS1-v1_5 verification for public exponent 3 (GHSA-6qrw-m8cv-hcxf)', () => {
+	it('step 4: only the DER DigestInfo of §9.2 verifies; every advisory shape is an invalid signature', async () => {
+		const keys = await exponentThreeKeys();
+		const data = encoder.encode('GHSA-6qrw-m8cv-hcxf');
+		const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+		const variants = digestInfoVariants(digest);
+		const native = new Uint8Array(await crypto.subtle.sign(pkcs1Sha256, keys.privateKey, data));
+		const actual: Record<string, { bySpki: boolean; byKey: boolean }> = {};
+		for (const variant of variants) {
+			const signature = await signDigestInfo(keys.privateKey, variant.digestInfo);
+			if (variant.valid) expect(signature).toEqual(native);
+			actual[variant.name] = await verifyBothWays(keys, signature, data);
+		}
+		expect(actual).toEqual(
+			Object.fromEntries(
+				variants.map((variant) => [variant.name, { bySpki: variant.valid, byKey: variant.valid }]),
+			),
+		);
+		expect(variants.filter((variant) => variant.valid)).toHaveLength(1);
+	});
+
+	it('refuses a cube-root forgery built without the private key whose recovered digest matches', async () => {
+		const keys = await exponentThreeKeys();
+		const { data, digest } = await oddDigestMessage('GHSA-6qrw-m8cv-hcxf forgery');
+		const forged = forgeExponentThreeSignature(digest, 256);
+		const recovered = await recoverEncodedMessage(keys.publicKey, forged);
+		expect(recovered.subarray(0, 11)).toEqual(Uint8Array.of(0, 1, ...new Array(8).fill(0xff), 0));
+		expect(recovered.subarray(11, 17)).toEqual(Uint8Array.of(0x30, 0x81, 0xf2, 0x30, 0x81, 0xcd));
+		expect(recovered.subarray(28, 31)).toEqual(Uint8Array.of(0x05, 0x81, 0xbf));
+		expect(recovered.subarray(-34)).toEqual(Uint8Array.of(0x04, 0x20, ...digest));
+		expect(await verifyBothWays(keys, forged, data)).toEqual({ bySpki: false, byKey: false });
+	});
+
+	it('refuses a certificate whose signature is a cube-root forgery under an e=3 issuer', async () => {
+		const keys = await exponentThreeKeys();
+		const root = await createCertificate({
+			issuer: { commonName: 'Exponent Three Root' },
+			subject: { commonName: 'Exponent Three Root' },
+			publicKey: keys.publicKey,
+			signerPrivateKey: keys.privateKey,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		for (let serial = 1; ; serial += 1) {
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Exponent Three Root' },
+				subject: { commonName: 'forged.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: keys.privateKey,
+				issuerCertificate: root.der,
+				serialNumber: Uint8Array.of(serial),
+				extensions: { keyUsage: ['digitalSignature'] },
+			});
+			const parsed = unwrap(parseCertificateDer(leaf.der));
+			const digest = new Uint8Array(
+				await crypto.subtle.digest('SHA-256', new Uint8Array(parsed.tbsCertificateDer)),
+			);
+			if (((digest[31] ?? 0) & 1) === 0) continue;
+			const forgedDer = leaf.der.slice();
+			forgedDer.set(forgeExponentThreeSignature(digest, 256), forgedDer.length - 256);
+			expect(unwrap(parseCertificateDer(forgedDer)).tbsCertificateDer).toEqual(
+				parsed.tbsCertificateDer,
+			);
+			expect(await verifyCertificateChain({ leaf: leaf.der, roots: [root.der] })).toMatchObject({
+				ok: true,
+			});
+			expect(await verifyCertificateChain({ leaf: forgedDer, roots: [root.der] })).toMatchObject({
+				ok: false,
+				code: 'signature_invalid',
+				index: 0,
+			});
+			return;
+		}
+	});
+
+	it('refuses a CMS SignerInfo whose signature is a cube-root forgery under an e=3 signer', async () => {
+		const keys = await exponentThreeKeys();
+		const signer = await createCertificate({
+			issuer: { commonName: 'Exponent Three Signer' },
+			subject: { commonName: 'Exponent Three Signer' },
+			publicKey: keys.publicKey,
+			signerPrivateKey: keys.privateKey,
+			extensions: { keyUsage: ['digitalSignature'] },
+		});
+		for (let counter = 0; ; counter += 1) {
+			const signed = unwrap(
+				await createPkcs7SignedData({
+					content: encoder.encode(`GHSA-6qrw-m8cv-hcxf CMS ${counter}`),
+					signers: [{ certificate: signer.der, privateKey: keys.privateKey }],
+				}),
+			);
+			const signerInfo = unwrap(parsePkcs7SignedDataDer(signed.der)).signerInfos[0];
+			if (signerInfo?.hasSignedAttrs !== true) throw new Error('expected signed attributes');
+			const signedInput = signerInfo.signedAttrsDer.slice();
+			signedInput[0] = 0x31;
+			const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', signedInput));
+			if (((digest[31] ?? 0) & 1) === 0) continue;
+			expect(signed.der.subarray(-256)).toEqual(signerInfo.signature);
+			const forgedDer = signed.der.slice();
+			forgedDer.set(forgeExponentThreeSignature(digest, 256), forgedDer.length - 256);
+			expect(await verifyPkcs7SignedData(signed.der)).toMatchObject({ ok: true });
+			expect(await verifyPkcs7SignedData(forgedDer)).toMatchObject({
+				ok: false,
+				code: 'signature_invalid',
+			});
+			return;
+		}
 	});
 });

@@ -5,6 +5,7 @@
 
 import { libargon2Vectors, rfc9106Vectors } from '../test/fixtures/argon2.mjs';
 import { forgeExponentOneJwt } from '../test/fixtures/jose-exponent-one.mjs';
+import * as exponentThree from '../test/fixtures/rsa-exponent-three.mjs';
 import * as legacyOaep from '../test/fixtures/rsa-oaep-sha1.mjs';
 
 /**
@@ -71,6 +72,7 @@ export async function runSmoke(micro509, cryptoApi, kdfApi, sshApi, joseApi) {
 	}
 
 	await runKeyImportSmoke(micro509, keyPair);
+	await runExponentThreeSmoke(cryptoApi);
 	await runArgon2Smoke(kdfApi);
 	await runSshSmoke(micro509, sshApi);
 	await runJoseSmoke(micro509, joseApi);
@@ -133,6 +135,59 @@ async function runKeyImportSmoke(api, pair) {
 			result.details.reason !== 'backend_rejected'
 		)
 			throw new Error('smoke: JWK key_ops input escaped the Result boundary');
+	}
+}
+
+/**
+ * Runs the GHSA-6qrw-m8cv-hcxf DigestInfo vectors through this runtime's RSA backend.
+ * @param {typeof import('#micro509/crypto')} cryptoApi
+ */
+async function runExponentThreeSmoke(cryptoApi) {
+	const algorithm = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+	const privateKey = await crypto.subtle.importKey(
+		'pkcs8',
+		Uint8Array.from(atob(exponentThree.pkcs8), (char) => char.charCodeAt(0)),
+		algorithm,
+		true,
+		['sign'],
+	);
+	const { n, e } = await crypto.subtle.exportKey('jwk', privateKey);
+	const publicKey = await crypto.subtle.importKey('jwk', { kty: 'RSA', n, e }, algorithm, true, [
+		'verify',
+	]);
+	const signerSpkiDer = new Uint8Array(await crypto.subtle.exportKey('spki', publicKey));
+	const { data, digest } = await exponentThree.oddDigestMessage('smoke exponent three');
+	/** @param {Uint8Array} signature */
+	const verify = async (signature) => {
+		const signatureAlgorithm = { oid: '1.2.840.113549.1.1.11' };
+		const results = [
+			await cryptoApi.verifySignature({
+				signerSpkiDer,
+				signatureAlgorithm,
+				publicKeyAlgorithm: { oid: '1.2.840.113549.1.1.1' },
+				signature,
+				data,
+			}),
+			await cryptoApi.verifySignatureWithKey({
+				publicKey,
+				signatureAlgorithm,
+				signatureEncoding: 'raw',
+				signature,
+				data,
+			}),
+		];
+		if (results.some((result) => !result.ok)) throw new Error('smoke: e=3 verification errored');
+		return results.map((result) => result.ok && result.valid);
+	};
+	for (const variant of exponentThree.digestInfoVariants(digest)) {
+		const signature = await exponentThree.signDigestInfo(privateKey, variant.digestInfo);
+		if ((await verify(signature)).some((valid) => valid !== variant.valid)) {
+			throw new Error(`smoke: e=3 DigestInfo "${variant.name}" verified as ${!variant.valid}`);
+		}
+	}
+	const forged = exponentThree.forgeExponentThreeSignature(digest, 256);
+	if ((await verify(forged)).some(Boolean)) {
+		throw new Error('smoke: e=3 cube-root forgery verified');
 	}
 }
 
