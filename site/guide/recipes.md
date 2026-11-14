@@ -171,12 +171,12 @@ Mallory holds a valid client certificate, so validation succeeds and
 authorization refuses the account. Appending Alice's public certificate leaves
 Mallory's certificate in first place, and the handshake proved Mallory's key.
 
-With `node:tls`, create the server with `requestCert: true`. After the
-handshake, `socket.getPeerCertificate(true)` returns the client's first
-certificate with its DER in `raw`. Further certificates follow through
-`issuerCertificate` until the link is `undefined` or points back to the same
-certificate. Node.js, Bun and Deno each fill that list differently, and the
-recipe uses those certificates only to build the path.
+With `node:tls`, create the server with `requestCert: true` and your client
+roots as `ca`. After the handshake, `socket.getPeerCertificate(true)` returns
+the client's first certificate with its DER in `raw`. Further certificates
+follow through `issuerCertificate` until the link is `undefined` or points
+back to the same certificate. Node.js, Bun and Deno each fill that list
+differently, and the recipe uses those certificates only to build the path.
 
 ## Issue a certificate from a CSR
 

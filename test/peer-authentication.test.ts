@@ -91,8 +91,9 @@ const tlsServer = createServer(
 	{
 		cert: server.certificate.pem,
 		key: server.keyPem,
+		ca: ca.certificate.pem,
 		requestCert: true,
-		rejectUnauthorized: false,
+		rejectUnauthorized: true,
 	},
 	(socket) => {
 		socket.end();
@@ -159,11 +160,13 @@ describe('TLS client authentication recipe (site/guide/recipes.md)', () => {
 
 	it('denies a client that appends an authorized certificate to its own chain (GHSA-99jp-jwmc-65p4)', async () => {
 		const chain = await handshake([mallory.certificate.pem, alice.certificate.pem], mallory.keyPem);
-		expect(chain).toEqual([mallory.certificate.der, alice.certificate.der]);
-		const anyPresentedMatches = await Promise.all(
+		expect(chain[0]).toEqual(mallory.certificate.der);
+		expect(chain).toContainEqual(alice.certificate.der);
+		const presentedMatches = await Promise.all(
 			chain.map(async (der) => accounts.has((await subjectPublicKeyInfoFingerprint(der)).hex)),
 		);
-		expect(anyPresentedMatches).toEqual([false, true]);
+		expect(presentedMatches[0]).toBe(false);
+		expect(presentedMatches).toContain(true);
 		expect(await authenticateClient(chain, roots, accounts)).toMatchObject({
 			ok: false,
 			reason: 'not_authorized',
