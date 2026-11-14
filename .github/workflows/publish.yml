@@ -92,29 +92,43 @@ jobs:
         run: |
           $outputs = ConvertFrom-Json $env:OUTPUTS
           $pkg = Get-Content package.json | ConvertFrom-Json
+          $spec = "{0}@{1}" -f $pkg.name, $pkg.version
           $versionsJson = bun info $pkg.name versions --json 2>$null
           $versions = if ($LASTEXITCODE -eq 0) { $versionsJson | ConvertFrom-Json } else { @() }
+          $published = $versions -contains $pkg.version
 
-          if ($versions -contains $pkg.version) { "::notice::{0}@{1} already on npm, skipping" -f $pkg.name, $pkg.version; exit 0 }
-          if ($outputs.is_tag -ne 'true') { npm publish --dry-run; exit $LASTEXITCODE }
+          if ($outputs.is_tag -ne 'true') {
+            if ($published) { "::notice::{0} already on npm, skipping" -f $spec; exit 0 }
+            npm publish --dry-run; exit $LASTEXITCODE
+          }
 
-          $publishArgs = @('--provenance', '--access', 'public')
-          if ($outputs.prerelease -eq 'true') { $publishArgs += @('--tag', 'beta') }
-
-          npm publish @publishArgs; exit $LASTEXITCODE
+          if ($published) {
+            "::notice::{0} already on npm, keeping the registry tarball" -f $spec
+            $tarball = npm pack $spec --silent
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } else {
+            $tarball = npm pack --silent
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $publishArgs = @('--provenance', '--access', 'public')
+            if ($outputs.prerelease -eq 'true') { $publishArgs += @('--tag', 'beta') }
+            npm publish "./$tarball" @publishArgs
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          Move-Item -Force $tarball dist.tar.gz
+      - if: needs.validate.outputs.is_tag == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: npm-package, path: dist.tar.gz, if-no-files-found: error }
 
   release:
     name: GitHub Release
     needs: [validate, publish-jsr, publish-npm]
-    if: needs.validate.outputs.is_tag == 'true'
+    if: needs.validate.outputs.is_tag == 'true' && needs.publish-npm.result == 'success' && needs.publish-jsr.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: write }
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with: { persist-credentials: false }
-      - uses: $/.github/actions/setup
-        with: { install-node: true, update-npm: true }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: npm-package }
       - shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,8 +137,6 @@ jobs:
           OUTPUTS: "${{ toJSON(needs.validate.outputs) }}"
         run: |
           $outputs = ConvertFrom-Json $env:OUTPUTS
-          $pkg = Get-Content package.json | ConvertFrom-Json
-          $spec = "{0}@{1}" -f $pkg.name, $pkg.version
           $asset = 'dist.tar.gz'
 
           $release = gh release view $env:TAG --json isDraft,isImmutable,assets 2>$null | ConvertFrom-Json
@@ -136,21 +148,7 @@ jobs:
             exit 1
           }
 
-          $files = @()
-          if ($needsAsset) {
-            $blob = $null
-            foreach ($attempt in 1..10) {
-              $blob = npm pack $spec --silent 2>$null
-              if ($LASTEXITCODE -eq 0 -and $blob) { break }
-              "::notice::{0} not on the registry yet (attempt {1}/10)" -f $spec, $attempt
-              $blob = $null
-              Start-Sleep -Seconds 15
-            }
-            if (-not $blob) { "::error::{0} never appeared on the registry" -f $spec; exit 1 }
-
-            Move-Item -Force $blob $asset
-            $files = @($asset)
-          }
+          $files = if ($needsAsset) { @($asset) } else { @() }
 
           $releaseArgs = @()
           if ($outputs.prerelease -eq 'true') { $releaseArgs += '--prerelease' }
@@ -163,9 +161,41 @@ jobs:
           }
           exit $LASTEXITCODE
 
+  await-cdn:
+    name: Wait for jsDelivr
+    needs: [validate, release]
+    if: needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.is_stable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    permissions: {}
+    steps:
+      - shell: pwsh
+        continue-on-error: true
+        env: { VERSION: "${{ needs.validate.outputs.version }}" }
+        run: |
+          # The release documentation imports micro509 from jsDelivr, which mirrors npm with a delay.
+          $url = 'https://cdn.jsdelivr.net/npm/micro509@{0}/package.json' -f $env:VERSION.TrimStart('v')
+          $window = [timespan]::FromMinutes(10)
+          $interval = [timespan]::FromSeconds(20)
+          $timeout = [timespan]::FromSeconds(10)
+          $attempts = [int]($window / $interval)
+          $deadline = [datetime]::UtcNow + $window
+          $served = switch (1..$attempts) {
+            default {
+              $status = try {
+                (Invoke-WebRequest $url -Method Head -SkipHttpErrorCheck -TimeoutSec $timeout.TotalSeconds).StatusCode
+              } catch { 0 }
+              "{0:u} attempt {1}/{2}: {3} answered {4}" -f [datetime]::UtcNow, $_, $attempts, $url, $status | Out-Host
+              if ($status -eq 200) { $true; break }
+              if ([datetime]::UtcNow + $interval -ge $deadline) { break }
+              Start-Sleep -Duration $interval
+            }
+          }
+          if (-not $served) { "::error::{0} did not answer 200 within {1}" -f $url, $window; exit 1 }
+
   deploy-docs:
     name: Deploy docs
-    needs: [validate, release]
+    needs: [validate, await-cdn]
     if: needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.is_stable == 'true'
     permissions: { contents: write }
     uses: $/.github/workflows/deploy-site.yml
