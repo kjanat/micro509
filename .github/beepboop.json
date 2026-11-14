@@ -10,7 +10,11 @@
 					"file": "publish.yml",
 					"mode": "observe",
 					"ref": "refs/tags/v*",
-					"publications": ["pkg:jsr/%40kjanat/micro509", "pkg:npm/micro509"]
+					"publications": [
+						"pkg:jsr/%40kjanat/micro509",
+						"pkg:npm/micro509",
+						"github-release:kjanat/micro509"
+					]
 				}
 			},
 			"prepare": {
