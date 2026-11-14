@@ -33,7 +33,7 @@ runs:
     - name: Setup tombi
       uses: kjanat/setup-tombi@94a6834e289046705b32e6b8dc977c8b939e8b35 # v1
 
-    - name: Setup dprint
+    - name: Setup kprint
       uses: kjanat/dprint-check@b6a885d3403db5e40ed59f2c27917d758381f577 # v3.2.0
       with: { install-only: true }
 

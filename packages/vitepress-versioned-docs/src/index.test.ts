@@ -24,6 +24,12 @@ const setup = () => {
 	return { root, site };
 };
 
+const channelBase = (channel: 'next' | 'latest' | 'archive' | 'preview'): string => {
+	if (channel === 'next') return '/next/';
+	if (channel === 'archive') return '/v1.2.3/';
+	return '/';
+};
+
 describe('single-target docs builds', () => {
 	for (const channel of ['next', 'latest', 'archive', 'preview'] as const) {
 		test(`${channel} uses only the checkout and publishes target metadata`, async () => {
@@ -66,8 +72,7 @@ describe('single-target docs builds', () => {
 				});
 				assert.equal(generated, 1);
 				assert.deepEqual(Object.keys(docs.versions[0]?.sections ?? {}).sort(), ['api', 'guide']);
-				const prefix = channel === 'next' ? 'next/' : channel === 'archive' ? 'v1.2.3/' : '';
-				const expectedBase = prefix === '' ? '/' : `/${prefix}`;
+				const expectedBase = channelBase(channel);
 				assert.equal(docs.base, expectedBase);
 				assert.equal(docs.rewrites('site/guide/index.md'), 'guide/index.md');
 				assert.deepEqual(
