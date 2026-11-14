@@ -12,7 +12,46 @@
 					"ref": "refs/tags/v*",
 					"publications": ["pkg:jsr/%40kjanat/micro509", "pkg:npm/micro509"]
 				}
-			}
+			},
+			"prepare": {
+				"strategy": "managed",
+				"workflow": {
+					"setup": {
+						"commands": "curl -fsSL https://bun.sh/install | bash\nexport PATH=\"$HOME/.bun/bin:$PATH\"\nbun install\nbun run build\nbun run typecheck"
+					},
+					"file": "prepare-release.yml",
+					"ref": "master"
+				},
+				"versionLands": "via-version-pr",
+				"versionPrMerge": "squash"
+			},
+			"promote": {
+				"publishWhen": "version-pr-merged",
+				"workflow": {
+					"setup": {
+						"tagPrefix": "v"
+					},
+					"file": "release.yml",
+					"ref": "master",
+					"publications": [],
+					"refs": {
+						"phase": "version",
+						"prefix": "v"
+					}
+				}
+			},
+			"startFrom": [
+				{
+					"via": "action",
+					"workflow": "start-release.yml"
+				},
+				{
+					"via": "dashboard"
+				},
+				{
+					"via": "cli"
+				}
+			]
 		},
 		"openssl": {
 			"packages": [],
