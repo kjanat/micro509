@@ -23,7 +23,11 @@ import {
 	rethrowDecodeRefusal,
 } from '#micro509/internal/asn1/decode-refusal';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import type { SignatureVerifier, SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import {
+	resolveSignatureVerifiers,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { asciiLowercase, domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
@@ -40,15 +44,19 @@ import {
 } from '#micro509/internal/verify/policy-engine';
 import { createSpkiDistrustCheck } from '#micro509/internal/verify/spki-distrust';
 import {
+	anchorWorkingKey,
 	assertPathBuildingChecks,
 	authorityKeyIdentifierMismatch,
 	buildChainInternal,
+	certificateWorkingKey,
 	countCaCertificatesBelowParsed,
 	isSelfIssued,
 	isWithinValidity,
 	loadCertificates,
 	loadSingleCertificate,
+	signatureChecksWith,
 	verifyCertificateSignature,
+	workingParametersAt,
 } from '#micro509/internal/verify/verify-path';
 import {
 	normalizeLabelSeparators,
@@ -293,6 +301,15 @@ export interface BuildCandidatePathInput {
 	 * it stops with `path_building_limit_exceeded`. Defaults to `100_000`.
 	 */
 	readonly maxPathBuildingChecks?: number;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. Path building
+	 * calls one only where the signature algorithm would otherwise fail with
+	 * `unsupported_signature_algorithm_parameters`. Defaults to none. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** A signature-verified certification path from leaf to root, before constraint validation. */
@@ -363,6 +380,14 @@ export interface ValidateCandidatePathInput
 	readonly rejectOversizedDisplayText?: boolean;
 	/** Bare anchor returned by buildCandidatePath. Required for distrust checks when anchorCertificateInChain is false. */
 	readonly trustAnchor?: TrustAnchor;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. Pass the same
+	 * verifiers given to {@linkcode buildCandidatePath}. Defaults to none. A key
+	 * that micro509 verifies natively, a key that is no OID, or a value that is
+	 * no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** Success payload from {@linkcode validateCandidatePath}. */
@@ -436,6 +461,16 @@ export interface VerifyCertificateChainInput
 	 * it stops with `path_building_limit_exceeded`. Defaults to `100_000`.
 	 */
 	readonly maxPathBuildingChecks?: number;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. Path building
+	 * calls one only where the signature algorithm would otherwise fail with
+	 * `unsupported_signature_algorithm_parameters`. Defaults to none. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`. CRL and OCSP signatures checked through
+	 * `revocation` go through WebCrypto only.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 	/** Leaf purpose constraint to enforce during validation. */
 	readonly purpose?: VerifyPurpose;
 	/** DNS/IP/URI/SRV identity to match against the leaf's SAN. */
@@ -678,6 +713,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 > {
 	assertPathBuildingChecks(input.maxPathBuildingChecks);
 	const distrust = createSpkiDistrustCheck(input.distrustedSpkiSha256);
+	const signatureChecks = signatureChecksWith(resolveSignatureVerifiers(input.signatureVerifiers));
 	let leaf: ParsedCertificate;
 	try {
 		leaf = loadSingleCertificate(input.leaf);
@@ -697,7 +733,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 		anchors,
 		at,
 		{ failure, detail },
-		undefined,
+		signatureChecks,
 		input.maxPathBuildingChecks,
 		distrust,
 	);
@@ -812,12 +848,20 @@ async function validateCandidatePathRaw(
 		return failure('issuer_not_found', 'chain is empty', 0);
 	}
 
-	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input);
+	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
+	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(
+		leaf,
+		chain.length,
+		input,
+		verifiers,
+	);
 	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
 	const certificateFailure = await validatePathCertificates(
 		chain,
 		at,
 		input.rejectOversizedDisplayText === true,
+		verifiers,
+		pathWorkingParameters(chain, input),
 	);
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
@@ -874,10 +918,11 @@ async function validateSelfSignedLeafAllowed(
 	leaf: ParsedCertificate,
 	chainLength: number,
 	input: ValidateCandidatePathInput,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
 		return undefined;
-	const selfSignature = await verifyCertificateSignature(leaf, leaf);
+	const selfSignature = await verifyCertificateSignature(leaf, leaf, verifiers);
 	if (!selfSignature.ok || !selfSignature.valid) return undefined;
 	return failure(
 		'self_signed_leaf_not_allowed',
@@ -887,11 +932,34 @@ async function validateSelfSignedLeafAllowed(
 	);
 }
 
+/**
+ * RFC 5280 §6.1.2 (g)-(i) and §6.1.4 (e)-(f) along `chain`: the working key
+ * parameters for the issuer at each index. The terminal certificate or the bare
+ * anchor initializes them.
+ */
+function pathWorkingParameters(
+	chain: readonly ParsedCertificate[],
+	input: ValidateCandidatePathInput,
+): (issuerIndex: number) => Uint8Array | undefined {
+	const top = chain[chain.length - 1];
+	if (input.anchorCertificateInChain === false || top === undefined) {
+		const start =
+			input.trustAnchor === undefined
+				? { algorithmOid: '', parametersDer: undefined }
+				: anchorWorkingKey(input.trustAnchor);
+		return (issuerIndex) => workingParametersAt(chain, issuerIndex, chain.length - 1, start);
+	}
+	const start = certificateWorkingKey(top);
+	return (issuerIndex) => workingParametersAt(chain, issuerIndex, chain.length - 2, start);
+}
+
 /** Validates every certificate and issuer relationship in a candidate path. */
 async function validatePathCertificates(
 	chain: readonly ParsedCertificate[],
 	at: Date,
 	rejectOversizedDisplayText: boolean,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	workingParameters: (issuerIndex: number) => Uint8Array | undefined,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
@@ -902,7 +970,13 @@ async function validatePathCertificates(
 			const displayTextValidation = validateDisplayTextAtPathIndex(current, index);
 			if (displayTextValidation !== undefined) return displayTextValidation;
 		}
-		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
+		const issuerValidation = await validatePathIssuerAtIndex(
+			chain,
+			current,
+			index,
+			verifiers,
+			workingParameters,
+		);
 		if (issuerValidation !== undefined) return issuerValidation;
 	}
 	return undefined;
@@ -951,11 +1025,19 @@ async function validatePathIssuerAtIndex(
 	chain: readonly ParsedCertificate[],
 	current: ParsedCertificate,
 	index: number,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	workingParameters: (issuerIndex: number) => Uint8Array | undefined,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (index === chain.length - 1) return undefined;
 	const issuer = chain[index + 1];
 	if (issuer === undefined) return failure('issuer_not_found', 'issuer missing', index);
-	return await validateIssuerAtPathIndex(current, issuer, index);
+	return await validateIssuerAtPathIndex(
+		current,
+		issuer,
+		index,
+		verifiers,
+		workingParameters(index + 1),
+	);
 }
 
 function validatePathLengthConstraints(
@@ -1109,6 +1191,8 @@ async function validateIssuerAtPathIndex(
 	current: ParsedCertificate,
 	issuer: ParsedCertificate,
 	index: number,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	workingParametersDer: Uint8Array | undefined,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (!compareDistinguishedNames(current.issuer, issuer.subject)) {
 		return failure(
@@ -1121,7 +1205,12 @@ async function validateIssuerAtPathIndex(
 			}),
 		);
 	}
-	const signatureResult = await verifyCertificateSignature(current, issuer);
+	const signatureResult = await verifyCertificateSignature(
+		current,
+		issuer,
+		verifiers,
+		workingParametersDer,
+	);
 	if (!signatureResult.ok) {
 		return failure(
 			signatureResult.code,
@@ -1259,21 +1348,7 @@ export async function verifyCertificateChain(
 	const distrustedSpkiSha256 =
 		input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256];
 	assertCrlMaxAge(input.revocation?.policy?.crlMaxAgeMs);
-	const buildResult = await buildCandidatePath({
-		leaf: input.leaf,
-		roots: input.roots,
-		...(input.intermediates !== undefined && {
-			intermediates: input.intermediates,
-		}),
-		...(input.trustAnchors !== undefined && {
-			trustAnchors: input.trustAnchors,
-		}),
-		...(input.at !== undefined && { at: input.at }),
-		...(input.maxPathBuildingChecks !== undefined && {
-			maxPathBuildingChecks: input.maxPathBuildingChecks,
-		}),
-		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
-	});
+	const buildResult = await buildCandidatePath(chainBuildInput(input, distrustedSpkiSha256));
 	if (!buildResult.ok) {
 		return buildResult;
 	}
@@ -1285,6 +1360,9 @@ export async function verifyCertificateChain(
 			trustAnchor: buildResult.value.trustAnchor,
 		}),
 		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
+		}),
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
 		...copyValidationInputs(input),
@@ -1320,6 +1398,31 @@ export async function verifyCertificateChain(
 			...buildResult.value,
 			policyValidation: validateResult.value.policyValidation,
 		},
+	};
+}
+
+/** The path-building half of a {@linkcode VerifyCertificateChainInput}. */
+function chainBuildInput(
+	input: VerifyCertificateChainInput,
+	distrustedSpkiSha256: readonly string[] | undefined,
+): BuildCandidatePathInput {
+	return {
+		leaf: input.leaf,
+		roots: input.roots,
+		...(input.intermediates !== undefined && {
+			intermediates: input.intermediates,
+		}),
+		...(input.trustAnchors !== undefined && {
+			trustAnchors: input.trustAnchors,
+		}),
+		...(input.at !== undefined && { at: input.at }),
+		...(input.maxPathBuildingChecks !== undefined && {
+			maxPathBuildingChecks: input.maxPathBuildingChecks,
+		}),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
+		}),
+		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
 	};
 }
 
@@ -1595,6 +1698,9 @@ function baseChainInput(
 		}),
 		...(input.distrustedSpkiSha256 !== undefined && {
 			distrustedSpkiSha256: input.distrustedSpkiSha256,
+		}),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
 		}),
 		...copyValidationInputs(input),
 	};
@@ -2309,4 +2415,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
 }
 
+export type {
+	SignatureVerifier,
+	SignatureVerifierInput,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
 export { isSelfIssued as isSelfIssuedCertificate } from '#micro509/internal/verify/verify-path';

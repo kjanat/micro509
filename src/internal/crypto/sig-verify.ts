@@ -5,7 +5,7 @@
  * @module
  */
 
-import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
+import { canonicalizeOid, toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import { DECODE_LIMIT_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
@@ -24,6 +24,94 @@ export {
 	derEcdsaSignatureToRaw,
 	rawEcdsaSignatureToDer,
 } from '#micro509/internal/crypto/ecdsa';
+
+/** One signature handed to a {@linkcode SignatureVerifier}. */
+export interface SignatureVerifierInput {
+	/** The signature algorithm as carried beside the signature. */
+	readonly signatureAlgorithm: {
+		/** Dotted-decimal signature algorithm OID. */
+		readonly oid: string;
+		/** DER algorithm parameters, when the signature carries them. */
+		readonly parametersDer?: Uint8Array;
+	};
+	/** DER `SubjectPublicKeyInfo` of the signer. */
+	readonly signerSpkiDer: Uint8Array;
+	/**
+	 * DER parameters to verify with: RFC 5280 §6.1 `working_public_key_parameters`.
+	 * These are the signer's own key parameters, or the parameters it inherits along
+	 * the certification path when its own are absent or NULL (RFC 5280 §6.1.4 (e),
+	 * RFC 3279 §2.3.2). Absent when the path leaves none.
+	 */
+	readonly signerPublicKeyParametersDer?: Uint8Array;
+	/** The signature bytes as carried. */
+	readonly signature: Uint8Array;
+	/** The exact bytes the signature covers. */
+	readonly data: Uint8Array;
+}
+
+/**
+ * Caller-supplied verification for a signature algorithm micro509 does not run
+ * through WebCrypto. Resolves `true` only for a valid signature. A rejection is
+ * reported as a verification error.
+ */
+export type SignatureVerifier = (input: SignatureVerifierInput) => Promise<boolean>;
+
+/**
+ * Caller verifiers keyed by dotted-decimal signature algorithm OID. A key that
+ * micro509 verifies natively throws `RangeError`, so a caller verifier never
+ * replaces WebCrypto verification.
+ */
+export type SignatureVerifiers = Readonly<Record<string, SignatureVerifier>>;
+
+const NATIVE_SIGNATURE_ALGORITHMS: ReadonlySet<string> = new Set([
+	OIDS.sha256WithRSAEncryption,
+	OIDS.sha384WithRSAEncryption,
+	OIDS.sha512WithRSAEncryption,
+	OIDS.rsassaPss,
+	OIDS.ecdsaWithSHA256,
+	OIDS.ecdsaWithSHA384,
+	OIDS.ecdsaWithSHA512,
+	OIDS.ed25519,
+]);
+
+/**
+ * Validates caller verifiers and indexes them by canonical OID.
+ *
+ * @throws RangeError for a key that is no encodable OID, a natively verified
+ * algorithm, or a value that is no function.
+ */
+export function resolveSignatureVerifiers(
+	verifiers: SignatureVerifiers | undefined,
+): ReadonlyMap<string, SignatureVerifier> {
+	const resolved = new Map<string, SignatureVerifier>();
+	if (verifiers === undefined) return resolved;
+	for (const [oid, verifier] of Object.entries(verifiers)) {
+		const canonical = canonicalVerifierOid(oid);
+		if (NATIVE_SIGNATURE_ALGORITHMS.has(canonical)) {
+			throw new RangeError(`signatureVerifiers cannot replace native verification of ${oid}`);
+		}
+		if (typeof verifier !== 'function') {
+			throw new RangeError(`signatureVerifiers value for ${oid} is not a function`);
+		}
+		if (resolved.has(canonical)) {
+			throw new RangeError(`signatureVerifiers names ${canonical} twice`);
+		}
+		resolved.set(canonical, verifier);
+	}
+	return resolved;
+}
+
+function canonicalVerifierOid(oid: string): string {
+	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
+		throw new RangeError(`signatureVerifiers key is not an OID: ${oid}`);
+	}
+	try {
+		return canonicalizeOid(oid);
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
+		throw new RangeError(`signatureVerifiers key is not an OID: ${oid}`);
+	}
+}
 
 /** Resolved WebCrypto parameters needed to verify a signature. */
 export interface VerifySignatureConfig {
@@ -318,6 +406,8 @@ export async function verifySignedDataDetailed(
 	subjectPublicKeyInfoDer: Uint8Array,
 	signature: Uint8Array,
 	signedData: Uint8Array,
+	verifiers: ReadonlyMap<string, SignatureVerifier> = new Map(),
+	signerParametersDer?: Uint8Array,
 ): Promise<VerifySignedDataResult> {
 	const config = getVerifySignatureConfigResult(
 		signatureAlgorithmOid,
@@ -326,7 +416,24 @@ export async function verifySignedDataDetailed(
 		publicKeyParametersOid,
 	);
 	if (!config.ok) {
-		return config;
+		const verifier = verifiers.get(signatureAlgorithmOid);
+		if (verifier === undefined) {
+			return config;
+		}
+		return await runCallerVerifier(verifier, {
+			signatureAlgorithm: {
+				oid: signatureAlgorithmOid,
+				...(signatureAlgorithmParametersDer === undefined
+					? {}
+					: { parametersDer: signatureAlgorithmParametersDer.slice() }),
+			},
+			signerSpkiDer: subjectPublicKeyInfoDer.slice(),
+			...(signerParametersDer === undefined
+				? {}
+				: { signerPublicKeyParametersDer: signerParametersDer.slice() }),
+			signature: signature.slice(),
+			data: signedData.slice(),
+		});
 	}
 	try {
 		const key = await importSpkiDerOrThrow(subjectPublicKeyInfoDer, config.value.importAlgorithm);
@@ -335,6 +442,21 @@ export async function verifySignedDataDetailed(
 		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		return verificationError(
 			error instanceof Error ? error.message : 'signature verification failed',
+		);
+	}
+}
+
+async function runCallerVerifier(
+	verifier: SignatureVerifier,
+	input: SignatureVerifierInput,
+): Promise<VerifySignedDataResult> {
+	try {
+		return { ok: true, valid: (await verifier(input)) === true };
+	} catch (error) {
+		return verificationError(
+			error instanceof Error
+				? `signature verifier failed: ${error.message}`
+				: 'signature verifier failed',
 		);
 	}
 }

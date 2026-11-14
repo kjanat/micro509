@@ -7,6 +7,9 @@
 
 export type {
 	SignatureProfileInput,
+	SignatureVerifier,
+	SignatureVerifierInput,
+	SignatureVerifiers,
 	SignDataResult,
 	VerifySignatureConfigFailure,
 	VerifySignatureInput,

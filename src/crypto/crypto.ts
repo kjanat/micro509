@@ -18,6 +18,9 @@ import { getSignatureAlgorithm, signBytes } from '#micro509/internal/crypto/sign
 import type { EcNamedCurve } from '#micro509/keys/keys';
 
 export type {
+	SignatureVerifier,
+	SignatureVerifierInput,
+	SignatureVerifiers,
 	VerifySignatureConfigFailure,
 	VerifySignedDataFailure,
 	VerifySignedDataResult,

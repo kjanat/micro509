@@ -34,8 +34,10 @@ Generic SPKI and PKCS#8 export functions delegate to WebCrypto and can export
 other key types when the supplied `CryptoKey` is extractable and its runtime
 supports the format. micro509 key import and generation are narrower.
 
-DSA and Brainpool signing and verification are unsupported. micro509 also
-has no ECDH key generation/import or key-agreement API.
+DSA and Brainpool signing and verification are unsupported. Certificate path
+verification accepts caller `signatureVerifiers` for signature algorithms
+outside this table, as the [verification guide](../guide/verification.md#caller-signature-verifiers)
+describes. micro509 also has no ECDH key generation/import or key-agreement API.
 
 ## JOSE signatures
 
