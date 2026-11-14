@@ -164,9 +164,9 @@
 		"deno": "catalog:deno",
 		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
-		"jose": "^6.2.13",
+		"jose": "^6.2.17",
 		"jose-v5": "npm:jose@5",
-		"playwright": "^1.63.0",
+		"playwright": "^1.65.1",
 		"publint": "catalog:build",
 		"runner-run": "catalog:",
 		"tombi": "catalog:",
@@ -212,9 +212,9 @@
 		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"@kjanat/fmt": "^0.62.0",
 		"@kprint/kprint": "^0.62.0",
-		"biome": "npm:@biomejs/biome@^2.5.14",
+		"biome": "npm:@biomejs/biome@^2.6.7",
 		"runner-run": "^0.28.0",
-		"tombi": "^1.5.10",
+		"tombi": "^1.11.2",
 		"vue": "^3.5.43"
 	},
 	"catalogs": {
@@ -225,8 +225,8 @@
 			"unplugin-unused": "^0.6.0"
 		},
 		"cloudflare": {
-			"@cloudflare/vite-plugin": "^1.62.2",
-			"wrangler": "^4.144.0"
+			"@cloudflare/vite-plugin": "^1.69.1",
+			"wrangler": "^4.162.0"
 		},
 		"deno": {
 			"@deno/doc": "npm:@jsr/deno__doc@0.210.0",
@@ -235,20 +235,20 @@
 			"importmapify": "^1.7.0"
 		},
 		"dprint": {
-			"@dprint/biome": "^0.15.0",
+			"@dprint/biome": "^0.15.6",
 			"@dprint/formatter": "^0.6.0",
 			"@dprint/json": "^0.26.0"
 		},
 		"site": {
 			"markdown-it-task-lists": "^2.1.1",
-			"tar": "^7.5.22",
+			"tar": "^7.5.23",
 			"vite-robots-txt": "^1.0.0",
 			"vite-svg-to-ico": "^5.0.0",
 			"vitepress": "2.0.0-alpha.21"
 		},
 		"ts": {
 			"@arethetypeswrong/core": "^0.18.4",
-			"@tsconfig/node24": "^24.0.5",
+			"@tsconfig/node24": "^24.0.6",
 			"@types/bun": "^1.4.2",
 			"@types/deno": "^2.7.0",
 			"@types/node": "^26.6.3",
