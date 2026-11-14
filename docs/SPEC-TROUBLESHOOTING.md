@@ -102,7 +102,3 @@ bookkeeping and does not trigger corpus delegation. Interactive `git add -p`,
 `git show`, `git grep` and a subsequent `cat docs/rfc/...` still receive the
 appropriate corpus checks. Allowing staging does not authorize publication
 of redistribution-restricted files.
-
-The formatter regression exercises an authored root `Errata.md` in an isolated
-project with this repository's dprint configuration. No source standard or
-user's existing errata document is rewritten by that test.

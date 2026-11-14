@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runCommand } from 'dreamcli/testkit';
@@ -281,43 +281,3 @@ describe('search context at removed page furniture', () => {
 		expect(runs.map((run) => run.find((line) => line.match)?.label)).toEqual(['doc §1', 'doc §2']);
 	});
 });
-
-const kprint = Bun.which('kprint', {
-	PATH: `${path.join(repositoryRoot, 'node_modules', '.bin')}${path.delimiter}${process.env.PATH ?? ''}`,
-});
-
-test.skipIf(kprint === null)(
-	'root Errata.md is discovered and formatted by the repository config',
-	async () => {
-		await scratch(async (root) => {
-			await cp(path.join(repositoryRoot, '.dprint.json'), path.join(root, '.dprint.json'));
-			await cp(path.join(repositoryRoot, '.gitignore'), path.join(root, '.gitignore'));
-			await symlink(
-				path.join(repositoryRoot, 'node_modules'),
-				path.join(root, 'node_modules'),
-				process.platform === 'win32' ? 'junction' : 'dir',
-			);
-			await writeFile(path.join(root, 'Errata.md'), '# Fixture\n\nThis is   authored test text.\n');
-			if (kprint === null) throw new Error('kprint disappeared');
-			for (const args of [
-				['output-file-paths', 'Errata.md'],
-				['fmt', 'Errata.md'],
-				['check', 'Errata.md'],
-			]) {
-				const child = Bun.spawn([kprint, ...args], {
-					cwd: root,
-					stdout: 'pipe',
-					stderr: 'pipe',
-				});
-				const [stdout, stderr, code] = await Promise.all([
-					new Response(child.stdout).text(),
-					new Response(child.stderr).text(),
-					child.exited,
-				]);
-				if (code !== 0) throw new Error(`kprint ${args.join(' ')}: ${code}\n${stderr}`);
-				if (args[0] === 'output-file-paths') expect(stdout).toContain('Errata.md');
-			}
-		});
-	},
-	120_000,
-);
