@@ -369,7 +369,7 @@ console.log(
 
 </LiveCode>
 
-When you need the _reason_ a match failed rather than a bare `false` — or a typed
+When you need the *reason* a match failed rather than a bare `false` — or a typed
 failure instead of a thrown error on untrusted input — reach for
 `matchCertificatePrivateKey`, the `Result`-returning companion. It succeeds
 (`ok: true`) on a match, or fails with a code of `key_mismatch` (right algorithm,

@@ -3,8 +3,8 @@
 	"model": "openai/gpt-5.6-sol",
 	"autoupdate": true,
 	"formatter": {
-		"dprint": {
-			"command": ["node_modules/.bin/dprint", "fmt", "$FILE"],
+		"kprint": {
+			"command": ["node_modules/.bin/kfmt", "$FILE"],
 			"extensions": [
 				".sh",
 				".bash",

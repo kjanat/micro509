@@ -12,7 +12,8 @@
 		},
 		{
 			"matchPackageNames": [
-				"dprint",
+				"@kjanat/fmt",
+				"@kprint/kprint",
 				"@dprint/**",
 				"dprint-plugin-*",
 				"@biomejs/biome",
@@ -79,11 +80,6 @@
 			"schedule": ["before 6am on monday"],
 			"timezone": "Europe/Amsterdam",
 			"updateNotScheduled": false
-		},
-		{
-			"description": "The exec plugin is managed manually.",
-			"matchPackageNames": ["@dprint/exec"],
-			"enabled": false
 		},
 		{
 			"matchPackageNames": ["@kjanat/tsc-*"],

@@ -282,7 +282,11 @@ describe('search context at removed page furniture', () => {
 	});
 });
 
-test.skipIf(Bun.which('dprint') === null)(
+const kprint = Bun.which('kprint', {
+	PATH: `${path.join(repositoryRoot, 'node_modules', '.bin')}${path.delimiter}${process.env.PATH ?? ''}`,
+});
+
+test.skipIf(kprint === null)(
 	'root Errata.md is discovered and formatted by the repository config',
 	async () => {
 		await scratch(async (root) => {
@@ -294,14 +298,13 @@ test.skipIf(Bun.which('dprint') === null)(
 				process.platform === 'win32' ? 'junction' : 'dir',
 			);
 			await writeFile(path.join(root, 'Errata.md'), '# Fixture\n\nThis is   authored test text.\n');
-			const executable = Bun.which('dprint');
-			if (executable === null) throw new Error('dprint disappeared');
+			if (kprint === null) throw new Error('kprint disappeared');
 			for (const args of [
 				['output-file-paths', 'Errata.md'],
 				['fmt', 'Errata.md'],
 				['check', 'Errata.md'],
 			]) {
-				const child = Bun.spawn([executable, ...args], {
+				const child = Bun.spawn([kprint, ...args], {
 					cwd: root,
 					stdout: 'pipe',
 					stderr: 'pipe',
@@ -311,7 +314,7 @@ test.skipIf(Bun.which('dprint') === null)(
 					new Response(child.stderr).text(),
 					child.exited,
 				]);
-				if (code !== 0) throw new Error(`dprint ${args.join(' ')}: ${code}\n${stderr}`);
+				if (code !== 0) throw new Error(`kprint ${args.join(' ')}: ${code}\n${stderr}`);
 				if (args[0] === 'output-file-paths') expect(stdout).toContain('Errata.md');
 			}
 		});

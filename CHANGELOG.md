@@ -1145,7 +1145,7 @@ stricter typed-contract pass.
   octets ([RFC 5915 §3][rfc5915-section-3], "version SHALL be ... one"). Only the tag was checked, so
   version 0 or 2 was deferred to the WebCrypto backend as a misleading error.
 - PBES2 decryption no longer rejects a PBKDF2 salt shorter than eight bytes. [RFC
-  8018 §4.1][rfc8018-section-4.1] makes the eight-octet minimum a "should" for salt _selection_ and
+  8018 §4.1][rfc8018-section-4.1] makes the eight-octet minimum a "should" for salt *selection* and
   says the salt need not be checked on receipt, so `openssl pkcs8 -saltlen 4`
   could not be decrypted. The encrypt path keeps the minimum.
   (https://github.com/kjanat/micro509/pull/85)

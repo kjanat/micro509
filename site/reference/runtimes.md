@@ -29,7 +29,7 @@ Native WebCrypto is used when it supports the requested variant and version.
 An unsupported native operation uses the TypeScript implementation in the
 current thread; other native failures are returned to the caller.
 
-_No_ Node.js builtins (`crypto`, `buffer`, `fs`, etc.) are used in library code.
+*No* Node.js builtins (`crypto`, `buffer`, `fs`, etc.) are used in library code.
 
 ## Tree-shaking
 

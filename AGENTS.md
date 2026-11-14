@@ -31,7 +31,7 @@ and structured `details`.
   `throwMicro509Error` (`src/result/result.ts`). Detect it with `isResultError`
   and branch on `error.code`. Codes are per-operation unions co-located with the
   builder (`ExtensionEncoderErrorCode`, `CrlEncoderErrorCode`,
-  `NameEncoderErrorCode`, `CreateCertificateErrorCode`, `SignJoseErrorCode`). Builder _config_
+  `NameEncoderErrorCode`, `CreateCertificateErrorCode`, `SignJoseErrorCode`). Builder *config*
   validation carries a code, and so do the two decode refusals of
   `src/internal/asn1/decode-refusal.ts`: `unsupported` for a construct micro509
   does not decode and `limit_exceeded` for an implementation limit, which every
@@ -164,7 +164,7 @@ bun test:differential # OpenSSL differential (set DIFFERENTIAL_OPENSSL=1)
 bun spec list         # section-level reader for the vendored standards corpus
 bun docs:lint         # deno doc lint on public exports (CI gate)
 bun lint              # biome lint
-bun fmt               # dprint fmt
+bun fmt               # kfmt (kprint fmt)
 ```
 
 ### Dependency bootstrap

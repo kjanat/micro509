@@ -19,6 +19,9 @@
 	"markup": {
 		"printWidth": 80
 	},
+	"toml": {
+		"configFile": "../tombi.toml"
+	},
 	"markdown": {
 		"textWrap": "maintain",
 		"codeBlock.useTabs": false,

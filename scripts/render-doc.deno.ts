@@ -5,7 +5,7 @@
  * Sources doc nodes straight from `@deno/doc`'s `doc()` — the same wasm-compiled
  * deno_doc that backs the `deno doc` CLI, but in-process. No subprocess, and no
  * import map: `doc()` resolves `#micro509/*` via package.json imports natively.
- * Output is piped through dprint so it needs no downstream formatting.
+ * Output is piped through kprint so it needs no downstream formatting.
  *
  *     deno run -A scripts/render-doc.deno.ts [symbol...]
  *
@@ -37,13 +37,13 @@ const importMap = new URL('../deno.import_map.json', import.meta.url).href;
 const nodes = await doc(urls, { importMap, printImportMapDiagnostics: false });
 const md = renderDocuments(nodes, { packageName: pkg.name }, new Set(Deno.args));
 
-// Format through dprint so downstream doesn't have to.
-const dprint = new Deno.Command('dprint', {
-	args: ['fmt', '--stdin', 'md'],
+// Format through kprint so downstream doesn't have to.
+const kfmt = new Deno.Command('kfmt', {
+	args: ['--stdin', 'md'],
 	stdin: 'piped',
 	stdout: 'piped',
 });
-const child = dprint.spawn();
+const child = kfmt.spawn();
 const writer = child.stdin.getWriter();
 await writer.write(new TextEncoder().encode(md));
 await writer.close();

@@ -102,9 +102,9 @@
 		"dev": "run -pK build:watch micro509-site:dev",
 		"docs:build": "run -q deno:doc --html --output=.denodocs $(jq -r '.exports | .[]? // .' jsr.json) 2>/dev/null",
 		"docs:lint": "run -q deno:doc --lint $(jq -r '.exports | .[]? // .' jsr.json)",
-		"fmt": "dprint fmt",
-		"fmt:autofix": "dprint fmt --allow-no-files --diff --excludes .github",
-		"format": "run -q fmt",
+		"fmt": "kfmt",
+		"fmt:autofix": "kfmt --allow-no-files --diff --excludes .github",
+		"format": "kfmt",
 		"itu": "bun scripts/fetch-spec.bun.ts itu",
 		"lint": "run -qq lint:biome",
 		"lint:biome": "biome lint",
@@ -152,7 +152,9 @@
 		"@dprint/formatter": "catalog:dprint",
 		"@dprint/json": "catalog:dprint",
 		"@gorhill/ubo-core": "0.1.30",
+		"@kjanat/fmt": "catalog:",
 		"@kjanat/tsc-bridge": "catalog:typebridge",
+		"@kprint/kprint": "catalog:",
 		"@micro509/doc-render": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",
@@ -160,7 +162,6 @@
 		"@types/node": "catalog:ts",
 		"biome": "catalog:",
 		"deno": "catalog:deno",
-		"dprint": "catalog:",
 		"dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
 		"importmapify": "catalog:deno",
 		"jose": "^6.2.13",
@@ -209,8 +210,9 @@
 	},
 	"catalog": {
 		"@kjanat/dreamcli": "npm:@kjanat/dreamcli@^5.0.0",
+		"@kjanat/fmt": "^0.62.0",
+		"@kprint/kprint": "^0.62.0",
 		"biome": "npm:@biomejs/biome@^2.5.14",
-		"dprint": "^0.64.0",
 		"runner-run": "^0.28.0",
 		"tombi": "^1.5.10",
 		"vue": "^3.5.43"
@@ -260,5 +262,5 @@
 			"@kjanat/tsc-vue-mapper": "^0.0.0"
 		}
 	},
-	"trustedDependencies": ["deno", "dprint", "esbuild", "sharp", "workerd"]
+	"trustedDependencies": ["deno", "@kprint/kprint", "@kjanat/fmt", "esbuild", "sharp", "workerd"]
 }

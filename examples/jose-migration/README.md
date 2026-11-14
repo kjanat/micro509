@@ -54,7 +54,7 @@ Regenerate in the repository with:
 ```sh
 bun install --frozen-lockfile
 bun scripts/generate-jose-migration-fixtures.ts
-bunx dprint fmt site/assets/fixtures/jose-migration.json
+bunx kfmt site/assets/fixtures/jose-migration.json
 bun test test/jose-migration-fixtures.test.ts
 ```
 

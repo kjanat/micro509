@@ -12,7 +12,7 @@
  *     bun scripts/render-doc.bun.ts [symbol...]
  *
  * No `symbol` args renders every exported symbol; otherwise only the named ones.
- * Output is piped through dprint so it needs no downstream formatting.
+ * Output is piped through kprint so it needs no downstream formatting.
  *
  * @module
  */
@@ -36,4 +36,4 @@ const raw =
 
 const parsed: { nodes: Record<string, ApiModule> } = JSON.parse(raw);
 const md = renderDocuments(parsed.nodes, { packageName: pkg.name }, new Set(argv.slice(2)));
-stdout.write(await $`dprint fmt --stdin md < ${new Blob([md])}`.text());
+stdout.write(await $`kfmt --stdin md < ${new Blob([md])}`.text());

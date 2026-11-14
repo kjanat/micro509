@@ -152,7 +152,7 @@ export const PKITS_CASES = [
 	await write(manifestPath, manifest).then(() => {
 		console.info(`Wrote manifest with ${cases.length} cases to ${manifestPath}`);
 	});
-	await $`bunx dprint fmt --log-level error ${manifestPath}`.cwd(projectRoot);
+	await $`bunx kfmt --log-level error ${manifestPath}`.cwd(projectRoot);
 }
 
 function parsePkitsCase(lines: readonly string[], lineIndex: number): ParsedPkitsCase | undefined {

@@ -1,7 +1,7 @@
 # **Public Key Interoperability Test Suite (PKITS) Certification Path Validation**
 
-_Version 1.0.1_\
-_April 14, 2011_
+*Version 1.0.1*\
+*April 14, 2011*
 
 ## **Table of Contents**
 
@@ -47,9 +47,9 @@ A certification path is an ordered list of certificates starting with a certific
 
 ### **1.2 Background**
 
-In the fall of 2000, NIST worked in conjunction with CygnaCom Solutions and Getronics Government Solutions, LLC to develop a test suite for a subset of the features defined in the IETF PKIX Certificate and CRL Profile, RFC 2459. The resulting test suite, documented in _Conformance Testing of Relying Party Client Certificate Path Processing Logic_ v. 1.07, has been widely used since its creation.
+In the fall of 2000, NIST worked in conjunction with CygnaCom Solutions and Getronics Government Solutions, LLC to develop a test suite for a subset of the features defined in the IETF PKIX Certificate and CRL Profile, RFC 2459. The resulting test suite, documented in *Conformance Testing of Relying Party Client Certificate Path Processing Logic* v. 1.07, has been widely used since its creation.
 
-This document was developed in an effort to extend the previous test suite to cover most of the features described in the successor to RFC 2459, RFC 3280. The tests in the document include all of the tests from _Conformance Testing of Relying Party Client Certificate Path Processing Logic_ in addition to tests covering certificate and CRL extensions that were not tested by that test suite. Section 5 of this document includes a table mapping tests from the original test suite to their corresponding tests in this test suite.
+This document was developed in an effort to extend the previous test suite to cover most of the features described in the successor to RFC 2459, RFC 3280. The tests in the document include all of the tests from *Conformance Testing of Relying Party Client Certificate Path Processing Logic* in addition to tests covering certificate and CRL extensions that were not tested by that test suite. Section 5 of this document includes a table mapping tests from the original test suite to their corresponding tests in this test suite.
 
 ### **1.3 Getting the Test Data**
 
@@ -109,20 +109,20 @@ This section contains the initialization parameters needed to be set when perfor
 Most of the test cases are designed for processing with the following inputs:
 
 - Trusted certificate to use (a.k.a. trust anchor) is Trust Anchor Root Certificate;
-- _initial-policy-set_ is the special value _any-policy_<sup>1</sup>;
-- _initial-explicit-policy_ indicator value is false;
-- _initial-policy-mapping-inhibit_ indicator value is false; and
-- _initial-inhibit-any-policy_ indicator value is false.
+- *initial-policy-set* is the special value *any-policy*<sup>1</sup>;
+- *initial-explicit-policy* indicator value is false;
+- *initial-policy-mapping-inhibit* indicator value is false; and
+- *initial-inhibit-any-policy* indicator value is false.
 
-The inputs listed above are referred to as the _default settings_. In many of the tests, different values may be used for many of the inputs without affecting the results. In all of the tests that are not related to policy processing, each certificate in the path asserts the certificate policy 2.16.840.1.101.3.2.1.48.1. As long as either the _initial-policy-set_ includes this value or the _initial-explicit-policy_ indicator is not set, the test results will not be affected in the non-policy processing tests. Similarly, the value of _initial-policy-mapping-inhibit_ will not affect any of the tests in which none of the certificates contain a **policyMappings** extension and the value of _initial-inhibit-any-policy_ will not affect any of the tests in which none of the certificates contain a **certificatePolicies** extension that includes the **anyPolicy** OID.
+The inputs listed above are referred to as the *default settings*. In many of the tests, different values may be used for many of the inputs without affecting the results. In all of the tests that are not related to policy processing, each certificate in the path asserts the certificate policy 2.16.840.1.101.3.2.1.48.1. As long as either the *initial-policy-set* includes this value or the *initial-explicit-policy* indicator is not set, the test results will not be affected in the non-policy processing tests. Similarly, the value of *initial-policy-mapping-inhibit* will not affect any of the tests in which none of the certificates contain a **policyMappings** extension and the value of *initial-inhibit-any-policy* will not affect any of the tests in which none of the certificates contain a **certificatePolicies** extension that includes the **anyPolicy** OID.
 
-In RFC 3280, the _initial-policy-set_ is referred to as the user-initial-policy-set and _initial-inhibit-any-policy_ is initial-any-policy-inhibit.
+In RFC 3280, the *initial-policy-set* is referred to as the user-initial-policy-set and *initial-inhibit-any-policy* is initial-any-policy-inhibit.
 
-If an implementation can not set the _initial-policy-set_ to _any-policy_, the tester should set the _initial-policy-set_ to the set of six policies listed in section 3.1 whenever the test procedures specify that the _initial-policy-set_ should be _any-policy_.
+If an implementation can not set the *initial-policy-set* to *any-policy*, the tester should set the *initial-policy-set* to the set of six policies listed in section 3.1 whenever the test procedures specify that the *initial-policy-set* should be *any-policy*.
 
 ### **3.1 Test Certificate Policies**
 
-Some of the test cases include a step that sets the _initial-policy-set_ to one or more certificate policies. In the test descriptions, the certificate policies are referenced using notional names assigned to improve readability. The following table maps the names used in the test descriptions with their Object Identifiers (OIDs).
+Some of the test cases include a step that sets the *initial-policy-set* to one or more certificate policies. In the test descriptions, the certificate policies are referenced using notional names assigned to improve readability. The following table maps the names used in the test descriptions with their Object Identifiers (OIDs).
 
 | Object Identifier         | Registered Name    | Name used in Test Cases |
 | ------------------------- | ------------------ | ----------------------- |
@@ -1316,30 +1316,30 @@ In this test, the intermediate certificate includes a non-critical **keyUsage** 
 
 The tests in this section are designed to verify an application's ability to process the **certificatePolicies** extension, including the ability to process policy qualifiers and the special policy OID **anyPolicy**.
 
-In each of the tests, the "Expected Result" indicates the results of path validation (e.g., the values of the _explicit-policy-indicator_, _authorities-constrained-policy-set_, and _user-constrained-policy-set_ and whether path validation should fail or succeed) as a function of the inputs<sup>4</sup>. All of the tests in this section should validate successfully if the _explicit-policy-indicator_ is not set during path validation. In many of the tests, however, in order to simplify testing, one of the certificates in the path includes a non-critical **policyConstraints** extension in which **requireExplicitPolicy** is present with a **SkipCerts** value of 0. With this, many of the tests in this section can be run using the default settings in applications that can process the **policyConstraints** extension, and the tester can determine whether the application processed the path correctly by simply checking whether path validation succeeded or failed. For those tests in which the path includes a certificate with a **policyConstraints** extension, applications that can not process the **policyConstraints** extension can achieve the same results by setting _initial-explicit-policy_ to true. If the application can not process the **policyConstraints** extension and it is not possible to set _initial-explicit-policy_ to true, then it will be necessary to look at the value of _user-constrained-policy-set_ that is output by the path validation code to determine if the path was processed correctly.
+In each of the tests, the "Expected Result" indicates the results of path validation (e.g., the values of the *explicit-policy-indicator*, *authorities-constrained-policy-set*, and *user-constrained-policy-set* and whether path validation should fail or succeed) as a function of the inputs<sup>4</sup>. All of the tests in this section should validate successfully if the *explicit-policy-indicator* is not set during path validation. In many of the tests, however, in order to simplify testing, one of the certificates in the path includes a non-critical **policyConstraints** extension in which **requireExplicitPolicy** is present with a **SkipCerts** value of 0. With this, many of the tests in this section can be run using the default settings in applications that can process the **policyConstraints** extension, and the tester can determine whether the application processed the path correctly by simply checking whether path validation succeeded or failed. For those tests in which the path includes a certificate with a **policyConstraints** extension, applications that can not process the **policyConstraints** extension can achieve the same results by setting *initial-explicit-policy* to true. If the application can not process the **policyConstraints** extension and it is not possible to set *initial-explicit-policy* to true, then it will be necessary to look at the value of *user-constrained-policy-set* that is output by the path validation code to determine if the path was processed correctly.
 
-If the application can not process the **policyConstraints** extension, and it is not possible to set _initial-explicit-policy_, and it is not possible to examine the value of the _user-constrained-policy-set_, then it will not be possible to determine whether the application can process the **certificatePolicies** extension correctly. One may, however, still run the tests in this section in which no certificate in the path includes a **policyConstraints** extension and the value of _initial-explicit-policy_ is false.
+If the application can not process the **policyConstraints** extension, and it is not possible to set *initial-explicit-policy*, and it is not possible to examine the value of the *user-constrained-policy-set*, then it will not be possible to determine whether the application can process the **certificatePolicies** extension correctly. One may, however, still run the tests in this section in which no certificate in the path includes a **policyConstraints** extension and the value of *initial-explicit-policy* is false.
 
-Many of the tests in this section suggest that the path be validated using inputs other than the default settings. As a general rule, each of the tests should be run using each of the suggested input settings unless the application can not be configured as specified. Where it is suggested that a path be validated with _initial-explicit-policy_ set to true, these sub-tests may be skipped when testing applications that do not allow _initial-explicit-policy_ to be set to true. These sub-tests are only present to determine if applications that allow _initial-explicit-policy_ to be set produce the correct results when this input has been set.
+Many of the tests in this section suggest that the path be validated using inputs other than the default settings. As a general rule, each of the tests should be run using each of the suggested input settings unless the application can not be configured as specified. Where it is suggested that a path be validated with *initial-explicit-policy* set to true, these sub-tests may be skipped when testing applications that do not allow *initial-explicit-policy* to be set to true. These sub-tests are only present to determine if applications that allow *initial-explicit-policy* to be set produce the correct results when this input has been set.
 
-If it is not possible to set the _initial-policy-set_ to a value other than _any-policy_, then the sub-tests in which _initial-policy-set_ is set to a different value may be skipped. However, in this case, it will be necessary, when running the corresponding sub-tests in which _initial-policy-set_ is set to _any-policy_, to examine the _user-constrained-policy-set_ to determine that it has been calculated correctly. If the _initial-policy-set_ can be set, then the proper calculation of the _user-constrained-policy-set_ may be inferred if path validation succeeds or fails as indicated for each of the sub-tests in which the _initial-policy-set_ is other than _any-policy_.
+If it is not possible to set the *initial-policy-set* to a value other than *any-policy*, then the sub-tests in which *initial-policy-set* is set to a different value may be skipped. However, in this case, it will be necessary, when running the corresponding sub-tests in which *initial-policy-set* is set to *any-policy*, to examine the *user-constrained-policy-set* to determine that it has been calculated correctly. If the *initial-policy-set* can be set, then the proper calculation of the *user-constrained-policy-set* may be inferred if path validation succeeds or fails as indicated for each of the sub-tests in which the *initial-policy-set* is other than *any-policy*.
 
 In RFC 3280, explicit_policy will be 0 if explicit-policy-indicator is set. The user-constrained-policy-set may be computed from the valid_policy_tree as follows. If the valid_policy_tree includes a leaf node with a valid_policy of anyPolicy, then the user-constrained-policy-set is any-policy. Otherwise, the user-constrained-policy-set consists of the set containing the valid_policy from each node in the valid_policy_tree in which the valid_policy is not anyPolicy and the valid_policy of that node's parent is anyPolicy. The authorities-constrained-policy-set may be computed using the same procedure on the valid_policy_tree before its intersection with the user-initial-policy-set has been computed (in step g of section 6.1.5).
 
-The final six tests in this section deal with policy qualifiers. Since all of the **certificatePolicies** extensions in these tests are marked non-critical, the policy qualifiers may be ignored by applications that are unable to process them. Applications that can not process policy qualifiers should be able to process the certification paths in the policy qualifier tests by processing the **certificatePolicies** extension the same as if they did not include qualifiers. If certification path processing library code is being tested, and the library processes policy qualifiers, then it will be necessary to look at the _authorities-constrained-policy-set_ and/or _user-constrained-policy-set_ to determine that the correct qualifiers have been associated with each of the policies in the set.
+The final six tests in this section deal with policy qualifiers. Since all of the **certificatePolicies** extensions in these tests are marked non-critical, the policy qualifiers may be ignored by applications that are unable to process them. Applications that can not process policy qualifiers should be able to process the certification paths in the policy qualifier tests by processing the **certificatePolicies** extension the same as if they did not include qualifiers. If certification path processing library code is being tested, and the library processes policy qualifiers, then it will be necessary to look at the *authorities-constrained-policy-set* and/or *user-constrained-policy-set* to determine that the correct qualifiers have been associated with each of the policies in the set.
 
 #### **4.8.1 All Certificates Same Policy Test1**
 
 In this test, every certificate in the path asserts the same policy, NIST-test-policy-1. The certification path in this test is the same certification path as in Valid Signatures Test1. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-explicit-policy_ set. The path should validate successfully.
-2. default settings, but with _initial-explicit-policy_ set and _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-3. default settings, but with _initial-explicit-policy_ set and _initial-policy-set_ = {NIST-test-policy-2}. The path should not validate successfully.
-4. default settings, but with _initial-explicit-policy_ set and _initial-policy-set_ = {NIST-test-policy-1, NIST-test-policy-2}. The path should validate successfully.
+1. default settings, but with *initial-explicit-policy* set. The path should validate successfully.
+2. default settings, but with *initial-explicit-policy* set and *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+3. default settings, but with *initial-explicit-policy* set and *initial-policy-set* = {NIST-test-policy-2}. The path should not validate successfully.
+4. default settings, but with *initial-explicit-policy* set and *initial-policy-set* = {NIST-test-policy-1, NIST-test-policy-2}. The path should validate successfully.
 
 **Procedure:** Validate Valid Certificate Path Test1 EE or open and verify Signed Test Message 6.2.2.66 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be the same as the _initialexplicit-policy_ indicator. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrainedpolicy-set_ will be {NIST-test-policy-1}. If not, the _user-constrainedpolicy-set_ will be empty. If the _initial-explicit-policy_ indicator is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be the same as the *initialexplicit-policy* indicator. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrainedpolicy-set* will be {NIST-test-policy-1}. If not, the *user-constrainedpolicy-set* will be empty. If the *initial-explicit-policy* indicator is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1352,13 +1352,13 @@ In this test, every certificate in the path asserts the same policy, NIST-test-p
 In this test, the **certificatePolicies** extension is omitted from every certificate in the path. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
 1. default settings. The path should validate successfully.
-2. default settings, but with _initial-explicit-policy_ set. The path should not validate
+2. default settings, but with *initial-explicit-policy* set. The path should not validate
 
 successfully.
 
 **Procedure:** Validate All Certificates No Policies Test2 EE or open and verify Signed Test Message 6.2.2.67.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. If the _initial-explicit-policy_ indicator is not set then the path should validate successfully. If the _initial-explicitpolicy_ indicator is set, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. If the *initial-explicit-policy* indicator is not set then the path should validate successfully. If the *initial-explicitpolicy* indicator is set, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1372,13 +1372,13 @@ In this test, every certificate in the path asserts the same certificate policy 
 
 1. default settings. The path should validate successfully.
 
-2. default settings, but with _initial-explicit-policy_ set. The path should not validate successfully.
+2. default settings, but with *initial-explicit-policy* set. The path should not validate successfully.
 
-3. default settings, but with _initial-explicit-policy_ set and _initial-policy-set_ = {NIST-test-policy-1, NIST-test-policy-2}. The path should not validate successfully.
+3. default settings, but with *initial-explicit-policy* set and *initial-policy-set* = {NIST-test-policy-1, NIST-test-policy-2}. The path should not validate successfully.
 
 **Procedure:** Validate Different Policies Test3 EE or open and verify Signed Test Message 6.2.2.68.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. If the _initial-explicit-policy_ indicator is not set then the path should validate successfully. If the _initial-explicitpolicy_ indicator is set, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. If the *initial-explicit-policy* indicator is not set then the path should validate successfully. If the *initial-explicitpolicy* indicator is set, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1393,7 +1393,7 @@ In this test, every certificate in the path asserts the same certificate policy 
 
 **Procedure:** Validate Different Policies Test4 EE using the default settings or open and verify Signed Test Message 6.2.2.69 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1408,7 +1408,7 @@ In this test, every certificate in the path except the second certificate assert
 
 **Procedure:** Validate Different Policies Test5 EE using the default settings or open and verify Signed Test Message 6.2.2.70 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension then the path should not validate successfully. If the application can not process the
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension then the path should not validate successfully. If the application can not process the
 
 **policyConstraints** extension, then the path should validate
 
@@ -1426,12 +1426,12 @@ successfully.
 The following path is such that the intersection of certificate policies among all the certificates has exactly one policy, NIST-test-policy-1. The final certificate in the path is a CA certificate. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
 1. default settings. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-3. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should not validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+3. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should not validate successfully.
 
 **Procedure:** Validate Overlapping Policies Test6 EE or open and verify Signed Test Message 6.2.2.71.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1}. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the _initial-policy-set_ is _anypolicy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _user-_ _constrained-policy-set_ will be empty. If the _explicit-policy-indicator_ is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1}. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the *initial-policy-set* is *anypolicy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *user-* *constrained-policy-set* will be empty. If the *explicit-policy-indicator* is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1447,7 +1447,7 @@ The following path is such that the intersection of certificate policies among a
 
 **Procedure:** Validate Different Policies Test7 EE using the default settings or open and verify Signed Test Message 6.2.2.72 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. If the _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension, then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. If the *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension, then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1463,7 +1463,7 @@ The following path is such that the intersection of certificate policies among a
 
 **Procedure:** Validate Different Policies Test8 EE using the default settings or open and verify Signed Test Message 6.2.2.73 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension then the path should not validate successfully. If the application can not process the
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension then the path should not validate successfully. If the application can not process the
 
 **policyConstraints** extension, then the path should validate
 
@@ -1483,7 +1483,7 @@ The following path is such that the intersection of certificate policies among a
 
 **Procedure:** Validate Different Policies Test9 EE using the default settings or open and verify Signed Test Message 6.2.2.74 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension, then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension, then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1499,12 +1499,12 @@ The following path is such that the intersection of certificate policies among a
 In this test, every certificate in the path asserts the same policies, NIST-test-policy-1 and NISTtest-policy-2. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
 1. default settings. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-3. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+3. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should validate successfully.
 
 **Procedure:** Validate All Certificates Same Policies Test10 EE or open and verify Signed Test Message 6.2.2.75 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1, NIST-test-policy-2}. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the _initial-policy-set_ is _any-policy_ or otherwise includes either NIST-testpolicy-1 or NIST-test-policy-2, then the _user-constrained-policy-set_ will not be empty. If not, the _user-constrained-policy-set_ will be empty. If the _explicit-policy-indicator_ is set and the _initial-policy-set_ does not include either NIST-test-policy-1 or NIST-test-policy-2, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1, NIST-test-policy-2}. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the *initial-policy-set* is *any-policy* or otherwise includes either NIST-testpolicy-1 or NIST-test-policy-2, then the *user-constrained-policy-set* will not be empty. If not, the *user-constrained-policy-set* will be empty. If the *explicit-policy-indicator* is set and the *initial-policy-set* does not include either NIST-test-policy-1 or NIST-test-policy-2, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1517,15 +1517,15 @@ In this test, every certificate in the path asserts the same policies, NIST-test
 In this test, every certificate in the path asserts the special policy **anyPolicy**. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
 1. default settings. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
 
 **Procedure:** Validate All Certificates anyPolicy Test11 EE or open and verify Signed Test Message 6.2.2.76 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be _any-policy_, the _explicit-_ _policy-indicator_ will be set if the application can process the
+**Expected Result:** The *authorities-constrained-policy-set* will be *any-policy*, the *explicit-* *policy-indicator* will be set if the application can process the
 
-**policyConstraints** extension, and the _user-constrained-policy-set_ will
+**policyConstraints** extension, and the *user-constrained-policy-set* will
 
-be the same as the _initial-policy-set_. The path should validate
+be the same as the *initial-policy-set*. The path should validate
 
 successfully.
 
@@ -1541,7 +1541,7 @@ In this test, the path consists of two certificates, each of which asserts a dif
 
 **Procedure:** Validate Different Policies Test12 EE using the default settings or open and verify Signed Test Message 6.2.2.77 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension, then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the application can process the **policyConstraints** extension, then the path should not validate successfully. If the application can not process the **policyConstraints** extension, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1553,15 +1553,15 @@ In this test, the path consists of two certificates, each of which asserts a dif
 
 In this test, every certificate in the path asserts the same policies, NIST-test-policy-1, NIST-testpolicy-2, and NIST-test-policy-3. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should validate successfully.
-3. default settings, but with _initial-policy-set_ = {NIST-test-policy-3}. The path should validate successfully.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should validate successfully.
+3. default settings, but with *initial-policy-set* = {NIST-test-policy-3}. The path should validate successfully.
 
 **Procedure:** Validate All Certificates Same Policies Test13 EE or open and verify Signed Test Message 6.2.2.78 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1, NIST-test-policy-2, NIST-test-policy-3}. The _explicit-policy-_ _indicator_ will be set if the application can process the
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1, NIST-test-policy-2, NIST-test-policy-3}. The *explicit-policy-* *indicator* will be set if the application can process the
 
-**policyConstraints** extension. If the _initial-policy-set_ is _any-policy_ or otherwise includes either NIST-test-policy-1, NIST-test-policy-2, or NIST-test-policy-3, then the _user-constrained-policy-set_ will not be empty. If not, the _user-constrained-policy-set_ will be empty. If the _explicit-policy-indicator_ is set and the _initial-policy-set_ does not include either NIST-test-policy-1, NIST-test-policy-2, or NIST-testpolicy-3, then the path should be rejected, otherwise it should validate
+**policyConstraints** extension. If the *initial-policy-set* is *any-policy* or otherwise includes either NIST-test-policy-1, NIST-test-policy-2, or NIST-test-policy-3, then the *user-constrained-policy-set* will not be empty. If not, the *user-constrained-policy-set* will be empty. If the *explicit-policy-indicator* is set and the *initial-policy-set* does not include either NIST-test-policy-1, NIST-test-policy-2, or NIST-testpolicy-3, then the path should be rejected, otherwise it should validate
 
 successfully.
 
@@ -1575,12 +1575,12 @@ successfully.
 
 In this test, the intermediate certificate asserts **anyPolicy** and the end entity certificate asserts NIST-test-policy-1. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should not validate successfully.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should not validate successfully.
 
 **Procedure:** Validate AnyPolicy Test14 EE or open and verify Signed Test Message 6.2.2.79 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1}. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the _initial-policy-set_ is _anypolicy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _user-_ _constrained-policy-set_ will be empty. If the _explicit-policy-indicator_ is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1}. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the *initial-policy-set* is *anypolicy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *user-* *constrained-policy-set* will be empty. If the *explicit-policy-indicator* is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1594,7 +1594,7 @@ In this test, the path consists of a single certificate. The certificate asserts
 
 **Procedure:** Validate User Notice Qualifier Test15 EE using the default settings or open and verify Signed Test Message 6.2.2.80 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be the same as the _initialexplicit-policy_ indicator. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrainedpolicy-set_ will be {NIST-test-policy-1}. If not, the _user-constrainedpolicy-set_ will be empty. If the _initial-explicit-policy_ indicator is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. If the path validates successfully, then the application should display the user notice.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be the same as the *initialexplicit-policy* indicator. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrainedpolicy-set* will be {NIST-test-policy-1}. If not, the *user-constrainedpolicy-set* will be empty. If the *initial-explicit-policy* indicator is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. If the path validates successfully, then the application should display the user notice.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1607,7 +1607,7 @@ In this test, the path consists of an intermediate certificate and an end entity
 
 **Procedure:** Validate User Notice Qualifier Test16 EE using the default settings or open and verify Signed Test Message 6.2.2.81 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be the same as the _initialexplicit-policy_ indicator. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrainedpolicy-set_ will be {NIST-test-policy-1}. If not, the _user-constrainedpolicy-set_ will be empty. If the _initial-explicit-policy_ indicator is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. If the path validates successfully, then the application should display the user notice associated with NIST-test-policy-1. The user notice associated with NIST-test-policy-2 should not be displayed.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be the same as the *initialexplicit-policy* indicator. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrainedpolicy-set* will be {NIST-test-policy-1}. If not, the *user-constrainedpolicy-set* will be empty. If the *initial-explicit-policy* indicator is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. If the path validates successfully, then the application should display the user notice associated with NIST-test-policy-1. The user notice associated with NIST-test-policy-2 should not be displayed.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1621,7 +1621,7 @@ In this test, the path consists of an intermediate certificate and an end entity
 
 **Procedure:** Validate User Notice Qualifier Test17 EE using the default settings or open and verify Signed Test Message 6.2.2.82 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be the same as the _initialexplicit-policy_ indicator. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrainedpolicy-set_ will be {NIST-test-policy-1}. If not, the _user-constrainedpolicy-set_ will be empty. If the _initial-explicit-policy_ indicator is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. If the path validates successfully, then the application should display the user notice associated with **anyPolicy**.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be the same as the *initialexplicit-policy* indicator. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrainedpolicy-set* will be {NIST-test-policy-1}. If not, the *user-constrainedpolicy-set* will be empty. If the *initial-explicit-policy* indicator is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. If the path validates successfully, then the application should display the user notice associated with **anyPolicy**.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1633,12 +1633,12 @@ In this test, the path consists of an intermediate certificate and an end entity
 
 In this test, the intermediate certificate asserts policies NIST-test-policy-1 and NIST-test-policy-2. The end certificate asserts NIST-test-policy-1 and **anyPolicy**. Each of the policies in the end entity certificate asserts a different user notice policy qualifier. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully and the qualifier associated with NIST-test-policy-1 in the end entity certificate should be displayed.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should validate successfully and the qualifier associated with **anyPolicy** in the end entity certificate should be displayed.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully and the qualifier associated with NIST-test-policy-1 in the end entity certificate should be displayed.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should validate successfully and the qualifier associated with **anyPolicy** in the end entity certificate should be displayed.
 
 **Procedure:** Validate User Notice Qualifier Test18 EE or open and verify Signed Test Message 6.2.2.83 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1, NIST-test-policy-2}. The _explicit-policy-indicator_ will be set if the application can process the **policyConstraints** extension. If the _initial-policy-set_ is _any-policy_ or otherwise includes either NIST-testpolicy-1 or NIST-test-policy-2, then the _user-constrained-policy-set_ will not be empty. If not, the _user-constrained-policy-set_ will be empty. If the _explicit-policy-indicator_ is set and the _initial-policy-set_ does not include either NIST-test-policy-1 or NIST-test-policy-2, then the path should be rejected, otherwise it should validate successfully. If NIST-test-policy-1 is in the _user-constrained-policy-set_, then the user notice associated with that policy in the end entity certificate should be displayed. If NIST-test-policy-2 is in the _user-constrainedpolicy-set_, then the user notice associated with **anyPolicy** in the end entity certificate should be displayed.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1, NIST-test-policy-2}. The *explicit-policy-indicator* will be set if the application can process the **policyConstraints** extension. If the *initial-policy-set* is *any-policy* or otherwise includes either NIST-testpolicy-1 or NIST-test-policy-2, then the *user-constrained-policy-set* will not be empty. If not, the *user-constrained-policy-set* will be empty. If the *explicit-policy-indicator* is set and the *initial-policy-set* does not include either NIST-test-policy-1 or NIST-test-policy-2, then the path should be rejected, otherwise it should validate successfully. If NIST-test-policy-1 is in the *user-constrained-policy-set*, then the user notice associated with that policy in the end entity certificate should be displayed. If NIST-test-policy-2 is in the *user-constrainedpolicy-set*, then the user notice associated with **anyPolicy** in the end entity certificate should be displayed.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1654,7 +1654,7 @@ In this test, the path consists of a single certificate. The certificate asserts
 
 **Procedure:** Validate User Notice Qualifier Test19 EE using the default settings or open and verify Signed Test Message 6.2.2.84 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} > and the _explicit-policy-indicator_ will be the same as the _initialexplicit-policy_ indicator. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrainedpolicy-set_ will be {NIST-test-policy-1}. If not, the _user-constrainedpolicy-set_ will be empty. If the _initial-explicit-policy_ indicator is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. Since the **explicitText** exceeds the maximum size of 200 characters, the application may choose to reject the certificate. If the application accepts the certificate, display of the user notice is optional.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} > and the *explicit-policy-indicator* will be the same as the *initialexplicit-policy* indicator. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrainedpolicy-set* will be {NIST-test-policy-1}. If not, the *user-constrainedpolicy-set* will be empty. If the *initial-explicit-policy* indicator is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. Since the **explicitText** exceeds the maximum size of 200 characters, the application may choose to reject the certificate. If the application accepts the certificate, display of the user notice is optional.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1665,9 +1665,9 @@ In this test, the path consists of a single certificate. The certificate asserts
 
 In this test, the path consists of an intermediate certificate and an end entity certificate, both of which assert the policy NIST-test-policy-1. There is a CPS pointer policy qualifier associated with NIST-test-policy-1 in the end entity certificate.
 
-**Procedure:** Validate CPS Pointer Qualifier Test20 EE using the default settings or open and verify Signed Test Message 6.2.2.85 using the default settings. (If possible, it is recommended that this test be run with the _initial-explicit-policy_ indicator set. If this can not be done, manually check that the _authorities-constrained-policy-set_ and _user-_ _constrained-policy-set_ are correct.)
+**Procedure:** Validate CPS Pointer Qualifier Test20 EE using the default settings or open and verify Signed Test Message 6.2.2.85 using the default settings. (If possible, it is recommended that this test be run with the *initial-explicit-policy* indicator set. If this can not be done, manually check that the *authorities-constrained-policy-set* and *user-* *constrained-policy-set* are correct.)
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be the same as the _initialexplicit-policy_ indicator. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrainedpolicy-set_ will be {NIST-test-policy-1}. If not, the _user-constrainedpolicy-set_ will be empty. If the _initial-explicit-policy_ indicator is set and the _initial-policy-set_ does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. The CPS pointer in the qualifier should be associated with NIST-testpolicy-1 in the _authorities-constrained-policy-set_ (and in the _userconstrained-policy-set_ if NIST-test-policy-1 is in that set). There are no processing requirements associated with the CPS pointer qualifier.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be the same as the *initialexplicit-policy* indicator. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrainedpolicy-set* will be {NIST-test-policy-1}. If not, the *user-constrainedpolicy-set* will be empty. If the *initial-explicit-policy* indicator is set and the *initial-policy-set* does not include NIST-test-policy-1, then the path should be rejected, otherwise it should validate successfully. The CPS pointer in the qualifier should be associated with NIST-testpolicy-1 in the *authorities-constrained-policy-set* (and in the *userconstrained-policy-set* if NIST-test-policy-1 is in that set). There are no processing requirements associated with the CPS pointer qualifier.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1677,7 +1677,7 @@ In this test, the path consists of an intermediate certificate and an end entity
 
 ### **4.9 Require Explicit Policy**
 
-The tests in this section can be used to determine if an application can process the **requireExplicitPolicy** field of the **policyConstraints** extension. In most of these tests, at least one certificate in the path does not include a **certificatePolicies** extension so that the _authoritiesconstrained-policy-set_ and _user-constrained-policy-set_ will be empty. In these tests, the path will validate successfully if the _explicit-policy-indicator_ is not set by path validation and the path will not validate successfully if the _explicit-policy-indicator_ is set. So, in order to run these tests, it is important that _initial-explicit-policy_ be set to false.
+The tests in this section can be used to determine if an application can process the **requireExplicitPolicy** field of the **policyConstraints** extension. In most of these tests, at least one certificate in the path does not include a **certificatePolicies** extension so that the *authoritiesconstrained-policy-set* and *user-constrained-policy-set* will be empty. In these tests, the path will validate successfully if the *explicit-policy-indicator* is not set by path validation and the path will not validate successfully if the *explicit-policy-indicator* is set. So, in order to run these tests, it is important that *initial-explicit-policy* be set to false.
 
 #### **4.9.1 Valid RequireExplicitPolicy Test1**
 
@@ -1687,7 +1687,7 @@ settings or open and verify Signed Test Message 6.2.2.86 using the
 
 default settings.
 
-**Expected Result:** The path should validate successfully since the _explicit-policy-_ _indicator_ is not set.
+**Expected Result:** The path should validate successfully since the *explicit-policy-* *indicator* is not set.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1704,7 +1704,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Valid requireExplicitPolicy Test2 EE using the default settings or open and verify Signed Test Message 6.2.2.87 using the default settings.
 
-**Expected Result:** The path should validate successfully since the _explicit-policy-_ _indicator_ is not set.
+**Expected Result:** The path should validate successfully since the *explicit-policy-* *indicator* is not set.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1721,7 +1721,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Invalid requireExplicitPolicy Test3 EE using the default settings or open and verify Signed Test Message 6.2.2.88 using the default settings.
 
-**Expected Result:** The path not should validate successfully since the _explicit-policy-_ _indicator_ is set and the _authorities-constrained-policy-set_ is empty.
+**Expected Result:** The path not should validate successfully since the *explicit-policy-* *indicator* is set and the *authorities-constrained-policy-set* is empty.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1738,7 +1738,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Valid requireExplicitPolicy Test4 EE using the default settings or open and verify Signed Test Message 6.2.2.89 using the default settings.
 
-**Expected Result:** The path should validate successfully (as long as the _initial-policy-set_ is either _any-policy_ or otherwise includes NIST-test-policy-1) since the _user-constrained-policy-set_ is not empty.
+**Expected Result:** The path should validate successfully (as long as the *initial-policy-set* is either *any-policy* or otherwise includes NIST-test-policy-1) since the *user-constrained-policy-set* is not empty.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1755,7 +1755,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Invalid requireExplicitPolicy Test5 EE using the default settings or open and verify Signed Test Message 6.2.2.90 using the default settings.
 
-**Expected Result:** The path should not validate successfully since the _explicit-policy-_ _indicator_ is set and the _authorities-constrained-policy-set_ is empty.
+**Expected Result:** The path should not validate successfully since the *explicit-policy-* *indicator* is set and the *authorities-constrained-policy-set* is empty.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1775,7 +1775,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Valid Self-Issued requireExplicitPolicy Test6 EE using the default settings or open and verify Signed Test Message 6.2.2.91 using the default settings.
 
-**Expected Result:** The path should validate successfully since the _explicit-policy-_ _indicator_ is not set.
+**Expected Result:** The path should validate successfully since the *explicit-policy-* *indicator* is not set.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1790,7 +1790,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Invalid Self-Issued requireExplicitPolicy Test7 EE using the default settings or open and verify Signed Test Message 6.2.2.92 using the default settings.
 
-**Expected Result:** The path should not validate successfully since the _explicit-policy-_ _indicator_ is set and the _authorities-constrained-policy-set_ is empty.
+**Expected Result:** The path should not validate successfully since the *explicit-policy-* *indicator* is set and the *authorities-constrained-policy-set* is empty.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1806,7 +1806,7 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 **Procedure:** Validate Invalid Self-Issued requireExplicitPolicy Test8 EE using the default settings or open and verify Signed Test Message 6.2.2.93 using the default settings.
 
-**Expected Result:** The path should not validate successfully since the _explicit-policy-_ _indicator_ is set and the _authorities-constrained-policy-set_ is empty.
+**Expected Result:** The path should not validate successfully since the *explicit-policy-* *indicator* is set and the *authorities-constrained-policy-set* is empty.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1819,24 +1819,24 @@ In this test, the first certificate in the path includes a **policyConstraints**
 
 ### **4.10 Policy Mappings**
 
-The tests in this section are designed to verify an application's ability to process the **policyMappings** extension. Most of the tests in this section indicate that the path should be validated using the default settings. Where this is the case, it is important that _initial-policymapping-inhibit_ be set to false. For those applications that are capable of setting _initial-policymapping-inhibit_ to true, two sub-tests have been included that can be used to determine if the application processes paths correctly when _initial-policy-mapping-inhibit_ is set to true.
+The tests in this section are designed to verify an application's ability to process the **policyMappings** extension. Most of the tests in this section indicate that the path should be validated using the default settings. Where this is the case, it is important that *initial-policymapping-inhibit* be set to false. For those applications that are capable of setting *initial-policymapping-inhibit* to true, two sub-tests have been included that can be used to determine if the application processes paths correctly when *initial-policy-mapping-inhibit* is set to true.
 
-Some of the tests also recommend validating paths using values of _initial-policy-set_ other than _any-policy_. These tests are included to verify that applications compute the _user-constrainedpolicy-set_ correctly in the face of policy mappings. If it is not possible to set the _initial-policy-set_ to a value other than _any-policy_, then it will be necessary to examine the _user-constrained-policyset_ to verify that it is being computed correctly.
+Some of the tests also recommend validating paths using values of *initial-policy-set* other than *any-policy*. These tests are included to verify that applications compute the *user-constrainedpolicy-set* correctly in the face of policy mappings. If it is not possible to set the *initial-policy-set* to a value other than *any-policy*, then it will be necessary to examine the *user-constrained-policyset* to verify that it is being computed correctly.
 
-As with the certificate policies tests, many of the tests in this section include paths in which one of the certificates includes a non-critical **policyConstraints** extension with **requireExplicitPolicy** present with a **SkipCerts** value of 0. If the application can process the **policyConstraints** extension, then tests in which the _user-constrained-policy-set_ is empty should simply fail (obviating the need to look at the _user-constrained-policy-set_). If the application can not process the **policyConstraints** extension, then _initial-explicit-policy_ should be set whenever the path includes a certificate that includes the **policyConstraints** extension. If the application can not process the **policyConstraints** extension and _initial-explicit-policy_ can not be set, then it will be necessary to check the _user-constrained-policy-set_ in all cases to ensure that its value has been correctly computed.
+As with the certificate policies tests, many of the tests in this section include paths in which one of the certificates includes a non-critical **policyConstraints** extension with **requireExplicitPolicy** present with a **SkipCerts** value of 0. If the application can process the **policyConstraints** extension, then tests in which the *user-constrained-policy-set* is empty should simply fail (obviating the need to look at the *user-constrained-policy-set*). If the application can not process the **policyConstraints** extension, then *initial-explicit-policy* should be set whenever the path includes a certificate that includes the **policyConstraints** extension. If the application can not process the **policyConstraints** extension and *initial-explicit-policy* can not be set, then it will be necessary to check the *user-constrained-policy-set* in all cases to ensure that its value has been correctly computed.
 
 #### **4.10.1 Valid Policy Mapping Test1**
 
 In this test, the intermediate certificate asserts NIST-test-policy-1 and maps NIST-test-policy-1 to NIST-test-policy-2. The end entity certificate asserts NIST-test-policy-2. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should not validate successfully.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should not validate successfully.
 
-3. default settings, but with _initial-policy-mapping-inhibit_ set. The path should not validate successfully.
+3. default settings, but with *initial-policy-mapping-inhibit* set. The path should not validate successfully.
 
 **Procedure:** Validate Valid Policy Mapping Test1 EE or open and verify Signed Test Message 6.2.2.94 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1850,11 +1850,11 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and maps N
 
 1. default settings. The path should not validate successfully.
 
-2. default settings, but with _initial-policy-mapping-inhibit_ set. The path should not validate successfully.
+2. default settings, but with *initial-policy-mapping-inhibit* set. The path should not validate successfully.
 
 **Procedure:** Validate Invalid Policy Mapping Test2 EE or open and verify Signed Test Message 6.2.2.95.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1866,14 +1866,14 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and maps N
 
 In this test, the path is valid under NIST-test-policy-2 as a result of policy mappings. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should not validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should not validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path
 
 should validate successfully.
 
 **Procedure:** Validate Valid Policy Mapping Test3 EE or open and verify Signed Test Message 6.2.2.96 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-2} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-2, then the _userconstrained-policy-set_ will be {NIST-test-policy-2}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-2 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-2} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-2, then the *userconstrained-policy-set* will be {NIST-test-policy-2}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-2 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1885,11 +1885,11 @@ should validate successfully.
 
 #### **4.10.4 Invalid Policy Mapping Test4**
 
-In this test, the policy asserted in the end entity certificate is not in the _authorities-constrainedpolicy-set_.
+In this test, the policy asserted in the end entity certificate is not in the *authorities-constrainedpolicy-set*.
 
 **Procedure:** Validate Invalid Policy Mapping Test4 EE using the default settings or open and verify Signed Test Message 6.2.2.97 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1903,12 +1903,12 @@ In this test, the policy asserted in the end entity certificate is not in the _a
 
 In this test, the path is valid under NIST-test-policy-1 as a result of policy mappings. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-6}. The path should not validate successfully.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-6}. The path should not validate successfully.
 
 **Procedure:** Validate Valid Policy Mapping Test5 EE or open and verify Signed Test Message 6.2.2.98 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1921,12 +1921,12 @@ In this test, the path is valid under NIST-test-policy-1 as a result of policy m
 
 In this test, the path is valid under NIST-test-policy-1 as a result of policy mappings. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-6}. The path should not validate successfully.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-6}. The path should not validate successfully.
 
 **Procedure:** Validate Valid Policy Mapping Test6 EE or open and verify Signed Test Message 6.2.2.99 using the settings specified above.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} > and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} > and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the
 
 **policyConstraints** extension), then the path should be rejected,
 
@@ -1977,7 +1977,7 @@ In this test, the intermediate certificate asserts **anyPolicy** and maps NIST-t
 
 **Procedure:** Validate Valid Policy Mapping Test9 EE using the default settings or open and verify Signed Test Message 6.2.2.102 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -1991,7 +1991,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1. The
 
 **Procedure:** Validate Invalid Policy Mapping Test10 EE using the default settings or open and verify Signed Test Message 6.2.2.103 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2006,7 +2006,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1. The
 
 **Procedure:** Validate Valid Policy Mapping Test11 EE using the default settings or open and verify Signed Test Message 6.2.2.104 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2019,12 +2019,12 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1. The
 
 In this test, the intermediate certificate asserts NIST-test-policy-1 and NIST-test-policy-2 and maps NIST-test-policy-1 to NIST-test-policy-3. The end entity certificate asserts **anyPolicy** and NIST-test-policy-3, each with a different user notice policy qualifier. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
-1. default settings, but with _initial-policy-set_ = {NIST-test-policy-1}. The path should validate successfully and the application should display the user notice associated with NIST-test-policy-3 in the end entity certificate.
-2. default settings, but with _initial-policy-set_ = {NIST-test-policy-2}. The path should validate successfully and the application should display the user notice associated with **anyPolicy** in the end entity certificate.
+1. default settings, but with *initial-policy-set* = {NIST-test-policy-1}. The path should validate successfully and the application should display the user notice associated with NIST-test-policy-3 in the end entity certificate.
+2. default settings, but with *initial-policy-set* = {NIST-test-policy-2}. The path should validate successfully and the application should display the user notice associated with **anyPolicy** in the end entity certificate.
 
 **Procedure:** Validate Valid Policy Mapping Test12 EE or open and verify Signed Test Message 6.2.2.105.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1, NIST-test-policy-2} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1 or NIST-test-policy-2, then the _user-constrained-policy-set_ will be not be empty. If not, the _user-constrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 or NIST-testpolicy-2 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1, NIST-test-policy-2} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1 or NIST-test-policy-2, then the *user-constrained-policy-set* will be not be empty. If not, the *user-constrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 or NIST-testpolicy-2 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2038,7 +2038,7 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and **anyP
 
 **Procedure:** Validate Valid Policy Mapping Test13 EE using the default settings or open and verify Signed Test Message 6.2.2.106 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully. If the path is accepted, the application should display the user notice associated with NIST-testpolicy-1 in the intermediate certificate.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully. If the path is accepted, the application should display the user notice associated with NIST-testpolicy-1 in the intermediate certificate.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2052,7 +2052,7 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and **anyP
 
 **Procedure:** Validate Valid Policy Mapping Test14 EE using the default settings or open and verify Signed Test Message 6.2.2.107 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}. If not, the _userconstrained-policy-set_ will be empty. If the _initial-policy-set_ does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully. If the path is accepted, the application should display the user notice associated with **anyPolicy** in the intermediate certificate.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}. If not, the *userconstrained-policy-set* will be empty. If the *initial-policy-set* does not include NIST-test-policy-1 (and the application can process the **policyConstraints** extension), then the path should be rejected, otherwise it should validate successfully. If the path is accepted, the application should display the user notice associated with **anyPolicy** in the intermediate certificate.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2064,9 +2064,9 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and **anyP
 
 The tests in this section are designed to verify an application's ability to process the **inihibitPolicyMapping** field of the **policyConstraints** extension and to verify that policy mappings are processed correctly after policy mapping has been inhibited. In order to make each of the tests pass/fail, at least one certificate in the certification path of each of the tests includes a **policyConstraints** extension with **requireExplicitPolicy** policy present with **SkipCerts** set to 0. Since a prerequisite for running the tests in this section is the ability to process the **policyConstraints** extension, the extension is made critical.
 
-Each of the tests in this section was designed to be run using the default settings. Since the _explicit-policy-indicator_ is set in each of the tests, the value of _initial-explicit-policy_ should not affect the results of the tests. However, the _initial-policy-mapping-inhibit_ indicator must be set to false and _initial-inhibit-any-policy_ must be set to false for any test in which one or more certificates in the path includes the **anyPolicy** OID.
+Each of the tests in this section was designed to be run using the default settings. Since the *explicit-policy-indicator* is set in each of the tests, the value of *initial-explicit-policy* should not affect the results of the tests. However, the *initial-policy-mapping-inhibit* indicator must be set to false and *initial-inhibit-any-policy* must be set to false for any test in which one or more certificates in the path includes the **anyPolicy** OID.
 
-It is believed that the proper processing of **inhibitPolicyMapping** may be determined by running each of these tests and determining whether each path is validated successfully or rejected as indicated. However, for those paths that validate successfully, it is recommended that the value of the _user-constrained-policy-set_ be checked as well, if possible.
+It is believed that the proper processing of **inhibitPolicyMapping** may be determined by running each of these tests and determining whether each path is validated successfully or rejected as indicated. However, for those paths that validate successfully, it is recommended that the value of the *user-constrained-policy-set* be checked as well, if possible.
 
 #### **4.11.1 Invalid inhibitPolicyMapping Test1**
 
@@ -2074,7 +2074,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitPolicyMapping Test1 EE using the default settings or open and verify Signed Test Message 6.2.2.108 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty. The _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty. The *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2089,7 +2089,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Valid inhibitPolicyMapping Test2 EE using the default settings or open and verify Signed Test Message 6.2.2.109 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2104,7 +2104,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitPolicyMapping Test3 EE using the default settings or open and verify Signed Test Message 6.2.2.110 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2120,7 +2120,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Valid inhibitPolicyMapping Test4 EE using the default settings or open and verify Signed Test Message 6.2.2.111 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-2} and the _explicit-policy-indicator_ will be set. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-2, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-2} and the *explicit-policy-indicator* will be set. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-2, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2136,7 +2136,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitPolicyMapping Test5 EE using the default settings or open and verify Signed Test Message 6.2.2.112 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2153,7 +2153,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitPolicyMapping Test6 EE using the default settings or open and verify Signed Test Message 6.2.2.113 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and the _user-constrained-_ _policy-set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and the *user-constrained-* *policy-set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2169,7 +2169,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Valid Self-Issued inhibitPolicyMapping Test7 EE using the default settings or open and verify Signed Test Message 6.2.2.114 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the path should validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the path should validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2185,7 +2185,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid Self-Issued inhibitPolicyMapping Test8 EE using the default settings or open and verify Signed Test Message 6.2.2.115 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2202,7 +2202,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid Self-Issued inhibitPolicyMapping Test9 EE using the default settings or open and verify Signed Test Message 6.2.2.116 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2219,7 +2219,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid Self-Issued inhibitPolicyMapping Test10 EE using the default settings or open and verify Signed Test Message 6.2.2.117 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2236,7 +2236,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid Self-Issued inhibitPolicyMapping Test11 EE using the default settings or open and verify Signed Test Message 6.2.2.118 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set. The path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set. The path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2249,9 +2249,9 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 ### **4.12 Inhibit Any Policy**
 
-The tests in this section were designed to verify an application's ability to process the **inhibitAnyPolicy** extension and to process certificates (including self-issued certificates) that assert the **anyPolicy** OID once the use of **anyPolicy** has been inhibited. In order to make these tests pass/fail, at least one certificate in each of the certification paths for each of of the tests includes a non-critical **policyConstraints** extension with **requireExplicitPolicy** present with a **SkipCerts** value of 0. If the application being tested can not process the **policyConstraints** extension, then the same results may be achieved by setting _initial-explicit-policy_ to true. If the application can not process the **policyConstraints** extension and it is not possible to set _initialexplicit-policy_ to true, then the results of the test will need to be determined by examining the _userconstrained-policy-set_.
+The tests in this section were designed to verify an application's ability to process the **inhibitAnyPolicy** extension and to process certificates (including self-issued certificates) that assert the **anyPolicy** OID once the use of **anyPolicy** has been inhibited. In order to make these tests pass/fail, at least one certificate in each of the certification paths for each of of the tests includes a non-critical **policyConstraints** extension with **requireExplicitPolicy** present with a **SkipCerts** value of 0. If the application being tested can not process the **policyConstraints** extension, then the same results may be achieved by setting *initial-explicit-policy* to true. If the application can not process the **policyConstraints** extension and it is not possible to set *initialexplicit-policy* to true, then the results of the test will need to be determined by examining the *userconstrained-policy-set*.
 
-Each of the tests in this section was designed to be run using the default settings. Since the purpose of these tests is to determine if the application can process the **inhibitAnyPolicy** extension, _initial-inhibit-any-policy_ must be set to false in order for the correct results to be obtained. In one or more of the tests in this section, it is recommend that the test also be run with _initial-inhibit-any-policy_ set to true. These subtests were only included for completeness in testing applications that allow _initial-inhibit-any-policy_ to be set to true. If the application does not allow for _initial-inhibit-any-policy_ to be set to true, then these subtests may be skipped.
+Each of the tests in this section was designed to be run using the default settings. Since the purpose of these tests is to determine if the application can process the **inhibitAnyPolicy** extension, *initial-inhibit-any-policy* must be set to false in order for the correct results to be obtained. In one or more of the tests in this section, it is recommend that the test also be run with *initial-inhibit-any-policy* set to true. These subtests were only included for completeness in testing applications that allow *initial-inhibit-any-policy* to be set to true. If the application does not allow for *initial-inhibit-any-policy* to be set to true, then these subtests may be skipped.
 
 #### **4.12.1 Invalid inhibitAnyPolicy Test1**
 
@@ -2259,7 +2259,7 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and includ
 
 **Procedure:** Validate Invalid inhibitAnyPolicy Test1 EE using the default settings or open and verify Signed Test Message 6.2.2.119 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2273,7 +2273,7 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and includ
 
 **Procedure:** Validate Valid inhibitAnyPolicy Test2 EE using the default settings or open and verify Signed Test Message 6.2.2.120 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}and the path should validate successfully. If not, then the _user-constrained-policyset_ will be empty. If the _user-constrained-policy-set_ is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}and the path should validate successfully. If not, then the *user-constrained-policyset* will be empty. If the *user-constrained-policy-set* is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2286,13 +2286,13 @@ In this test, the intermediate certificate asserts NIST-test-policy-1 and includ
 In this test, the first intermediate certificate asserts NIST-test-policy-1 and includes an **inhibitAnyPolicy** extension set to 1. The second intermediate certificate asserts **anyPolicy**. The end entity certificate asserts NIST-test-policy-1. If possible, it is recommended that the certification path in this test be validated using the following inputs:
 
 1. default settings. The path should validate successfully.
-2. default settings, but with _initial-inhibit-any-policy_ set. The path should not validate successfully.
+2. default settings, but with *initial-inhibit-any-policy* set. The path should not validate successfully.
 
 - **Procedure:** Validate inhibitAnyPolicy Test3 EE or open and verify Signed Test
 
 Message 6.2.2.121.
 
-**Expected Result:** The _explicit-policy-indicator_ will be set (if the application can process > the **policyConstraints** extension). If _initial-inhibit-any-policy_ is set, then the _authorities-constrained-policy-set_ and the _user-constrainedpolicy-set_ will be empty and the path should not validate successfully. Otherwise, the _authorities-constrained-policy-set_ will be {NIST-testpolicy-1}. If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _user-constrained-policy-set_ will be {NIST-test-policy-1}and the path should validate successfully. If not, then the _user-constrained-policy-set_ will be empty. If the _userconstrained-policy-set_ is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *explicit-policy-indicator* will be set (if the application can process > the **policyConstraints** extension). If *initial-inhibit-any-policy* is set, then the *authorities-constrained-policy-set* and the *user-constrainedpolicy-set* will be empty and the path should not validate successfully. Otherwise, the *authorities-constrained-policy-set* will be {NIST-testpolicy-1}. If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *user-constrained-policy-set* will be {NIST-test-policy-1}and the path should validate successfully. If not, then the *user-constrained-policy-set* will be empty. If the *userconstrained-policy-set* is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2307,7 +2307,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitAnyPolicy Test4 EE using the default settings or open and verify Signed Test Message 6.2.2.122 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2322,7 +2322,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitAnyPolicy Test5 EE using the default settings or open and verify Signed Test Message 6.2.2.123 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2338,7 +2338,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid inhibitAnyPolicy Test6 EE using the default settings or open and verify Signed Test Message 6.2.2.124 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2353,7 +2353,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Valid Self-Issued inhibitAnyPolicy Test7 EE using the default settings or open and verify Signed Test Message 6.2.2.125 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}and the path should validate successfully. If not, then the _user-constrained-policyset_ will be empty. If the _user-constrained-policy-set_ is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}and the path should validate successfully. If not, then the *user-constrained-policyset* will be empty. If the *user-constrained-policy-set* is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2369,7 +2369,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Invalid Self-Issued inhibitAnyPolicy Test8 EE using the default settings or open and verify Signed Test Message 6.2.2.126 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2386,7 +2386,7 @@ In this test, the first intermediate certificate asserts NIST-test-policy-1 and 
 
 **Procedure:** Validate Valid Self-Issued inhibitAnyPolicy Test9 EE using the default settings or open and verify Signed Test Message 6.2.2.127 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ will be {NIST-test-policy-1} and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the _initial-policy-set_ is _any-policy_ or otherwise includes NIST-test-policy-1, then the _userconstrained-policy-set_ will be {NIST-test-policy-1}and the path should validate successfully. If not, then the _user-constrained-policyset_ will be empty. If the _user-constrained-policy-set_ is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* will be {NIST-test-policy-1} and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the *initial-policy-set* is *any-policy* or otherwise includes NIST-test-policy-1, then the *userconstrained-policy-set* will be {NIST-test-policy-1}and the path should validate successfully. If not, then the *user-constrained-policyset* will be empty. If the *user-constrained-policy-set* is empty and the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 
@@ -2405,7 +2405,7 @@ entity certificate is a self-issued CA certificate that asserts **anyPolicy**.
 
 **Procedure:** Validate Invalid Self-Issued inhibitAnyPolicy Test10 EE using the default settings or open and verify Signed Test Message 6.2.2.128 using the default settings.
 
-**Expected Result:** The _authorities-constrained-policy-set_ and _user-constrained-policy-_ _set_ will be empty and the _explicit-policy-indicator_ will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
+**Expected Result:** The *authorities-constrained-policy-set* and *user-constrained-policy-* *set* will be empty and the *explicit-policy-indicator* will be set (if the application can process the **policyConstraints** extension). If the application can process the **policyConstraints** extension, then the path should not validate successfully.
 
 **Certification Path:** The certification path is composed of the following objects:
 

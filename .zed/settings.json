@@ -2,7 +2,7 @@
 // see the documentation: https://zed.dev/docs/configuring-zed#settings-files
 {
 	"formatter": [
-		{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+		{ "external": { "command": "kfmt", "arguments": ["--stdin", "{buffer_path}"] } },
 		{ "language_server": { "name": "dprint" } }
 	],
 	"prettier": { "allowed": false },
@@ -12,7 +12,7 @@
 		"TypeScript": {
 			"format_on_save": "on",
 			"formatter": [
-				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+				{ "external": { "command": "kfmt", "arguments": ["--stdin", "{buffer_path}"] } },
 				{ "language_server": { "name": "dprint" } }
 			],
 			"language_servers": [
@@ -35,7 +35,7 @@
 		"JavaScript": {
 			"format_on_save": "on",
 			"formatter": [
-				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+				{ "external": { "command": "kfmt", "arguments": ["--stdin", "{buffer_path}"] } },
 				{ "language_server": { "name": "dprint" } }
 			],
 			"language_servers": [
@@ -108,7 +108,7 @@
 		"dprint": {
 			"binary": {
 				"path": "bunx",
-				"arguments": ["dprint", "lsp"]
+				"arguments": ["kprint", "lsp"]
 			}
 		},
 		"typescript": {
