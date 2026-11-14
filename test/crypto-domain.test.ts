@@ -23,7 +23,9 @@ import {
 import {
 	digestInfoVariants,
 	pkcs8 as exponentThreePkcs8,
+	findOddDigest,
 	forgeExponentThreeSignature,
+	modulusLength,
 	oddDigestMessage,
 	recoverEncodedMessage,
 	signDigestInfo,
@@ -192,6 +194,21 @@ const rsaEncryption = '1.2.840.113549.1.1.1';
 const sha256WithRsaEncryption = '1.2.840.113549.1.1.11';
 const pkcs1Sha256 = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' } as const;
 
+const advisoryDigestInfoShapes = [
+	'absent parameters',
+	'NULL parameters with content',
+	'long-form DigestInfo length',
+	'long-form DigestAlgorithm length',
+	'long-form OID length',
+	'long-form NULL length',
+	'long-form digest length',
+	'indefinite DigestInfo length',
+	'constructed parameters',
+	'INTEGER parameters',
+	'padded OID subidentifier',
+	'octets after the DigestInfo',
+] as const;
+
 async function exponentThreeKeys() {
 	const privateKey = await crypto.subtle.importKey(
 		'pkcs8',
@@ -204,7 +221,12 @@ async function exponentThreeKeys() {
 	const publicKey = await crypto.subtle.importKey('jwk', { kty: 'RSA', n, e }, pkcs1Sha256, true, [
 		'verify',
 	]);
-	return { privateKey, publicKey, spki: await exportSpkiDer(publicKey) };
+	return {
+		privateKey,
+		publicKey,
+		spki: await exportSpkiDer(publicKey),
+		modulusBytes: await modulusLength(publicKey),
+	};
 }
 
 async function verifyBothWays(
@@ -232,6 +254,39 @@ async function verifyBothWays(
 }
 
 describe('RFC 8017 §8.2.2 RSASSA-PKCS1-v1_5 verification for public exponent 3 (GHSA-6qrw-m8cv-hcxf)', () => {
+	it('the odd-digest search stops after 64 attempts with a named error', async () => {
+		let evenDigestBytes: Uint8Array | undefined;
+		for (let attempt = 0; attempt < 64 && evenDigestBytes === undefined; attempt += 1) {
+			const bytes = encoder.encode(`even digest ${attempt}`);
+			const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+			if (((digest[31] ?? 0) & 1) === 0) evenDigestBytes = bytes;
+		}
+		if (evenDigestBytes === undefined) throw new Error('no even SHA-256 digest found');
+		const signedBytes = evenDigestBytes;
+		const attempts: number[] = [];
+		const error = await findOddDigest('exhaustion probe', async (attempt) => {
+			attempts.push(attempt);
+			return { value: attempt, signedBytes };
+		}).then(
+			() => undefined,
+			(rejection: unknown) => rejection,
+		);
+		expect(error).toBeInstanceOf(Error);
+		expect(String(error)).toContain('exhaustion probe: no odd SHA-256 digest in 64 attempts');
+		expect(attempts).toEqual(Array.from({ length: 64 }, (_, attempt) => attempt));
+	});
+
+	it('the fixture lists the canonical DigestInfo and every advisory shape', () => {
+		const variants = digestInfoVariants(new Uint8Array(32));
+		expect(variants.filter((variant) => variant.valid).map((variant) => variant.name)).toEqual([
+			'canonical DER',
+		]);
+		expect(variants.filter((variant) => !variant.valid).map((variant) => variant.name)).toEqual([
+			...advisoryDigestInfoShapes,
+		]);
+		expect(new Set(variants.map((variant) => variant.name)).size).toBe(13);
+	});
+
 	it('step 4: only the DER DigestInfo of §9.2 verifies; every advisory shape is an invalid signature', async () => {
 		const keys = await exponentThreeKeys();
 		const data = encoder.encode('GHSA-6qrw-m8cv-hcxf');
@@ -244,18 +299,19 @@ describe('RFC 8017 §8.2.2 RSASSA-PKCS1-v1_5 verification for public exponent 3 
 			if (variant.valid) expect(signature).toEqual(native);
 			actual[variant.name] = await verifyBothWays(keys, signature, data);
 		}
-		expect(actual).toEqual(
-			Object.fromEntries(
-				variants.map((variant) => [variant.name, { bySpki: variant.valid, byKey: variant.valid }]),
+		expect(actual).toEqual({
+			'canonical DER': { bySpki: true, byKey: true },
+			...Object.fromEntries(
+				advisoryDigestInfoShapes.map((name) => [name, { bySpki: false, byKey: false }]),
 			),
-		);
-		expect(variants.filter((variant) => variant.valid)).toHaveLength(1);
+		});
 	});
 
 	it('refuses a cube-root forgery built without the private key whose recovered digest matches', async () => {
 		const keys = await exponentThreeKeys();
+		expect(keys.modulusBytes).toBe(256);
 		const { data, digest } = await oddDigestMessage('GHSA-6qrw-m8cv-hcxf forgery');
-		const forged = forgeExponentThreeSignature(digest, 256);
+		const forged = forgeExponentThreeSignature(digest, keys.modulusBytes);
 		const recovered = await recoverEncodedMessage(keys.publicKey, forged);
 		expect(recovered.subarray(0, 11)).toEqual(Uint8Array.of(0, 1, ...new Array(8).fill(0xff), 0));
 		expect(recovered.subarray(11, 17)).toEqual(Uint8Array.of(0x30, 0x81, 0xf2, 0x30, 0x81, 0xcd));
@@ -277,36 +333,38 @@ describe('RFC 8017 §8.2.2 RSASSA-PKCS1-v1_5 verification for public exponent 3 
 			},
 		});
 		const leafKeys = await generateKeyPair();
-		for (let serial = 1; ; serial += 1) {
-			const leaf = await createCertificate({
+		const { value: leaf, digest } = await findOddDigest('certificate', async (attempt) => {
+			const issued = await createCertificate({
 				issuer: { commonName: 'Exponent Three Root' },
 				subject: { commonName: 'forged.example' },
 				publicKey: leafKeys.publicKey,
 				signerPrivateKey: keys.privateKey,
 				issuerCertificate: root.der,
-				serialNumber: Uint8Array.of(serial),
+				serialNumber: Uint8Array.of(attempt + 1),
 				extensions: { keyUsage: ['digitalSignature'] },
 			});
-			const parsed = unwrap(parseCertificateDer(leaf.der));
-			const digest = new Uint8Array(
-				await crypto.subtle.digest('SHA-256', new Uint8Array(parsed.tbsCertificateDer)),
-			);
-			if (((digest[31] ?? 0) & 1) === 0) continue;
-			const forgedDer = leaf.der.slice();
-			forgedDer.set(forgeExponentThreeSignature(digest, 256), forgedDer.length - 256);
-			expect(unwrap(parseCertificateDer(forgedDer)).tbsCertificateDer).toEqual(
-				parsed.tbsCertificateDer,
-			);
-			expect(await verifyCertificateChain({ leaf: leaf.der, roots: [root.der] })).toMatchObject({
-				ok: true,
-			});
-			expect(await verifyCertificateChain({ leaf: forgedDer, roots: [root.der] })).toMatchObject({
-				ok: false,
-				code: 'signature_invalid',
-				index: 0,
-			});
-			return;
-		}
+			const parsed = unwrap(parseCertificateDer(issued.der));
+			return { value: { der: issued.der, parsed }, signedBytes: parsed.tbsCertificateDer };
+		});
+		const signature = leaf.parsed.signatureValue;
+		expect(signature).toHaveLength(keys.modulusBytes);
+		expect(leaf.der.subarray(-signature.length)).toEqual(signature);
+		const forgedDer = leaf.der.slice();
+		forgedDer.set(
+			forgeExponentThreeSignature(digest, signature.length),
+			forgedDer.length - signature.length,
+		);
+		const forgedParsed = unwrap(parseCertificateDer(forgedDer));
+		expect(forgedParsed.tbsCertificateDer).toEqual(leaf.parsed.tbsCertificateDer);
+		expect(forgedParsed.signatureValue).not.toEqual(signature);
+		expect(await verifyCertificateChain({ leaf: leaf.der, roots: [root.der] })).toMatchObject({
+			ok: true,
+		});
+		expect(await verifyCertificateChain({ leaf: forgedDer, roots: [root.der] })).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+			index: 0,
+		});
 	});
 
 	it('refuses a CMS SignerInfo whose signature is a cube-root forgery under an e=3 signer', async () => {
@@ -318,28 +376,30 @@ describe('RFC 8017 §8.2.2 RSASSA-PKCS1-v1_5 verification for public exponent 3 
 			signerPrivateKey: keys.privateKey,
 			extensions: { keyUsage: ['digitalSignature'] },
 		});
-		for (let counter = 0; ; counter += 1) {
-			const signed = unwrap(
+		const { value: signed, digest } = await findOddDigest('CMS SignerInfo', async (attempt) => {
+			const created = unwrap(
 				await createPkcs7SignedData({
-					content: encoder.encode(`GHSA-6qrw-m8cv-hcxf CMS ${counter}`),
+					content: encoder.encode(`GHSA-6qrw-m8cv-hcxf CMS ${attempt}`),
 					signers: [{ certificate: signer.der, privateKey: keys.privateKey }],
 				}),
 			);
-			const signerInfo = unwrap(parsePkcs7SignedDataDer(signed.der)).signerInfos[0];
+			const signerInfo = unwrap(parsePkcs7SignedDataDer(created.der)).signerInfos[0];
 			if (signerInfo?.hasSignedAttrs !== true) throw new Error('expected signed attributes');
-			const signedInput = signerInfo.signedAttrsDer.slice();
-			signedInput[0] = 0x31;
-			const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', signedInput));
-			if (((digest[31] ?? 0) & 1) === 0) continue;
-			expect(signed.der.subarray(-256)).toEqual(signerInfo.signature);
-			const forgedDer = signed.der.slice();
-			forgedDer.set(forgeExponentThreeSignature(digest, 256), forgedDer.length - 256);
-			expect(await verifyPkcs7SignedData(signed.der)).toMatchObject({ ok: true });
-			expect(await verifyPkcs7SignedData(forgedDer)).toMatchObject({
-				ok: false,
-				code: 'signature_invalid',
-			});
-			return;
-		}
+			const signedBytes = signerInfo.signedAttrsDer.slice();
+			signedBytes[0] = 0x31;
+			return { value: { der: created.der, signature: signerInfo.signature }, signedBytes };
+		});
+		expect(signed.signature).toHaveLength(keys.modulusBytes);
+		expect(signed.der.subarray(-signed.signature.length)).toEqual(signed.signature);
+		const forgedDer = signed.der.slice();
+		forgedDer.set(
+			forgeExponentThreeSignature(digest, signed.signature.length),
+			forgedDer.length - signed.signature.length,
+		);
+		expect(await verifyPkcs7SignedData(signed.der)).toMatchObject({ ok: true });
+		expect(await verifyPkcs7SignedData(forgedDer)).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+		});
 	});
 });
