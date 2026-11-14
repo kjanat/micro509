@@ -165,6 +165,25 @@ function resultFailure(failures, errorCount, output) {
 }
 
 /**
+ * @param {import('playwright').Locator} blocks
+ * @param {number} count
+ * @param {number} expectedBlocks
+ * @returns {Promise<string>}
+ */
+async function hydrationFailure(blocks, count, expectedBlocks) {
+	if (count === 0) return 'SSR page contains LiveCode markup but no hydrated examples appeared';
+	if (count !== expectedBlocks) {
+		return `SSR rendered ${expectedBlocks} examples but the browser found ${count}; hydration did not preserve every block`;
+	}
+	for (let index = 0; index < count; index += 1) {
+		if ((await blocks.nth(index).locator('.live-code-btn').count()) !== 1) {
+			return `example ${index + 1} did not hydrate exactly one Run button`;
+		}
+	}
+	return '';
+}
+
+/**
  * Run every LiveCode block on one page; a block that errors, prints nothing,
  * or never settles fails.
  *
@@ -196,47 +215,11 @@ async function runAllBlocks(browser, baseUrl, { route, expectedBlocks }) {
 
 		const blocks = page.locator('.live-code');
 		const count = await blocks.count();
-		if (count === 0) {
+		const hydration = await hydrationFailure(blocks, count, expectedBlocks);
+		if (hydration !== '') {
 			return [
-				{
-					version: route,
-					source: '',
-					output: '',
-					failed: true,
-					why: 'SSR page contains LiveCode markup but no hydrated examples appeared',
-					ms: 0,
-					imported,
-				},
+				{ version: route, source: '', output: '', failed: true, why: hydration, ms: 0, imported },
 			];
-		}
-		if (count !== expectedBlocks) {
-			return [
-				{
-					version: route,
-					source: '',
-					output: '',
-					failed: true,
-					why: `SSR rendered ${expectedBlocks} examples but the browser found ${count}; hydration did not preserve every block`,
-					ms: 0,
-					imported,
-				},
-			];
-		}
-		for (let index = 0; index < count; index += 1) {
-			const buttons = await blocks.nth(index).locator('.live-code-btn').count();
-			if (buttons !== 1) {
-				return [
-					{
-						version: route,
-						source: '',
-						output: '',
-						failed: true,
-						why: `example ${index + 1} did not hydrate exactly one Run button`,
-						ms: 0,
-						imported,
-					},
-				];
-			}
 		}
 
 		for (let index = 0; index < count; index += 1) {
@@ -256,7 +239,7 @@ async function runAllBlocks(browser, baseUrl, { route, expectedBlocks }) {
 					}
 				}
 				await block.scrollIntoViewIfNeeded();
-				source = (await block.locator('pre code').first().innerText()).trim();
+				source = ((await block.locator('pre code').first().textContent()) ?? '').trim();
 
 				started = performance.now();
 				await button.click();
@@ -271,7 +254,7 @@ async function runAllBlocks(browser, baseUrl, { route, expectedBlocks }) {
 				);
 
 				const ms = Math.round(performance.now() - started);
-				output = (await outputBlock.innerText()).trim();
+				output = ((await outputBlock.textContent()) ?? '').trim();
 
 				const why = resultFailure(failures, await block.locator('.live-code-err').count(), output);
 
@@ -439,7 +422,7 @@ async function runAfterVersionSwitch(browser, baseUrl, { version, route }) {
 		const outputBlock = block.locator('.live-code-pre').first();
 
 		await block.waitFor({ state: 'visible' });
-		source = (await block.locator('pre code').first().innerText()).trim();
+		source = ((await block.locator('pre code').first().textContent()) ?? '').trim();
 
 		started = performance.now();
 		await button.click();
@@ -450,7 +433,7 @@ async function runAfterVersionSwitch(browser, baseUrl, { version, route }) {
 		);
 
 		const ms = Math.round(performance.now() - started);
-		output = (await outputBlock.innerText()).trim();
+		output = ((await outputBlock.textContent()) ?? '').trim();
 
 		const marker = `@${version.slice(1)}`;
 		const misdirected = imported.filter((url) => !url.includes(marker));
