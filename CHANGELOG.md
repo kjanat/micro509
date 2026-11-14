@@ -2,13 +2,12 @@
 
 <!--
 Release checklist — every box, every release:
-- [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
-- [ ] Bump version in package.json AND jsr.json
+- [ ] Start the release with `beepboop release <bump>` or the Start release workflow; Beepboop opens the version PR that bumps package.json AND jsr.json
+- [ ] On the version PR, move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
 - [ ] Bump the version in examples/browser/index.html's import map. examples/vite/package.json uses `latest`
 - [ ] Run `bun install` after the example bump so bun.lock matches; CI installs with a frozen lockfile
 - [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
-- [ ] Verify the signature on the merged release commit, then create its signed release tag
-- [ ] Push the tag to trigger the Publish workflow
+- [ ] Merge the version PR; Beepboop pushes the signed vX.Y.Z tag, which starts the Publish workflow
 - [ ] Verify npm, JSR, the GitHub release and the documentation deployment
 -->
 
@@ -19,6 +18,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-14
+
+Sign and verify JWTs with RS384, RS512, ES256 and ES384, encrypt with compact
+JWE, and migrate from jose with runnable guides and an independent test corpus.
+One function imports any unencrypted private-key PEM, and JWK Sets that arrive
+as parsed objects get the same validation as JSON text.
+
+CMS verification now defaults to the application profile: `id-data` content
+with signed attributes from every signer. Callers that accept bare `id-data`
+signatures opt in.
+
+### Added
+
+- **Sign and verify RS384, RS512, ES256 and ES384.** `micro509/jose` signs and
+  verifies compact JWS and JWT with these algorithms next to RS256, through
+  direct keys, local JWK Sets and remote resolvers. Callers accept only the
+  algorithms they list. RSA keys are checked for hash, modulus, exponent and
+  key usage. ECDSA keys are bound to their exact curve and hash, and signatures
+  use the fixed-width raw encoding. EC JWK entries are checked for coordinate
+  encoding, width, field range and curve membership. `importJwkEntry(entry)`
+  stays RS256, and other algorithms take an explicit argument.
+  [#227](https://github.com/kjanat/micro509/issues/227)
+- **Encrypt with compact JWE.** `encryptCompactJwe` and `decryptCompactJwe`
+  support RSA-OAEP-512 with A256GCM under an explicit `alg` and `enc` policy.
+  Headers and segments are strict and bounded, and `zip` and critical
+  extensions are refused. A failed RSA unwrap, a wrong key, a wrong content-key
+  length and a failed GCM tag return one refusal, and a failed unwrap continues
+  with a random content key as [RFC 7516 §11.5][rfc7516-section-11.5]
+  recommends. Decryption returns the plaintext bytes and the authenticated
+  protected header members. [#231](https://github.com/kjanat/micro509/issues/231)
+- **Encode and decode base64url.** `micro509/jose` exports `base64UrlEncode` and
+  the strict `base64UrlDecode`, which refuses padding, whitespace, noncanonical
+  trailing bits and invalid lengths.
+  [#232](https://github.com/kjanat/micro509/issues/232)
+- **Validate parsed JWK Sets.** `validateJwks` checks a JWK Set that is already
+  a JavaScript object with the rules of `parseJwks`. It reads data without
+  calling getters or `toJSON`, rejects non-JSON values and cycles, bounds depth,
+  node count and data size, and keeps a detached copy.
+  [#229](https://github.com/kjanat/micro509/issues/229)
+- **Import any private-key PEM.** `importPrivateKeyPem` and
+  `importPrivateKeyPemOrThrow` accept exactly one PKCS#8, PKCS#1 or SEC1 block
+  and pass it to the matching importer. Bundles and encrypted input return
+  typed refusals. [#222](https://github.com/kjanat/micro509/issues/222)
+- Key import failures carry the stage, reason and container in their details,
+  and a bounded diagnostic replaces native backend messages.
+  [#223](https://github.com/kjanat/micro509/issues/223)
+- **Migrate from jose.** The migration guide maps jose APIs to micro509 with
+  runnable examples. Recipes cover key generation and import, verified claims
+  flowing into application schemas, and an application-owned JWKS cache. 21
+  independently signed JWT cases with fixed-clock expectations are reusable in
+  consumer tests. [#220](https://github.com/kjanat/micro509/issues/220),
+  [#221](https://github.com/kjanat/micro509/issues/221),
+  [#224](https://github.com/kjanat/micro509/issues/224),
+  [#225](https://github.com/kjanat/micro509/issues/225),
+  [#226](https://github.com/kjanat/micro509/issues/226)
+
 ### Changed
 
 - CMS verification defaults to `id-data` content with signed attributes required
@@ -26,7 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type. Legacy bare `id-data` signatures require explicit `signedAttributes:
   'allowed'` or `'forbidden'`; non-`id-data` always requires signed attributes
   under RFC 5652 §5.3. New typed content-type and attribute-policy failures are
-  distinct from invalid signatures. This changes verification defaults. (#216)
+  distinct from invalid signatures. This changes verification defaults.
+  [#216](https://github.com/kjanat/micro509/issues/216)
+- Format with kprint through `bun fmt` (`@kjanat/fmt`). TOML formats through
+  the Tombi plugin.
+- Releases start from `beepboop release`, the Start release workflow or the
+  Beepboop dashboard. Beepboop opens the version PR and, after the merge,
+  pushes the signed version tag that starts the Publish workflow.
 
 ## [0.17.1] - 2026-10-26
 
@@ -2081,7 +2142,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.17.1...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/kjanat/micro509/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/kjanat/micro509/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/kjanat/micro509/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/kjanat/micro509/compare/v0.15.0...v0.16.0
@@ -2217,6 +2279,7 @@ Initial prerelease. API may change before 1.0.
 [rfc7468-section-8]: https://www.rfc-editor.org/rfc/rfc7468.html#section-8
 [rfc7468-section-9]: https://www.rfc-editor.org/rfc/rfc7468.html#section-9
 [rfc7468-section-14]: https://www.rfc-editor.org/rfc/rfc7468.html#section-14
+[rfc7516-section-11.5]: https://www.rfc-editor.org/rfc/rfc7516.html#section-11.5
 [rfc8018-appendix-A.2]: https://www.rfc-editor.org/rfc/rfc8018.html#appendix-A.2
 [rfc8018-section-4.1]: https://www.rfc-editor.org/rfc/rfc8018.html#section-4.1
 [rfc8410-section-5]: https://www.rfc-editor.org/rfc/rfc8410.html#section-5

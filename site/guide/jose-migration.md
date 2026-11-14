@@ -5,9 +5,8 @@ outline: [2, 3]
 
 # Migrate from jose
 
-This guide describes the implementation in this change set, including the new
-algorithm, JWE, key-import and JWKS APIs. These additions are **not a claim about
-the published 0.17.1 package**. Check the version/preview you install against the
+This guide covers the algorithm, JWE, key-import and JWKS APIs that micro509
+0.18.0 added. Check the version you install against the
 [capability matrix](../reference/algorithms.md). The reusable independent corpus
 is generated with jose 5.10.0; the repository also retains its jose 6 interop
 suite. Keep an independent implementation in development dependencies during a
