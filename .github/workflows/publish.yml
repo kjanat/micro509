@@ -170,18 +170,24 @@ jobs:
     permissions: {}
     steps:
       - shell: pwsh
+        continue-on-error: true
         env: { VERSION: "${{ needs.validate.outputs.version }}" }
         run: |
           # The release documentation imports micro509 from jsDelivr, which mirrors npm with a delay.
           $url = 'https://cdn.jsdelivr.net/npm/micro509@{0}/package.json' -f $env:VERSION.TrimStart('v')
           $window = [timespan]::FromMinutes(10)
           $interval = [timespan]::FromSeconds(20)
+          $timeout = [timespan]::FromSeconds(10)
           $attempts = [int]($window / $interval)
+          $deadline = [datetime]::UtcNow + $window
           $served = switch (1..$attempts) {
             default {
-              $status = try { (Invoke-WebRequest $url -Method Head -SkipHttpErrorCheck).StatusCode } catch { 0 }
+              $status = try {
+                (Invoke-WebRequest $url -Method Head -SkipHttpErrorCheck -TimeoutSec $timeout.TotalSeconds).StatusCode
+              } catch { 0 }
               "{0:u} attempt {1}/{2}: {3} answered {4}" -f [datetime]::UtcNow, $_, $attempts, $url, $status | Out-Host
               if ($status -eq 200) { $true; break }
+              if ([datetime]::UtcNow + $interval -ge $deadline) { break }
               Start-Sleep -Duration $interval
             }
           }
