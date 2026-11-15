@@ -370,6 +370,44 @@ describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget
 	);
 });
 
+describe('checkCertificateRevocationAgainstCrlsBy with a complete CRL that does not cover the certificate', () => {
+	it('spends no delta CRL attempt on it', async () => {
+		const s = await scenario();
+		const parse = (der: Uint8Array) => unwrap(parseCertificateRevocationListDer(der));
+		const attacker = await generateKeyPair();
+		const forged = await Promise.all(
+			Array.from({ length: 5 }, async (_, index) =>
+				parse(
+					(
+						await s.crl({
+							signerPrivateKey: attacker.privateKey,
+							crlNumber: 100 + index,
+							baseCrlNumber: 5,
+							thisUpdate: new Date(s.at.getTime() - HOUR_MS),
+							issuingDistributionPoint: { onlyContainsCACerts: true },
+						})
+					).der,
+				),
+			),
+		);
+		const budget = { remaining: 32 };
+		const result = await checkCertificateRevocationAgainstCrlsBy(
+			unwrap(parseCertificatePem(s.leafPem)),
+			parse((await s.caOnlyBase(5)).der),
+			forged,
+			{ kind: 'certificate', certificate: s.caPem },
+			{ at: s.at },
+			callerVerification(undefined),
+			budget,
+		);
+		expect(result).toMatchObject({
+			kind: 'checked',
+			result: { ok: false, code: 'non_applicable' },
+		});
+		expect(budget.remaining).toBe(32);
+	});
+});
+
 describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation with a delta CRL that fails', () => {
 	it.each([
 		{ base: 'keyCompromise', delta: 'forged', crl: 'revoked', evidence: 'revoked' },
@@ -712,11 +750,12 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 
 describe('checkChainRevocation delta CRL attempt limits for a CRL signer', () => {
 	it.each([
-		{ signerBases: 8, expected: 'good' },
-		{ signerBases: 9, expected: ['no_applicable_ocsp', 'crl_signer_indeterminate'] },
+		{ signerBases: 8, copies: 1, expected: 'good' },
+		{ signerBases: 8, copies: 2, expected: 'good' },
+		{ signerBases: 9, copies: 1, expected: ['no_applicable_ocsp', 'crl_signer_indeterminate'] },
 	] as const)(
-		'counts the delta CRL checks for a CRL signer against the 32 per call ($signerBases signer base CRLs)',
-		async ({ signerBases, expected }) => {
+		'counts the delta CRL checks for a CRL signer against the 32 per call ($signerBases signer base CRLs, $copies copies each)',
+		async ({ signerBases, copies, expected }) => {
 			const root = await createSelfSignedCertificate({
 				subject: { commonName: 'Signer Budget Root' },
 				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
@@ -778,8 +817,7 @@ describe('checkChainRevocation delta CRL attempt limits for a CRL signer', () =>
 					thisUpdate,
 					nextUpdate,
 				});
-			const crls = [
-				leafCrl.der,
+			const signerCrls = [
 				...(await Promise.all(
 					Array.from({ length: signerBases }, async (_, index) => (await rootCrl(index + 1)).der),
 				)),
@@ -787,6 +825,7 @@ describe('checkChainRevocation delta CRL attempt limits for a CRL signer', () =>
 					[100, 101, 102, 103].map(async (crlNumber) => (await rootCrl(crlNumber, 1)).der),
 				)),
 			];
+			const crls = [leafCrl.der, ...Array.from({ length: copies }, () => signerCrls).flat()];
 			const result = await checkChainRevocation({
 				chain: [
 					unwrap(parseCertificatePem(leaf.pem)),

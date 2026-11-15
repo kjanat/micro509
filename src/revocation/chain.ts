@@ -43,6 +43,7 @@ import {
 	checkRevocationAgainstAuthenticatedCrl,
 	coversAllDistributionPointReasons,
 	DELTA_CRL_ATTEMPTS_PER_BASE,
+	distinctSignedCrls,
 	irremovableCrlRevocation,
 	isCrlApplicableTo,
 	normalizeCrl,
@@ -817,13 +818,15 @@ async function checkSignerRevocation(
 	// signer revoked, and a revoked verdict from any CRL wins.
 	const coveredReasons = new Set<string>();
 	let sawUnsettledEvidence = false;
-	const crls = ctx.crls.flatMap((source) => {
-		try {
-			return [normalizeCrl(source)];
-		} catch {
-			return [];
-		}
-	});
+	const crls = distinctSignedCrls(
+		ctx.crls.flatMap((source) => {
+			try {
+				return [normalizeCrl(source)];
+			} catch {
+				return [];
+			}
+		}),
+	);
 	const deltaCrls = crls.filter((crl) => crl.baseCrlNumber !== undefined);
 	for (const crl of crls) {
 		if (crl.baseCrlNumber !== undefined) continue;
@@ -1654,27 +1657,6 @@ function parseCrlEvidenceSources(
 		}
 	}
 	return parsedCrls;
-}
-
-/** `crls` without repeats of the same signed content and signature. */
-function distinctSignedCrls(
-	crls: readonly ParsedCertificateRevocationList[],
-): readonly ParsedCertificateRevocationList[] {
-	const seen = new Set<string>();
-	return crls.filter((crl) => {
-		const key = [
-			crl.signatureAlgorithmOid,
-			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
-			toHex(crl.signatureValue),
-			crl.signatureValueUnusedBits,
-			toHex(crl.tbsCertListDer),
-		].join(':');
-		if (seen.has(key)) {
-			return false;
-		}
-		seen.add(key);
-		return true;
-	});
 }
 
 const DELTA_CRL_ATTEMPTS_PER_CHAIN = 32;

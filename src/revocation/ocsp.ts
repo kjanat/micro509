@@ -97,6 +97,7 @@ import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
+	distinctSignedCrls,
 	normalizeCrl,
 } from '#micro509/revocation/crl';
 import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
@@ -1910,7 +1911,7 @@ function partitionResponderCrls(sources: readonly CrlSource[]): {
 		}
 		(crl.baseCrlNumber === undefined ? complete : delta).push(crl);
 	}
-	return { complete, delta };
+	return { complete: distinctSignedCrls(complete), delta: distinctSignedCrls(delta) };
 }
 
 function responderCrlCheck(input: OcspValidationOptions): CrlCheckOptions {

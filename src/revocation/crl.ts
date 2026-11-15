@@ -1416,6 +1416,31 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 	};
 }
 
+/**
+ * `crls` with each signed content and signature kept once.
+ *
+ * @internal
+ */
+export function distinctSignedCrls(
+	crls: readonly ParsedCertificateRevocationList[],
+): readonly ParsedCertificateRevocationList[] {
+	const seen = new Set<string>();
+	return crls.filter((crl) => {
+		const key = [
+			crl.signatureAlgorithmOid,
+			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
+			toHex(crl.signatureValue),
+			crl.signatureValueUnusedBits,
+			toHex(crl.tbsCertListDer),
+		].join(':');
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
+}
+
 /** Delta CRLs micro509 tries per complete CRL, an implementation limit. */
 export const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
 
@@ -1499,7 +1524,8 @@ export type CrlsCheckOutcome =
  * updated by the newest delta CRL in `deltaCrls` that applies to it. A
  * revocation in the complete CRL that no delta CRL could remove settles the
  * status even when the delta CRLs do not. Each delta CRL check spends one
- * from `budget`.
+ * from `budget`, and a complete CRL that does not cover `certificate` spends
+ * none.
  *
  * @internal
  */
@@ -1523,13 +1549,15 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		};
 	}
 	const at = options.at ?? new Date();
-	const candidates = rankApplicableDeltaCrls(
-		completeCrl,
-		deltaCrls,
-		at,
-		options.clockSkewMs ?? 0,
-		options.maxAgeMs,
-	);
+	const candidates = checkCrlApplicability(certificate, authenticated.value).ok
+		? rankApplicableDeltaCrls(
+				authenticated.value,
+				deltaCrls,
+				at,
+				options.clockSkewMs ?? 0,
+				options.maxAgeMs,
+			)
+		: [];
 	let attempts = 0;
 	for (const deltaCrl of candidates) {
 		if (attempts >= DELTA_CRL_ATTEMPTS_PER_BASE || budget.remaining <= 0) break;

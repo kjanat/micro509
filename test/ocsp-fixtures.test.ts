@@ -834,6 +834,69 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 	);
 
 	it.each([
+		{ revokingDelta: false, expected: { ok: true } },
+		{ revokingDelta: true, expected: { ok: false, code: 'responder_revoked' } },
+	] as const)(
+		'counts five copies of one forged delta CRL once (revoking delta $revokingDelta)',
+		async ({ revokingDelta, expected }) => {
+			const authority = await issueAuthority('Delta Copy CA');
+			const responder = await issueDelegatedResponder(authority);
+			const response = await goodResponse(
+				authority,
+				responder.keys.privateKey,
+				responder.certificate.pem,
+				true,
+			);
+			const crl = (
+				signerPrivateKey: CryptoKey,
+				crlNumber: number,
+				thisUpdate: Date,
+				baseCrlNumber?: number,
+				revokedSerialHex?: string,
+			) =>
+				createCertificateRevocationList({
+					crlNumber,
+					...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+					issuer: { commonName: authority.commonName },
+					signerPrivateKey,
+					issuerCertificate: authority.ca.certificate.der,
+					thisUpdate,
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+					...(revokedSerialHex === undefined
+						? {}
+						: {
+								revokedCertificates: [
+									{ serialNumber: hexToBytes(revokedSerialHex), reasonCode: 'keyCompromise' },
+								],
+							}),
+				});
+			const forged = await crl(
+				(await generateKeyPair()).privateKey,
+				100,
+				new Date(Date.now() - HOUR_MS),
+				5,
+			);
+			const revoking = await crl(
+				authority.ca.keyPair.privateKey,
+				6,
+				new Date(Date.now() - 2 * HOUR_MS),
+				5,
+				unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex,
+			);
+			const result = await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				responderRevocationCrls: [
+					(await crl(authority.ca.keyPair.privateKey, 5, new Date(Date.now() - 3 * HOUR_MS))).der,
+					...Array.from({ length: 5 }, () => forged.der),
+					...(revokingDelta ? [revoking.der] : []),
+				],
+			});
+			expect(result).toMatchObject(expected);
+		},
+	);
+
+	it.each([
 		{ form: 'DER', expected: { ok: false, code: 'responder_revoked' } },
 		{ form: 'parsed', expected: { ok: false, code: 'responder_revoked' } },
 		{
