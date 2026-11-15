@@ -2308,11 +2308,11 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			const issuer = example('CERTIFICATE');
 			expect(await verifyCertificateRevocationListSignature(relabelled, issuer)).toMatchObject({
 				ok: false,
-				code: 'signature_invalid',
+				code: 'malformed',
 			});
 			expect(
 				await validateCertificateRevocationList({ crl: relabelled, issuerCertificate: issuer }),
-			).toMatchObject({ ok: false, code: 'signature_invalid' });
+			).toMatchObject({ ok: false, code: 'malformed' });
 			expect(
 				await validateCertificateRevocationList({ crl: figure8, issuerCertificate: issuer }),
 			).toMatchObject({ ok: false, code: 'issuer_mismatch' });

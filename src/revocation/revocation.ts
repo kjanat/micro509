@@ -8,7 +8,7 @@
 import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import type { SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
 import { resolveSignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
-import type { DecodeRefusalCode, Result } from '#micro509/result/result';
+import type { DecodeFailureCode, Result } from '#micro509/result/result';
 import { rethrowIfInvariant } from '#micro509/result/result';
 import type {
 	CrlApplicabilityFailureReason,
@@ -138,7 +138,7 @@ export interface CheckCertificateRevocationInput {
 export type CheckCertificateRevocationErrorCode =
 	| 'revocation_evidence_missing'
 	| 'revocation_status_indeterminate'
-	| DecodeRefusalCode;
+	| DecodeFailureCode;
 
 /** Every {@linkcode RevocationIndeterminateReasonCode}, as a runtime array. */
 export const REVOCATION_INDETERMINATE_REASON_CODES = [
@@ -146,6 +146,7 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'certificate_status_unknown',
 	'crl_sign_not_permitted',
 	'issuer_mismatch',
+	'malformed',
 	'next_update_missing',
 	'non_applicable',
 	'nonce_mismatch',
@@ -441,7 +442,7 @@ function undecodableCertificateResult(
 	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 	return revocationSuccess({
 		status: 'indeterminate',
-		code: refusal?.code ?? 'revocation_status_indeterminate',
+		code: refusal?.code ?? 'malformed',
 		message: refusal?.message ?? 'Certificate input is malformed',
 		details: {
 			checkedSources,

@@ -212,6 +212,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 | `crl_sign_not_permitted`   | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                                        |
 | `issuer_mismatch`          | CRL issuer does not match the certificate's issuer                                                           |
 | `limit_exceeded`           | A CRL or certificate exceeds a micro509 decoding limit, see `ParseCertificateRevocationListErrorCode`        |
+| `malformed`                | A CRL or certificate does not decode                                                                         |
 | `non_applicable`           | No supplied CRL applies to the certificate ([RFC 5280 §6.3.3][rfc5280-section-6.3.3])                        |
 | `reason_code_unrecognized` | The certificate's entry carries a CRLReason outside RFC 5280 §5.3.1 under `unrecognizedReasonCode: 'reject'` |
 | `signature_invalid`        | CRL signature fails against the issuer key                                                                   |
@@ -246,6 +247,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | Code                              | Meaning                                                                                 |
 | --------------------------------- | --------------------------------------------------------------------------------------- |
 | `limit_exceeded`                  | The certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `malformed`                       | The certificate does not decode                                                         |
 | `revocation_evidence_missing`     | No CRL or OCSP evidence was supplied                                                    |
 | `revocation_status_indeterminate` | Evidence yielded no verdict under the hard-fail policy                                  |
 | `unsupported`                     | The certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
@@ -259,6 +261,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                        |
 | `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                                      |
 | `limit_exceeded`               | Evidence or a certificate it names exceeds a micro509 decoding limit                         |
+| `malformed`                    | Evidence or a certificate it names does not decode                                           |
 | `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`                              |
 | `non_applicable`               | No supplied CRL applies to the certificate                                                   |
 | `nonce_mismatch`               | Response nonce differs from the request's                                                    |

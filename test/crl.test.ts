@@ -3179,7 +3179,7 @@ describe('crl', () => {
 			crl: parsedCrlWithoutDer,
 			issuerCertificate: ca.certificate.pem,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateCertificateRevocationList fails closed for malformed issuer certificate input', async () => {
@@ -3201,7 +3201,7 @@ describe('crl', () => {
 			crl: crl.pem,
 			issuerCertificate: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateCertificateRevocationList ignores tampered parsed issuer certificate fields', async () => {
@@ -3333,7 +3333,7 @@ describe('crl', () => {
 			issuerCertificate: ca.certificate.pem,
 			crl: crl.pem,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'non_applicable' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('checkCertificateRevocationAgainstCrl rejects duplicate revoked entries for the same certificate', async () => {
@@ -3419,7 +3419,7 @@ describe('crl', () => {
 			crl.pem,
 			Uint8Array.of(0xff, 0xff),
 		);
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateCertificateRevocationList rejects signature with wrong key', async () => {

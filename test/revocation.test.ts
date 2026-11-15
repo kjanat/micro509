@@ -57,7 +57,7 @@ describe('revocation boundary', () => {
 			ok: true,
 			value: {
 				status: 'indeterminate',
-				code: 'revocation_status_indeterminate',
+				code: 'malformed',
 				message: 'Certificate input is malformed',
 			},
 		});
