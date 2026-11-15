@@ -23,6 +23,11 @@ import {
 	withCrlIssuer,
 	withRevokedEntryReasonCode,
 } from '#test/helpers';
+import {
+	PARAMETER_SIGNATURE_OID,
+	parameterKey,
+	resignedCrl,
+} from '#test/oracles/parameter-signature';
 
 const CA_NAME = 'Delta Shadow CA';
 const HOUR_MS = 60 * 60 * 1000;
@@ -929,6 +934,38 @@ describe('validateOcspResponse and checkCertificateRevocation delta CRL limits f
 			},
 		});
 	});
+});
+
+describe('checkCertificateRevocation stops at the first evidence that revokes', () => {
+	it.each([
+		{ order: 'revoking CRL first', calls: 0 },
+		{ order: 'revoking CRL last', calls: 1 },
+	] as const)(
+		'verifies later evidence only before a revocation ($order)',
+		async ({ order, calls }) => {
+			const s = await scenario();
+			const revoking = { kind: 'crl' as const, crl: (await s.base(true)).der };
+			const other = {
+				kind: 'crl' as const,
+				crl: await resignedCrl((await s.baseNumbered(6)).der, parameterKey('stop', true)),
+			};
+			let verified = 0;
+			const result = await checkCertificateRevocation({
+				certificate: s.leafPem,
+				issuerCertificate: s.caPem,
+				evidence: order === 'revoking CRL first' ? [revoking, other] : [other, revoking],
+				at: s.at,
+				signatureVerifiers: {
+					[PARAMETER_SIGNATURE_OID]: async () => {
+						verified += 1;
+						return false;
+					},
+				},
+			});
+			expect(result).toMatchObject({ ok: true, value: { status: 'revoked' } });
+			expect(verified).toBe(calls);
+		},
+	);
 });
 
 describe('checkCertificateRevocation classifies each CRL by its delta CRL indicator', () => {

@@ -517,6 +517,7 @@ function undecodableCertificateResult(
 	});
 }
 
+/** The checks of `evidence` in order, up to the first that revokes `certificate`. */
 async function checkRevocationEvidence(
 	input: CheckCertificateRevocationInput,
 	evidence: readonly RevocationEvidenceInput[],
@@ -536,29 +537,42 @@ async function checkRevocationEvidence(
 	const checkedCompleteCrls = new Set<string>();
 	const checks: RevocationEvidenceCheck[] = [];
 	for (const [index, entry] of evidence.entries()) {
-		if (entry.kind === 'ocsp') {
-			checks.push(
-				await guardedEvidenceCheck('ocsp', () =>
-					checkCertificateRevocationWithOcsp(input, entry, certificate, budget),
-				),
-			);
-			continue;
-		}
-		const crlEntry = parsed[index];
-		if (crlEntry === undefined) continue;
-		for (const crl of [crlEntry.deltaCrl, crlEntry.crl]) {
-			if (crl?.kind === 'indeterminate') checks.push(crl.check);
-		}
-		for (const completeCrl of completeCrlsOf(crlEntry)) {
-			const key = signedCrlKey(completeCrl);
-			if (checkedCompleteCrls.has(key)) continue;
-			checkedCompleteCrls.add(key);
-			checks.push(
-				await guardedEvidenceCheck('crl', () =>
-					checkCertificateRevocationWithCrl(input, completeCrl, deltaCrls, certificate, budget),
-				),
-			);
-		}
+		const entryChecks =
+			entry.kind === 'ocsp'
+				? [
+						await guardedEvidenceCheck('ocsp', () =>
+							checkCertificateRevocationWithOcsp(input, entry, certificate, budget),
+						),
+					]
+				: await checkCrlEvidenceEntry(parsed[index], checkedCompleteCrls, (completeCrl) =>
+						checkCertificateRevocationWithCrl(input, completeCrl, deltaCrls, certificate, budget),
+					);
+		checks.push(...entryChecks);
+		if (entryChecks.some((check) => check.status === 'revoked')) return checks;
+	}
+	return checks;
+}
+
+/**
+ * The checks of one CRL evidence entry: its CRLs that do not decode, then
+ * `check` on each complete CRL not in `checked`, up to the first that revokes.
+ */
+async function checkCrlEvidenceEntry(
+	entry: ReturnType<typeof parseCrlEvidence> | undefined,
+	checked: Set<string>,
+	check: (completeCrl: ParsedCertificateRevocationList) => Promise<RevocationEvidenceCheck>,
+): Promise<readonly RevocationEvidenceCheck[]> {
+	if (entry === undefined) return [];
+	const checks = [entry.deltaCrl, entry.crl].flatMap((crl) =>
+		crl?.kind === 'indeterminate' ? [crl.check] : [],
+	);
+	for (const completeCrl of completeCrlsOf(entry)) {
+		const key = signedCrlKey(completeCrl);
+		if (checked.has(key)) continue;
+		checked.add(key);
+		const result = await guardedEvidenceCheck('crl', () => check(completeCrl));
+		checks.push(result);
+		if (result.status === 'revoked') break;
 	}
 	return checks;
 }
