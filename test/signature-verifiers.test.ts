@@ -1002,3 +1002,27 @@ describe('revocation signers and inherited key parameters', () => {
 		expect(result.value.certificates[0]).toMatchObject({ status: 'good', source: { kind: 'crl' } });
 	});
 });
+
+describe('self-signed leaf check with inherited key parameters', () => {
+	it.each([{ leafCarriesParameters: true }, { leafCarriesParameters: false }] as const)(
+		'rejects a self-signed leaf under a bare anchor with its name and key (leaf carries parameters $leafCarriesParameters)',
+		async ({ leafCarriesParameters }) => {
+			const anchorKey = parameterKey('P', true);
+			const leafKey = { ...anchorKey, carriesParameters: leafCarriesParameters };
+			const anchorDer = await parameterCertificate(
+				'Parameter Self',
+				anchorKey,
+				'self',
+				CA_EXTENSIONS,
+			);
+			const leafDer = await parameterCertificate('Parameter Self', leafKey, 'self', undefined);
+			const result = await validateCandidatePath({
+				chain: [unwrap(parseCertificateDer(leafDer))],
+				anchorCertificateInChain: false,
+				trustAnchor: trustAnchorFromCertificate(unwrap(parseCertificateDer(anchorDer))),
+				signatureVerifiers: parameterSignatureVerifiers,
+			});
+			expect(result).toMatchObject({ ok: false, code: 'self_signed_leaf_not_allowed' });
+		},
+	);
+});

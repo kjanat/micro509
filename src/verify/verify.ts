@@ -23,7 +23,11 @@ import {
 	rethrowDecodeRefusal,
 } from '#micro509/internal/asn1/decode-refusal';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import type { SignatureVerifier, SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
 import {
 	callerVerification,
 	resolveSignatureVerifiers,
@@ -859,19 +863,18 @@ async function validateCandidatePathRaw(
 	}
 
 	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
-	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(
-		leaf,
-		chain.length,
-		input,
+	const workingParameters = pathWorkingParameters(chain, input);
+	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input, {
 		verifiers,
-	);
+		workingParameters: { parametersDer: workingParameters(0) },
+	});
 	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
 	const certificateFailure = await validatePathCertificates(
 		chain,
 		at,
 		input.rejectOversizedDisplayText === true,
 		verifiers,
-		pathWorkingParameters(chain, input),
+		workingParameters,
 	);
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
@@ -923,16 +926,20 @@ async function validatePathDistrust(
 	return undefined;
 }
 
-/** RFC 5280 §3.2 makes a self-issued certificate self-signed only when the public key it binds verifies its signature. */
+/**
+ * RFC 5280 §3.2 makes a self-issued certificate self-signed only when the
+ * public key it binds verifies its signature, with the parameters its path
+ * gives that key (RFC 5280 §6.1.4 (e)).
+ */
 async function validateSelfSignedLeafAllowed(
 	leaf: ParsedCertificate,
 	chainLength: number,
 	input: ValidateCandidatePathInput,
-	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	verification: CallerVerification,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
 		return undefined;
-	const selfSignature = await verifyCertificateSignature(leaf, leaf, { verifiers });
+	const selfSignature = await verifyCertificateSignature(leaf, leaf, verification);
 	if (!selfSignature.ok || !selfSignature.valid) return undefined;
 	return failure(
 		'self_signed_leaf_not_allowed',
