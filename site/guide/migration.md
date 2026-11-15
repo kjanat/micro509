@@ -231,8 +231,11 @@ updated by the newest applicable delta CRL among every `deltaCrl` in
 `evidence`, as `checkChainRevocation` does. Two entries for one complete CRL,
 one with an older delta CRL that holds the certificate and one with a newer
 clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
-yields the new indeterminate code `delta_crl_unusable`, which keeps OCSP or
-other CRL evidence from settling the status as `good`.
+yields the new indeterminate code `delta_crl_unusable`, and candidates left
+after the attempt limits yield `delta_crl_retry_limit_exceeded`. Either one
+keeps OCSP or other CRL evidence from settling the status as `good`. An
+undecodable `deltaCrl` no longer hides its complete CRL, and evidence that
+does not decode reports `malformed`.
 
 ## Set an age policy for CRLs without `nextUpdate`
 

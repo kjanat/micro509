@@ -17,6 +17,7 @@ import type {
 	CheckCertificateRevocationAgainstCrlResult,
 	CrlApplicabilityFailureReason,
 	CrlSource,
+	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
 	ParsedRevocationReason,
 	UnrecognizedReasonCodePolicy,
@@ -25,9 +26,11 @@ import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
+	DELTA_CRL_ATTEMPTS_PER_CALL,
 	distinctSignedCrls,
 	normalizeCrl,
 	revocationReasonFromCode,
+	signedCrlKey,
 } from '#micro509/revocation/crl';
 import type {
 	OcspCertificateSource,
@@ -161,6 +164,7 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'certificate_status_missing',
 	'certificate_status_unknown',
 	'crl_sign_not_permitted',
+	'delta_crl_retry_limit_exceeded',
 	'delta_crl_unusable',
 	'issuer_mismatch',
 	'malformed',
@@ -358,9 +362,10 @@ export function resolveOcspResponderCandidates(
  * else `indeterminate` with diagnostic details about each indeterminate evidence.
  * Each distinct complete CRL is checked once, updated by the newest delta CRL
  * among every `deltaCrl` in `evidence` that applies to it, as
- * `checkChainRevocation` does. A delta CRL that cannot settle the status
- * yields `delta_crl_unusable`, which keeps other evidence from settling it as
- * `good`.
+ * `checkChainRevocation` does, within the same attempt limits. A delta CRL
+ * that cannot settle the status yields `delta_crl_unusable`, and candidates
+ * left after the limits `delta_crl_retry_limit_exceeded`; either keeps other
+ * evidence from settling it as `good`.
  * A certificate carrying noRevAvail is `skipped` without consulting evidence
  * (RFC 9608 §4). One carrying id-pkix-ocsp-nocheck is still checked against
  * the evidence, which may list it as revoked.
@@ -450,7 +455,10 @@ function settleRevocationEvidence(
 	checkedSources: readonly RevocationEvidenceKind[],
 ): CheckCertificateRevocationResult {
 	const unrecognizedReason = indeterminateEvidence.some(
-		(entry) => entry.code === 'reason_code_unrecognized' || entry.code === 'delta_crl_unusable',
+		(entry) =>
+			entry.code === 'reason_code_unrecognized' ||
+			entry.code === 'delta_crl_unusable' ||
+			entry.code === 'delta_crl_retry_limit_exceeded',
 	);
 	// An OCSP good is per-certificate and definitive. A CRL good is definitive
 	// only once the applicable CRLs together cover every revocation reason.
@@ -507,38 +515,34 @@ async function checkRevocationEvidence(
 		entry.kind === 'crl' ? parseCrlEvidence(entry) : undefined,
 	);
 	const deltaCrls = distinctSignedCrls(
-		parsed.flatMap((entry) =>
-			entry?.kind === 'parsed' && entry.deltaCrl !== undefined ? [entry.deltaCrl] : [],
-		),
+		parsed.flatMap((entry) => (entry?.deltaCrl?.kind === 'parsed' ? [entry.deltaCrl.crl] : [])),
 	);
-	const checkedCompleteCrls: ParsedCertificateRevocationList[] = [];
+	const budget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CALL };
+	const checkedCompleteCrls = new Set<string>();
 	const checks: RevocationEvidenceCheck[] = [];
 	for (const [index, entry] of evidence.entries()) {
 		const crlEntry = parsed[index];
-		if (entry.kind === 'ocsp' || crlEntry === undefined) {
-			if (entry.kind === 'ocsp') {
-				checks.push(
-					await guardedEvidenceCheck('ocsp', () =>
-						checkCertificateRevocationWithOcsp(input, entry, certificate),
-					),
-				);
-			}
+		if (entry.kind === 'ocsp') {
+			checks.push(
+				await guardedEvidenceCheck('ocsp', () =>
+					checkCertificateRevocationWithOcsp(input, entry, certificate),
+				),
+			);
 			continue;
 		}
-		if (crlEntry.kind === 'indeterminate') {
-			checks.push(crlEntry.check);
+		if (crlEntry === undefined) continue;
+		if (crlEntry.deltaCrl?.kind === 'indeterminate') checks.push(crlEntry.deltaCrl.check);
+		if (crlEntry.crl.kind === 'indeterminate') {
+			checks.push(crlEntry.crl.check);
 			continue;
 		}
-		if (
-			distinctSignedCrls([...checkedCompleteCrls, crlEntry.crl]).length ===
-			checkedCompleteCrls.length
-		) {
-			continue;
-		}
-		checkedCompleteCrls.push(crlEntry.crl);
+		const completeCrl = crlEntry.crl.crl;
+		const key = signedCrlKey(completeCrl);
+		if (checkedCompleteCrls.has(key)) continue;
+		checkedCompleteCrls.add(key);
 		checks.push(
 			await guardedEvidenceCheck('crl', () =>
-				checkCertificateRevocationWithCrl(input, crlEntry.crl, deltaCrls, certificate),
+				checkCertificateRevocationWithCrl(input, completeCrl, deltaCrls, certificate, budget),
 			),
 		);
 	}
@@ -567,26 +571,31 @@ function undecodableEvidence(
 		status: 'indeterminate',
 		detail: {
 			kind,
-			code: refusal?.code ?? 'signature_invalid',
+			code: refusal?.code ?? 'malformed',
 			message: refusal?.message ?? `${kind.toUpperCase()} evidence input is malformed`,
 		},
 	};
 }
 
-/** A CRL evidence entry's complete and delta CRLs, or why they do not decode. */
-function parseCrlEvidence(entry: RevocationCrlEvidenceInput):
-	| {
-			readonly kind: 'parsed';
-			readonly crl: ParsedCertificateRevocationList;
-			readonly deltaCrl: ParsedCertificateRevocationList | undefined;
-	  }
-	| { readonly kind: 'indeterminate'; readonly check: RevocationEvidenceCheck } {
+/** One CRL that decoded, or why it does not. */
+type ParsedCrlEvidence =
+	| { readonly kind: 'parsed'; readonly crl: ParsedCertificateRevocationList }
+	| { readonly kind: 'indeterminate'; readonly check: RevocationEvidenceCheck };
+
+/** A CRL evidence entry's complete and delta CRLs, each decoded on its own. */
+function parseCrlEvidence(entry: RevocationCrlEvidenceInput): {
+	readonly crl: ParsedCrlEvidence;
+	readonly deltaCrl: ParsedCrlEvidence | undefined;
+} {
+	return {
+		crl: parseOneCrl(entry.crl),
+		deltaCrl: entry.deltaCrl === undefined ? undefined : parseOneCrl(entry.deltaCrl),
+	};
+}
+
+function parseOneCrl(source: CrlSource): ParsedCrlEvidence {
 	try {
-		return {
-			kind: 'parsed',
-			crl: normalizeCrl(entry.crl),
-			deltaCrl: entry.deltaCrl === undefined ? undefined : normalizeCrl(entry.deltaCrl),
-		};
+		return { kind: 'parsed', crl: normalizeCrl(source) };
 	} catch (error) {
 		return { kind: 'indeterminate', check: undecodableEvidence('crl', error) };
 	}
@@ -602,6 +611,7 @@ async function checkCertificateRevocationWithCrl(
 	completeCrl: ParsedCertificateRevocationList,
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	certificate: ParsedCertificate,
+	budget: DeltaCrlBudget,
 ): Promise<RevocationEvidenceCheck> {
 	const outcome = await checkCertificateRevocationAgainstCrlsBy(
 		certificate,
@@ -617,17 +627,24 @@ async function checkCertificateRevocationWithCrl(
 				: { unrecognizedReasonCode: input.unrecognizedReasonCode }),
 		},
 		callerVerification(input.signatureVerifiers),
+		[budget],
 	);
-	return outcome.kind === 'unsettled'
-		? {
-				status: 'indeterminate',
-				detail: {
-					kind: 'crl',
-					code: 'delta_crl_unusable',
-					message: 'A delta CRL could not settle the certificate status',
-				},
-			}
-		: crlEvidenceCheck(outcome.result);
+	if (outcome.kind === 'checked') return crlEvidenceCheck(outcome.result);
+	return {
+		status: 'indeterminate',
+		detail:
+			outcome.reason === 'retry_limit'
+				? {
+						kind: 'crl',
+						code: 'delta_crl_retry_limit_exceeded',
+						message: 'Delta CRL candidates remained after the attempt limit',
+					}
+				: {
+						kind: 'crl',
+						code: 'delta_crl_unusable',
+						message: 'An applicable delta CRL could not settle the certificate status',
+					},
+	};
 }
 
 /** The evidence check for one CRL result. */

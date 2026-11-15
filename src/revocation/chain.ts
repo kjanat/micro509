@@ -44,6 +44,7 @@ import {
 	checkRevocationAgainstAuthenticatedCrl,
 	coversAllDistributionPointReasons,
 	DELTA_CRL_ATTEMPTS_PER_BASE,
+	DELTA_CRL_ATTEMPTS_PER_CALL,
 	distinctSignedCrls,
 	irremovableCrlRevocation,
 	isCrlApplicableTo,
@@ -1704,8 +1705,6 @@ function parseCrlEvidenceSources(
 	return parsedCrls;
 }
 
-const DELTA_CRL_ATTEMPTS_PER_CHAIN = 32;
-
 interface DeltaCandidateCheck {
 	readonly cert: ParsedCertificate;
 	readonly baseCrl: ParsedCertificateRevocationList;
@@ -2161,7 +2160,7 @@ function signerValidationContext(
 		distrustedSpkiSha256:
 			input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256],
 		verifiers,
-		deltaBudget: { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN },
+		deltaBudget: { remaining: DELTA_CRL_ATTEMPTS_PER_CALL },
 		workingKeyOf: (certificate) =>
 			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
 		pathKeys,

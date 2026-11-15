@@ -256,31 +256,32 @@ delta CRL that does not pair with the complete CRL, including one whose
 
 ### RevocationIndeterminateReasonCode
 
-| Code                           | Meaning                                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------------------------- |
-| `certificate_status_missing`   | Response carries no entry for the certificate                                                |
-| `certificate_status_unknown`   | Responder answered `unknown`                                                                 |
-| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                        |
-| `delta_crl_unusable`           | A delta CRL could not settle the status; other evidence cannot settle it as good either      |
-| `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                                      |
-| `limit_exceeded`               | Evidence or a certificate it names exceeds a micro509 decoding limit                         |
-| `malformed`                    | Evidence or a certificate it names does not decode                                           |
-| `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`                              |
-| `non_applicable`               | No supplied CRL applies to the certificate                                                   |
-| `nonce_mismatch`               | Response nonce differs from the request's                                                    |
-| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                                              |
-| `reason_code_unrecognized`     | Revoking evidence carries an unrecognized CRLReason under `unrecognizedReasonCode: 'reject'` |
-| `reason_coverage_incomplete`   | Applicable CRLs cover only some CRLReasons                                                   |
-| `request_mismatch`             | Response does not answer the supplied request                                                |
-| `responder_chain_invalid`      | Responder certificate path fails validation                                                  |
-| `responder_id_mismatch`        | ResponderID matches no candidate signer                                                      |
-| `responder_revocation_unknown` | Delegated responder revocation status undetermined                                           |
-| `responder_revoked`            | Delegated responder certificate is revoked                                                   |
-| `response_status_invalid`      | OCSPResponse status is not `successful`                                                      |
-| `signature_invalid`            | Evidence signature fails                                                                     |
-| `stale_crl`                    | CRL outside its `thisUpdate`/`nextUpdate` window or older than `crlMaxAgeMs`                 |
-| `stale_response`               | Response outside its freshness window                                                        |
-| `unsupported`                  | Evidence or a certificate it names holds a value micro509 does not decode                    |
+| Code                             | Meaning                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `certificate_status_missing`     | Response carries no entry for the certificate                                                |
+| `certificate_status_unknown`     | Responder answered `unknown`                                                                 |
+| `crl_sign_not_permitted`         | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                        |
+| `delta_crl_retry_limit_exceeded` | Delta CRL candidates remained after the attempt limit; other evidence cannot settle good     |
+| `delta_crl_unusable`             | An applicable delta CRL could not settle the status; other evidence cannot settle good       |
+| `issuer_mismatch`                | Evidence issuer does not match the certificate's issuer                                      |
+| `limit_exceeded`                 | Evidence or a certificate it names exceeds a micro509 decoding limit                         |
+| `malformed`                      | Evidence or a certificate it names does not decode                                           |
+| `next_update_missing`            | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`                              |
+| `non_applicable`                 | No supplied CRL applies to the certificate                                                   |
+| `nonce_mismatch`                 | Response nonce differs from the request's                                                    |
+| `ocsp_signing_missing`           | Delegated responder lacks the `ocspSigning` EKU                                              |
+| `reason_code_unrecognized`       | Revoking evidence carries an unrecognized CRLReason under `unrecognizedReasonCode: 'reject'` |
+| `reason_coverage_incomplete`     | Applicable CRLs cover only some CRLReasons                                                   |
+| `request_mismatch`               | Response does not answer the supplied request                                                |
+| `responder_chain_invalid`        | Responder certificate path fails validation                                                  |
+| `responder_id_mismatch`          | ResponderID matches no candidate signer                                                      |
+| `responder_revocation_unknown`   | Delegated responder revocation status undetermined                                           |
+| `responder_revoked`              | Delegated responder certificate is revoked                                                   |
+| `response_status_invalid`        | OCSPResponse status is not `successful`                                                      |
+| `signature_invalid`              | Evidence signature fails                                                                     |
+| `stale_crl`                      | CRL outside its `thisUpdate`/`nextUpdate` window or older than `crlMaxAgeMs`                 |
+| `stale_response`                 | Response outside its freshness window                                                        |
+| `unsupported`                    | Evidence or a certificate it names holds a value micro509 does not decode                    |
 
 The chain-level `RevocationIndeterminateReason` from `checkChainRevocation` and
 `verifyCertificateChain({ revocation })` uses its own names. A CRL that is

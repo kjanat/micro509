@@ -1425,6 +1425,22 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 }
 
 /**
+ * A key equal for two CRLs exactly when their signed content and signature
+ * are equal.
+ *
+ * @internal
+ */
+export function signedCrlKey(crl: ParsedCertificateRevocationList): string {
+	return [
+		crl.signatureAlgorithmOid,
+		toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
+		toHex(crl.signatureValue),
+		crl.signatureValueUnusedBits,
+		toHex(crl.tbsCertListDer),
+	].join(':');
+}
+
+/**
  * `crls` with each signed content and signature kept once.
  *
  * @internal
@@ -1434,13 +1450,7 @@ export function distinctSignedCrls(
 ): readonly ParsedCertificateRevocationList[] {
 	const seen = new Set<string>();
 	return crls.filter((crl) => {
-		const key = [
-			crl.signatureAlgorithmOid,
-			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
-			toHex(crl.signatureValue),
-			crl.signatureValueUnusedBits,
-			toHex(crl.tbsCertListDer),
-		].join(':');
+		const key = signedCrlKey(crl);
 		if (seen.has(key)) {
 			return false;
 		}
@@ -1451,6 +1461,9 @@ export function distinctSignedCrls(
 
 /** Delta CRLs micro509 tries per complete CRL, an implementation limit. */
 export const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
+
+/** Delta CRLs micro509 tries in one revocation check, an implementation limit. */
+export const DELTA_CRL_ATTEMPTS_PER_CALL = 32;
 
 /**
  * Delta CRL checks left to spend across one revocation check, an
@@ -1516,16 +1529,16 @@ function isNewerDeltaCrl(
 
 /**
  * Result of {@linkcode checkCertificateRevocationAgainstCrlsBy}. `unsettled`
- * means an applicable delta CRL could not settle the status, or the
- * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit or the shared
- * {@linkcode DeltaCrlBudget} ran out first. A delta CRL
+ * means an applicable delta CRL could not settle the status (`delta_unusable`),
+ * or the {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit or a shared
+ * {@linkcode DeltaCrlBudget} ran out first (`retry_limit`). A delta CRL
  * may then revoke the certificate, so the complete CRL's good is no evidence.
  *
  * @internal
  */
 export type CrlsCheckOutcome =
 	| { readonly kind: 'checked'; readonly result: CheckCertificateRevocationAgainstCrlResult }
-	| { readonly kind: 'unsettled' };
+	| { readonly kind: 'unsettled'; readonly reason: 'delta_unusable' | 'retry_limit' };
 
 /**
  * Checks `certificate` against `completeCrl`, which `authority` signs,
@@ -1595,7 +1608,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 	);
 	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
 	return search.unexamined && candidates.length > search.attempts
-		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at))
+		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at), 'retry_limit')
 		: { kind: 'checked', result: aloneResult };
 }
 
@@ -1641,7 +1654,10 @@ function recordDeltaCrlOutcome(
 			search.done = true;
 		}
 	} else if (outcome.kind === 'delta_unresolved') {
-		search.result = settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
+		search.result = settledOrUnsettled(
+			irremovableCrlRevocation(certificate, outcome.complete, at),
+			'delta_unusable',
+		);
 		search.done = true;
 	} else if (outcome.kind === 'delta_stale') {
 		search.unexamined = false;
@@ -1666,7 +1682,10 @@ function olderDeltaRevocation(
 	at: Date,
 ): CrlsCheckOutcome | undefined {
 	if (outcome.kind === 'delta_unresolved') {
-		return settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
+		return settledOrUnsettled(
+			irremovableCrlRevocation(certificate, outcome.complete, at),
+			'delta_unusable',
+		);
 	}
 	if (outcome.kind !== 'checked') return undefined;
 	if (!outcome.result.ok) {
@@ -1678,8 +1697,9 @@ function olderDeltaRevocation(
 
 function settledOrUnsettled(
 	result: CheckCertificateRevocationAgainstCrlResult | undefined,
+	reason: Extract<CrlsCheckOutcome, { readonly kind: 'unsettled' }>['reason'],
 ): CrlsCheckOutcome {
-	return result === undefined ? { kind: 'unsettled' } : { kind: 'checked', result };
+	return result === undefined ? { kind: 'unsettled', reason } : { kind: 'checked', result };
 }
 
 /**

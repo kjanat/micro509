@@ -516,6 +516,92 @@ describe('checkCertificateRevocation and checkChainRevocation with several delta
 	);
 });
 
+describe('checkCertificateRevocation with CRL evidence that does not decode', () => {
+	const garbage = new Uint8Array([0x30, 0x03, 0x02, 0x01, 0x01]);
+
+	it('still checks a complete CRL whose deltaCrl does not decode', async () => {
+		const s = await scenario();
+		const result = await checkCertificateRevocation({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			evidence: [
+				{ kind: 'crl', crl: (await s.base(true)).der, deltaCrl: garbage },
+				{ kind: 'ocsp', response: s.ocspGood },
+			],
+			at: s.at,
+		});
+		expect(result).toMatchObject({ ok: true, value: { status: 'revoked' } });
+	});
+
+	it('still pools the deltaCrl of an entry whose complete CRL does not decode', async () => {
+		const s = await scenario();
+		const single = await checkCertificateRevocation({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			evidence: [
+				{ kind: 'crl', crl: (await s.base(false)).der },
+				{ kind: 'crl', crl: garbage, deltaCrl: (await s.revokingDelta()).der },
+			],
+			at: s.at,
+		});
+		expect(single).toMatchObject({ ok: true, value: { status: 'revoked' } });
+	});
+
+	it('reports a CRL that does not decode as malformed', async () => {
+		const s = await scenario();
+		const result = await checkCertificateRevocation({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			evidence: [{ kind: 'crl', crl: garbage }],
+			at: s.at,
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			value: {
+				status: 'indeterminate',
+				details: { indeterminateEvidence: [{ kind: 'crl', code: 'malformed' }] },
+			},
+		});
+	});
+});
+
+describe('checkCertificateRevocation delta CRL attempt limits', () => {
+	it.each([
+		{ bases: 8, expected: { status: 'good' } },
+		{ bases: 9, expected: { status: 'indeterminate' } },
+	] as const)(
+		'spends at most 32 delta CRL checks per call, as chain revocation does ($bases base CRLs)',
+		async ({ bases, expected }) => {
+			const s = await scenario();
+			const deltas = await s.forgedDeltas(4, 1);
+			const completeCrls = await Promise.all(
+				Array.from({ length: bases }, async (_, index) => (await s.baseNumbered(index + 1)).der),
+			);
+			const result = await checkCertificateRevocation({
+				certificate: s.leafPem,
+				issuerCertificate: s.caPem,
+				evidence: completeCrls.map((crl, index) => {
+					const deltaCrl = deltas[index];
+					return deltaCrl === undefined
+						? { kind: 'crl' as const, crl }
+						: { kind: 'crl' as const, crl, deltaCrl };
+				}),
+				at: s.at,
+			});
+			expect(result).toMatchObject({
+				ok: true,
+				value:
+					expected.status === 'indeterminate'
+						? {
+								status: 'indeterminate',
+								details: { indeterminateEvidence: [{ code: 'delta_crl_retry_limit_exceeded' }] },
+							}
+						: expected,
+			});
+		},
+	);
+});
+
 describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget', () => {
 	it.each([
 		{ remaining: 4, expected: 'good' },
