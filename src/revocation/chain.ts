@@ -899,10 +899,10 @@ async function checkSignerAgainstCrlAuthorities(
 }
 
 /**
- * Evaluates one CRL against a signer. A CRL that does not parse, does not
- * apply, or is itself signed by a signer that is not known good yields no
- * evidence rather than a verdict. A CRL the signer itself signed vouches for
- * it, as an indirect CRL may cover its own issuer.
+ * Evaluates one CRL against a signer. A CRL that does not parse or does not
+ * apply yields no evidence. Its `good` needs a CRL signer known good, and its
+ * revocation one not known revoked. A CRL the signer itself signed vouches
+ * for it, as an indirect CRL may cover its own issuer.
  */
 async function checkSignerAgainstCrl(
 	signer: ParsedCertificate,
@@ -934,11 +934,12 @@ async function checkSignerAgainstCrl(
 			? { kind: 'unrecognized_reason' }
 			: SIGNER_CRL_NO_EVIDENCE;
 	}
-	if (result.value.status === 'revoked') {
-		return { kind: 'revoked' };
-	}
 	const selfSigned = issuer.kind === 'certificate' && sameCertificate(issuer.certificate, signer);
-	return selfSigned || (await validateCrlSigner(issuer, ctx)) === 'resolved-valid'
+	const issuerStatus = selfSigned ? 'resolved-valid' : await validateCrlSigner(issuer, ctx);
+	if (result.value.status === 'revoked') {
+		return issuerStatus === 'resolved-revoked' ? SIGNER_CRL_NO_EVIDENCE : { kind: 'revoked' };
+	}
+	return issuerStatus === 'resolved-valid'
 		? { kind: 'reasons', reasons: result.value.coveredReasons }
 		: SIGNER_CRL_NO_EVIDENCE;
 }

@@ -17,6 +17,7 @@ import {
 } from '#micro509';
 import { explicitContext, octetString, sequence, tlv, utcTime } from '#micro509/internal/asn1/der';
 import {
+	addRevokedEntryCertificateIssuers,
 	childAt,
 	constructedChildren,
 	expectRejectedWith,
@@ -1419,6 +1420,118 @@ describe('checkChainRevocation with an indirect CRL issuer that a chain CA certi
 				policy: { mode: 'hard-fail' },
 			});
 			expect(result.value.decision).toBe(decision);
+			expect(result.value.certificates[0]?.indeterminateReasons).toEqual(reasons);
+		},
+	);
+});
+
+describe('checkChainRevocation with a CRL signer listed by another indirect CRL issuer', () => {
+	it.each([
+		{ authority: 'good', reasons: ['no_applicable_ocsp', 'crl_signer_revoked'] },
+		{ authority: 'revoked', reasons: ['no_applicable_ocsp', 'crl_signer_indeterminate'] },
+	] as const)(
+		'reads the revocation by a $authority indirect CRL issuer',
+		async ({ authority, reasons }) => {
+			const at = new Date(Date.now() + 5_000);
+			const window = {
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+				nextUpdate: new Date(at.getTime() + HOUR_MS),
+			};
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Authority Root' },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+			});
+			const rootSubject = unwrap(parseCertificatePem(root.certificate.pem)).subject.derHex;
+			const point = (name: string) =>
+				({
+					type: 'fullName',
+					fullName: [{ type: 'uri', value: `http://example.test/${name}.crl` }],
+				}) as const;
+			const issueUnderRoot = async (
+				commonName: string,
+				extensions: Parameters<typeof createCertificate>[0]['extensions'],
+			) => {
+				const keys = await generateKeyPair();
+				const built = await createCertificate({
+					issuer: { commonName: 'Authority Root' },
+					subject: { commonName },
+					publicKey: keys.publicKey,
+					signerPrivateKey: root.keyPair.privateKey,
+					issuerCertificate: root.certificate.der,
+					...(extensions === undefined ? {} : { extensions }),
+				});
+				return { keys, built, parsed: unwrap(parseCertificatePem(built.pem)) };
+			};
+			const authorityT = await issueUnderRoot('Authority T', { keyUsage: ['cRLSign'] });
+			const signerS = await issueUnderRoot('Authority S', {
+				keyUsage: ['cRLSign'],
+				crlDistributionPoints: [
+					{
+						distributionPoint: point('signer'),
+						crlIssuer: [{ type: 'directoryName', derHex: authorityT.parsed.subject.derHex }],
+					},
+				],
+			});
+			const leaf = await issueUnderRoot('authority-leaf.example', {
+				crlDistributionPoints: [
+					{
+						distributionPoint: point('leaf'),
+						crlIssuer: [{ type: 'directoryName', derHex: signerS.parsed.subject.derHex }],
+					},
+				],
+			});
+			const leafCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Authority S' },
+				signerPrivateKey: signerS.keys.privateKey,
+				issuerCertificate: signerS.built.der,
+				issuingDistributionPoint: { distributionPoint: point('leaf'), indirectCrl: true },
+				...window,
+			});
+			const signerCrl = await addRevokedEntryCertificateIssuers(
+				(
+					await createCertificateRevocationList({
+						crlNumber: 1,
+						issuer: { commonName: 'Authority T' },
+						signerPrivateKey: authorityT.keys.privateKey,
+						issuerCertificate: authorityT.built.der,
+						issuingDistributionPoint: { distributionPoint: point('signer'), indirectCrl: true },
+						revokedCertificates: [
+							{
+								serialNumber: hexToBytes(signerS.parsed.serialNumberHex),
+								reasonCode: 'keyCompromise',
+							},
+						],
+						...window,
+					})
+				).der,
+				authorityT.keys.privateKey,
+				[{ entryIndex: 0, names: [{ type: 'directoryName', derHex: rootSubject }] }],
+			);
+			const rootCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Authority Root' },
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				...(authority === 'revoked'
+					? {
+							revokedCertificates: [
+								{
+									serialNumber: hexToBytes(authorityT.parsed.serialNumberHex),
+									reasonCode: 'keyCompromise',
+								},
+							],
+						}
+					: {}),
+				...window,
+			});
+			const result = await checkChainRevocation({
+				chain: [leaf.parsed, unwrap(parseCertificatePem(root.certificate.pem))],
+				crls: [leafCrl.der, signerCrl, rootCrl.der],
+				extraCertificates: [signerS.built.pem, authorityT.built.pem],
+				at,
+			});
+			expect(result.value.decision).toBe('deny');
 			expect(result.value.certificates[0]?.indeterminateReasons).toEqual(reasons);
 		},
 	);
