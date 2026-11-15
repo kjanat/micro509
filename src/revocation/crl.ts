@@ -1358,6 +1358,130 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 	};
 }
 
+/** Delta CRLs micro509 tries per complete CRL, an implementation limit. */
+export const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
+
+/**
+ * Every delta CRL that can update `baseCrl`, newest first, in the order to try
+ * authenticating them.
+ *
+ * @internal
+ */
+export function rankApplicableDeltaCrls(
+	baseCrl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+	at: Date,
+	clockSkewMs: number,
+	crlMaxAgeMs: number | undefined,
+): readonly ParsedCertificateRevocationList[] {
+	const baseCrlNumber = baseCrl.crlNumber;
+	if (baseCrlNumber === undefined) {
+		return [];
+	}
+	return deltaCrls
+		.filter(
+			(deltaCrl) =>
+				deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
+				deltaCrl.baseCrlNumber !== undefined &&
+				deltaCrl.baseCrlNumber <= baseCrlNumber &&
+				deltaCrl.crlNumber !== undefined &&
+				deltaCrl.crlNumber > baseCrlNumber &&
+				deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
+				isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs),
+		)
+		.sort((left, right) =>
+			isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0,
+		);
+}
+
+function isNewerDeltaCrl(
+	candidate: ParsedCertificateRevocationList,
+	current: ParsedCertificateRevocationList,
+): boolean {
+	const candidateTime = candidate.thisUpdate.getTime();
+	const currentTime = current.thisUpdate.getTime();
+	if (candidateTime !== currentTime) return candidateTime > currentTime;
+	return (candidate.crlNumber ?? 0n) > (current.crlNumber ?? 0n);
+}
+
+/**
+ * Checks `certificate` against `completeCrl`, which `authority` signs,
+ * updated by the newest delta CRL in `deltaCrls` that applies to it. Returns
+ * `undefined` when an applicable delta CRL cannot settle the status, or when
+ * the {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit runs out, unless the
+ * complete CRL holds a revocation no delta CRL could remove.
+ *
+ * @internal
+ */
+export async function checkCertificateRevocationAgainstCrlsBy(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+	authority: CrlAuthority,
+	options: CrlCheckOptions,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult | undefined> {
+	const authenticated = await authenticateCrl(completeCrl, authority, verification);
+	if (!authenticated.ok) {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			authenticated.code,
+			authenticated.message,
+		);
+	}
+	const at = options.at ?? new Date();
+	const candidates = rankApplicableDeltaCrls(
+		completeCrl,
+		deltaCrls,
+		at,
+		options.clockSkewMs ?? 0,
+		options.maxAgeMs,
+	);
+	for (const deltaCrl of candidates.slice(0, DELTA_CRL_ATTEMPTS_PER_BASE)) {
+		const outcome = await checkRevocationAgainstAuthenticatedCrl(
+			certificate,
+			authenticated.value,
+			authority,
+			{ ...options, deltaCrl },
+			verification,
+		);
+		if (outcome.kind === 'checked') return outcome.result;
+		if (outcome.kind === 'delta_unresolved') {
+			return irremovableCrlRevocation(certificate, outcome.complete, at);
+		}
+	}
+	const alone = await checkRevocationAgainstAuthenticatedCrl(
+		certificate,
+		authenticated.value,
+		authority,
+		options,
+		verification,
+	);
+	if (alone.kind !== 'checked') return undefined;
+	return candidates.length > DELTA_CRL_ATTEMPTS_PER_BASE
+		? irremovableCrlRevocation(certificate, alone.result, at)
+		: alone.result;
+}
+
+/**
+ * `result` when it revokes `certificate` in a way no delta CRL could undo at
+ * `at`. RFC 5280 §5.3.1 lets removeFromCRL clear only a certificateHold entry
+ * or a certificate that has expired.
+ *
+ * @internal
+ */
+export function irremovableCrlRevocation(
+	certificate: ParsedCertificate,
+	result: CheckCertificateRevocationAgainstCrlResult,
+	at: Date,
+): Extract<CheckCertificateRevocationAgainstCrlResult, { readonly ok: true }> | undefined {
+	return certificate.notAfter.getTime() >= at.getTime() &&
+		result.ok &&
+		result.value.status === 'revoked' &&
+		result.value.reasonCode !== 'certificateHold'
+		? result
+		: undefined;
+}
+
 /** RFC 5280 §6.3.3 (d): interim_reasons_mask from the matched DP and the CRL's IDP. */
 function interimReasonsMask(
 	distributionPoint: ParsedDistributionPoint | undefined,

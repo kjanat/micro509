@@ -94,7 +94,7 @@ import type {
 } from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
-	checkCertificateRevocationAgainstCrlBy,
+	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
@@ -474,7 +474,11 @@ export interface ValidateOcspResponseInput {
 	readonly trustedOcspResponders?: readonly OcspCertificateSource[];
 	/** Revocation policy for delegated responder certificates. Defaults to `'nocheck-or-evidence'`. */
 	readonly responderRevocationPolicy?: OcspResponderRevocationPolicy;
-	/** CRLs used as revocation evidence for delegated responder certificates. */
+	/**
+	 * CRLs used as revocation evidence for delegated responder certificates. A
+	 * delta CRL in the list updates the complete CRL it applies to (RFC 5280
+	 * §5.2.4).
+	 */
 	readonly responderRevocationCrls?: readonly CrlSource[];
 	/**
 	 * Maximum age of each `responderRevocationCrls` entry's `thisUpdate` at
@@ -1838,6 +1842,25 @@ function parseResponderCrlFromSource(source: CrlSource): ParsedCertificateRevoca
 	return parseCertificateRevocationListDerOrThrow(source);
 }
 
+/** The CRLs among `sources` that parse, split into complete and delta CRLs. */
+function partitionResponderCrls(sources: readonly CrlSource[]): {
+	readonly complete: readonly ParsedCertificateRevocationList[];
+	readonly delta: readonly ParsedCertificateRevocationList[];
+} {
+	const complete: ParsedCertificateRevocationList[] = [];
+	const delta: ParsedCertificateRevocationList[] = [];
+	for (const source of sources) {
+		let crl: ParsedCertificateRevocationList;
+		try {
+			crl = parseResponderCrlFromSource(source);
+		} catch {
+			continue; // Unusable evidence — try remaining CRLs
+		}
+		(crl.baseCrlNumber === undefined ? complete : delta).push(crl);
+	}
+	return { complete, delta };
+}
+
 function responderCrlCheck(input: OcspValidationOptions): CrlCheckOptions {
 	return {
 		at: input.at ?? new Date(),
@@ -1887,19 +1910,25 @@ async function checkDelegatedResponderRevocation(
 		return settled;
 	}
 	const crlCheck = responderCrlCheck(input);
+	const verification = {
+		verifiers: context.verifiers,
+		workingParameters: { parametersDer: context.issuerWorkingKey.parametersDer },
+	};
+	const crls = partitionResponderCrls(input.responderRevocationCrls ?? []);
 	const coveredReasons = new Set<string>();
 	let sawUnrecognizedReason = false;
-	for (const source of input.responderRevocationCrls ?? []) {
-		let crl: ParsedCertificateRevocationList;
-		try {
-			crl = parseResponderCrlFromSource(source);
-		} catch {
-			continue; // Unusable evidence — try remaining CRLs
+	for (const crl of crls.complete) {
+		const result = await checkCertificateRevocationAgainstCrlsBy(
+			signer,
+			crl,
+			crls.delta,
+			issuer,
+			crlCheck,
+			verification,
+		);
+		if (result === undefined) {
+			continue; // An applicable delta CRL left the status unsettled
 		}
-		const result = await checkCertificateRevocationAgainstCrlBy(signer, crl, issuer, crlCheck, {
-			verifiers: context.verifiers,
-			workingParameters: { parametersDer: context.issuerWorkingKey.parametersDer },
-		});
 		if (!result.ok) {
 			sawUnrecognizedReason ||= result.code === 'reason_code_unrecognized';
 			continue; // CRL does not apply to the responder certificate

@@ -179,8 +179,8 @@ and so does a CRL entry for the responder whose reason code
 `unrecognizedReasonCode: 'reject'` refuses. A responder with a critical
 cRLDistributionPoints extension still needs evidence under it. For chain revocation, set
 `policy.ocspResponderRevocation`. For `checkCertificateRevocation`, set
-`ocspResponderRevocation`; the complete CRLs in its `evidence` serve as
-responder evidence.
+`ocspResponderRevocation`; the CRLs in its `evidence`, delta CRLs included,
+serve as responder evidence.
 
 ## Set an age policy for CRLs without `nextUpdate`
 

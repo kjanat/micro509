@@ -13,6 +13,8 @@ import {
 	unwrap,
 	validateCertificateRevocationList,
 } from '#micro509';
+import { callerVerification } from '#micro509/internal/crypto/sig-verify';
+import { checkCertificateRevocationAgainstCrlsBy } from '#micro509/revocation/crl';
 import { addRevokedEntryCertificateIssuers, hexToBytes } from '#test/helpers';
 
 const CA_NAME = 'Delta Shadow CA';
@@ -167,6 +169,12 @@ async function scenario() {
 				ca.keyPair.privateKey,
 				[{ entryIndex: 0, names: [{ type: 'email', value: 'unsupported@example.test' }] }],
 			),
+		forgedBase: () =>
+			crl({
+				signerPrivateKey: attackerKeys.privateKey,
+				crlNumber: 5,
+				thisUpdate: baseThisUpdate,
+			}),
 		olderGoodDelta: () =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -218,6 +226,54 @@ async function leafStatus(
 		indeterminateReasons: status?.indeterminateReasons,
 	};
 }
+
+const HELPER_BASES = {
+	clean: (s: Scenario) => s.baseNumbered(5),
+	keyCompromise: (s: Scenario) => s.baseNumbered(5, 'keyCompromise'),
+	certificateHold: (s: Scenario) => s.baseNumbered(5, 'certificateHold'),
+	forged: (s: Scenario) => s.forgedBase(),
+};
+
+const HELPER_DELTAS = {
+	none: async () => [],
+	revoking: async (s: Scenario) => [(await s.revokingDelta()).der],
+	'forged and revoking': async (s: Scenario) => [s.forgedNewerDelta, (await s.revokingDelta()).der],
+	'four forged': (s: Scenario) => s.forgedDeltas(4),
+	'five forged': (s: Scenario) => s.forgedDeltas(5),
+	unresolvable: async (s: Scenario) => [(await s.unresolvableDelta()).der],
+} satisfies Record<string, (s: Scenario) => Promise<readonly Uint8Array[]>>;
+
+describe('checkCertificateRevocationAgainstCrlsBy', () => {
+	it.each([
+		{ base: 'clean', deltas: 'none', expected: 'good' },
+		{ base: 'clean', deltas: 'revoking', expected: 'revoked' },
+		{ base: 'clean', deltas: 'forged and revoking', expected: 'revoked' },
+		{ base: 'clean', deltas: 'four forged', expected: 'good' },
+		{ base: 'clean', deltas: 'five forged', expected: 'unsettled' },
+		{ base: 'keyCompromise', deltas: 'five forged', expected: 'revoked' },
+		{ base: 'certificateHold', deltas: 'five forged', expected: 'unsettled' },
+		{ base: 'clean', deltas: 'unresolvable', expected: 'unsettled' },
+		{ base: 'keyCompromise', deltas: 'unresolvable', expected: 'revoked' },
+		{ base: 'forged', deltas: 'revoking', expected: 'signature_invalid' },
+	] as const)(
+		'checks a $base base CRL with $deltas delta CRLs as $expected',
+		async ({ base, deltas, expected }) => {
+			const s = await scenario();
+			const parse = (der: Uint8Array) => unwrap(parseCertificateRevocationListDer(der));
+			const result = await checkCertificateRevocationAgainstCrlsBy(
+				unwrap(parseCertificatePem(s.leafPem)),
+				parse((await HELPER_BASES[base](s)).der),
+				(await HELPER_DELTAS[deltas](s)).map(parse),
+				{ kind: 'certificate', certificate: s.caPem },
+				{ at: s.at },
+				callerVerification(undefined),
+			);
+			const outcome =
+				result === undefined ? 'unsettled' : result.ok ? result.value.status : result.code;
+			expect(outcome).toBe(expected);
+		},
+	);
+});
 
 describe('checkChainRevocation with a delta CRL whose signature does not verify', () => {
 	it('fixes the premise: the forged delta is newer and fails authentication', async () => {

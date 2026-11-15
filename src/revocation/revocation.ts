@@ -121,8 +121,8 @@ export interface CheckCertificateRevocationInput {
 	 */
 	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
 	/**
-	 * Revocation policy for delegated OCSP responders. The complete CRLs in
-	 * `evidence` serve as their revocation evidence. See
+	 * Revocation policy for delegated OCSP responders. The CRLs in `evidence`,
+	 * delta CRLs included, serve as their revocation evidence. See
 	 * {@linkcode OcspResponderRevocationPolicy}. Defaults to
 	 * `'nocheck-or-evidence'`.
 	 */
@@ -584,7 +584,11 @@ function ocspEvidenceValidationInput(
 			? {}
 			: { responderRevocationPolicy: input.ocspResponderRevocation }),
 		responderRevocationCrls: (input.evidence ?? []).flatMap((entry) =>
-			entry.kind === 'crl' ? [entry.crl] : [],
+			entry.kind !== 'crl'
+				? []
+				: entry.deltaCrl === undefined
+					? [entry.crl]
+					: [entry.crl, entry.deltaCrl],
 		),
 		...(input.crlMaxAgeMs === undefined
 			? {}

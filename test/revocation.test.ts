@@ -916,6 +916,105 @@ describe('revocation boundary', () => {
 		},
 	);
 
+	it.each([
+		{ delta: false, status: 'good' },
+		{ delta: true, status: 'indeterminate' },
+	] as const)(
+		'applies a delta CRL that revokes the delegated responder (delta $delta)',
+		async ({ delta, status }) => {
+			const pointName = (name: string) => ({
+				type: 'fullName' as const,
+				fullName: [{ type: 'uri' as const, value: `http://example.test/${name}.crl` }],
+			});
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: 'Responder Delta CA' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const issue = async (commonName: string, extensions: CertificateExtensionsInput) => {
+				const keys = await generateKeyPair();
+				const built = await createCertificate({
+					issuer: { commonName: 'Responder Delta CA' },
+					subject: { commonName },
+					publicKey: keys.publicKey,
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerCertificate: ca.certificate.der,
+					extensions,
+				});
+				return { keys, built };
+			};
+			const leaf = await issue('responder-delta.example', {
+				crlDistributionPoints: [{ distributionPoint: pointName('leaf') }],
+			});
+			const responder = await issue('Responder Delta responder', {
+				extendedKeyUsage: ['ocspSigning'],
+				crlDistributionPoints: [{ distributionPoint: pointName('responder') }],
+			});
+			const responderSerial = unwrap(parseCertificatePem(responder.built.pem)).serialNumberHex;
+			const scope = { issuingDistributionPoint: { distributionPoint: pointName('responder') } };
+			const thisUpdate = new Date(Date.now() - 60_000);
+			const base = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Responder Delta CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerCertificate: ca.certificate.der,
+				thisUpdate,
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+				...scope,
+			});
+			const deltaCrl = await createCertificateRevocationList({
+				crlNumber: 2,
+				baseCrlNumber: 1,
+				issuer: { commonName: 'Responder Delta CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerCertificate: ca.certificate.der,
+				thisUpdate,
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+				revokedCertificates: [
+					{ serialNumber: hexToBytes(responderSerial), reasonCode: 'keyCompromise' },
+				],
+				...scope,
+			});
+			const response = await createOcspResponse({
+				signerPrivateKey: responder.keys.privateKey,
+				signerCertificate: responder.built.pem,
+				includedCertificates: [responder.built.pem],
+				responses: [
+					{
+						certificate: leaf.built.pem,
+						issuerCertificate: ca.certificate.pem,
+						certStatus: 'good',
+					},
+				],
+			});
+			const result = await checkCertificateRevocation({
+				certificate: leaf.built.pem,
+				issuerCertificate: ca.certificate.pem,
+				evidence: [
+					{ kind: 'crl', crl: base.der, ...(delta ? { deltaCrl: deltaCrl.der } : {}) },
+					{ kind: 'ocsp', response: response.der },
+				],
+			});
+			expect(result).toMatchObject(
+				status === 'good'
+					? { ok: true, value: { status, kind: 'ocsp' } }
+					: {
+							ok: true,
+							value: {
+								status,
+								details: {
+									indeterminateEvidence: expect.arrayContaining([
+										expect.objectContaining({ kind: 'ocsp', code: 'responder_revoked' }),
+									]),
+								},
+							},
+						},
+			);
+		},
+	);
+
 	it('returns unknown when OCSP response omits the target certificate status', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
 		const otherLeafKeys = await generateKeyPair();

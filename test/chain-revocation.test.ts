@@ -763,6 +763,110 @@ describe('checkChainRevocation', () => {
 		},
 	);
 
+	it.each([
+		{ delta: false, status: 'good', reasons: undefined },
+		{
+			delta: true,
+			status: 'indeterminate',
+			reasons: ['no_applicable_ocsp', 'crl_signer_revoked'],
+		},
+	] as const)(
+		'applies a delta CRL that revokes a delegated CRL signer (delta $delta)',
+		async ({ delta, status, reasons }) => {
+			const at = new Date(Date.now() + 5_000);
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Delta Signer Root' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 2 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const issueCa = async (commonName: string) => {
+				const keys = await generateKeyPair();
+				const certificate = await createCertificate({
+					issuer: { commonName: 'Delta Signer Root' },
+					subject: { commonName },
+					publicKey: keys.publicKey,
+					signerPrivateKey: root.keyPair.privateKey,
+					issuerCertificate: root.certificate.der,
+					extensions: {
+						basicConstraints: { ca: true, pathLength: 0 },
+						keyUsage: ['keyCertSign', 'cRLSign'],
+					},
+				});
+				return { keys, certificate };
+			};
+			const intermediate = await issueCa('Delta Signer Intermediate');
+			const signerCa = await issueCa('Delta Signer CRL CA');
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'Delta Signer CRL CA' },
+				subject: { commonName: 'Delta Signer Intermediate' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: signerCa.keys.privateKey,
+				issuerCertificate: signerCa.certificate.der,
+				extensions: { keyUsage: ['cRLSign'] },
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Delta Signer Intermediate' },
+				subject: { commonName: 'delta-signer-leaf' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: intermediate.keys.privateKey,
+				issuerCertificate: intermediate.certificate.der,
+				extensions: { keyUsage: ['digitalSignature'] },
+			});
+			const window = {
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+				nextUpdate: new Date(at.getTime() + HOUR_MS),
+			};
+			const leafCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Delta Signer Intermediate' },
+				signerPrivateKey: signerKeys.privateKey,
+				issuerCertificate: signer.der,
+				...window,
+			});
+			const signerCaCrl = (fields: { crlNumber: number; baseCrlNumber?: number }) =>
+				createCertificateRevocationList({
+					issuer: { commonName: 'Delta Signer CRL CA' },
+					signerPrivateKey: signerCa.keys.privateKey,
+					issuerCertificate: signerCa.certificate.der,
+					...window,
+					...fields,
+					...(fields.baseCrlNumber === undefined
+						? {}
+						: {
+								revokedCertificates: [
+									{
+										serialNumber: hexToBytes(
+											unwrap(parseCertificatePem(signer.pem)).serialNumberHex,
+										),
+										reasonCode: 'keyCompromise' as const,
+									},
+								],
+							}),
+				});
+			const signerBase = await signerCaCrl({ crlNumber: 1 });
+			const signerDelta = await signerCaCrl({ crlNumber: 2, baseCrlNumber: 1 });
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificatePem(intermediate.certificate.pem)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls: [leafCrl.der, signerBase.der, ...(delta ? [signerDelta.der] : [])],
+				extraCertificates: [signer.pem, signerCa.certificate.pem],
+				at,
+				policy: { mode: 'soft-fail' },
+			});
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.value.certificates[0]?.status).toBe(status);
+			expect(result.value.certificates[0]?.indeterminateReasons).toEqual(reasons);
+		},
+	);
+
 	it('tries a later authorized signer when an earlier same-key candidate is unusable', async () => {
 		const at = new Date(Date.now() + 5_000);
 		const root = await createSelfSignedCertificate({
