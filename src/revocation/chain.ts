@@ -49,14 +49,15 @@ import type {
 	OcspResponderRevocationPolicy,
 	ParsedOcspResponse,
 	ParsedOcspSingleResponse,
+	RevocationSkipReason,
 	ValidateOcspResponseFailure,
 	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
 } from '#micro509/revocation/ocsp';
 import {
-	carriesOcspNoCheck,
 	parseOcspResponseDerOrThrow,
 	parseOcspResponsePemOrThrow,
+	revocationSkipReasonOf,
 	validateOcspResponseBy,
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
@@ -371,7 +372,7 @@ export type CertificateRevocationStatus =
 			 * The extension that exempts the certificate: `'no_rev_avail'` for
 			 * noRevAvail (RFC 9608 §2) or `'ocsp_nocheck'` for id-pkix-ocsp-nocheck.
 			 */
-			readonly skipReason: 'no_rev_avail' | 'ocsp_nocheck';
+			readonly skipReason: RevocationSkipReason;
 			/** Never present on a `skipped` verdict. */
 			readonly source?: undefined;
 			/** Never present on a `skipped` verdict. */
@@ -746,6 +747,11 @@ async function validateCrlSigner(
 	// (Chain was already validated before revocation checking)
 	const isInChain = ctx.chain.some((c) => sameCertificate(c, signer));
 	if (isInChain) {
+		ctx.cache.set(key, 'resolved-valid');
+		return 'resolved-valid';
+	}
+
+	if (revocationSkipReason(signer) !== undefined) {
 		ctx.cache.set(key, 'resolved-valid');
 		return 'resolved-valid';
 	}
@@ -1967,13 +1973,9 @@ function issuerAt(
  * certificate carrying noRevAvail or id-pkix-ocsp-nocheck, read from its
  * signed DER.
  */
-function revocationSkipReason(
-	certificate: ParsedCertificate,
-): 'no_rev_avail' | 'ocsp_nocheck' | undefined {
+function revocationSkipReason(certificate: ParsedCertificate): RevocationSkipReason | undefined {
 	const signed = parseCertificateDer(certificate.der);
-	if (!signed.ok) return undefined;
-	if (signed.value.noRevAvail === true) return 'no_rev_avail';
-	return carriesOcspNoCheck(signed.value) ? 'ocsp_nocheck' : undefined;
+	return signed.ok ? revocationSkipReasonOf(signed.value) : undefined;
 }
 
 // Function

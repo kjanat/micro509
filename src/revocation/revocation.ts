@@ -27,6 +27,7 @@ import type {
 	OcspRequestSource,
 	OcspResponderRevocationPolicy,
 	ParsedOcspResponse,
+	RevocationSkipReason,
 	ValidateOcspResponseInput,
 } from '#micro509/revocation/ocsp';
 import { validateOcspResponse } from '#micro509/revocation/ocsp';
@@ -38,7 +39,7 @@ export type * from '#micro509/revocation/crl';
 export type * from '#micro509/revocation/ocsp';
 
 /** Unified revocation outcome across CRL and OCSP evidence. */
-export type RevocationStatus = 'good' | 'revoked' | 'indeterminate';
+export type RevocationStatus = 'good' | 'revoked' | 'indeterminate' | 'skipped';
 
 /** Which revocation mechanism produced the evidence. */
 export type RevocationEvidenceKind = 'crl' | 'ocsp';
@@ -236,11 +237,26 @@ export interface RevocationCheckRevokedValue {
 	readonly revocationReasonCode?: bigint;
 }
 
-/** Discriminated union of `good`, `revoked`, and `indeterminate` revocation outcomes. */
+/**
+ * The certificate carries noRevAvail, so no evidence was consulted (RFC 9608
+ * §4). A CRL never lists such a certificate (RFC 9608 §2), so its absence from
+ * one shows nothing.
+ */
+export interface RevocationCheckSkippedValue {
+	/** Status is skipped. */
+	readonly status: Extract<RevocationStatus, 'skipped'>;
+	/** The extension that exempts the certificate. */
+	readonly skipReason: Extract<RevocationSkipReason, 'no_rev_avail'>;
+	/** Human-readable diagnostic message. */
+	readonly message: string;
+}
+
+/** Discriminated union of `good`, `revoked`, `indeterminate`, and `skipped` revocation outcomes. */
 export type CheckCertificateRevocationValue =
 	| RevocationCheckGoodValue
 	| RevocationCheckRevokedValue
-	| RevocationCheckIndeterminateValue;
+	| RevocationCheckIndeterminateValue
+	| RevocationCheckSkippedValue;
 
 /**
  * Result of {@linkcode checkCertificateRevocation}. Always succeeds (`ok: true`) —
@@ -332,6 +348,9 @@ export function resolveOcspResponderCandidates(
  * Evaluates all provided CRL and OCSP evidence to determine the certificate's
  * revocation status. Returns the first `revoked` if any, else the first `good`,
  * else `indeterminate` with diagnostic details about each indeterminate evidence.
+ * A certificate carrying noRevAvail is `skipped` without consulting evidence
+ * (RFC 9608 §4). One carrying id-pkix-ocsp-nocheck is still checked against
+ * the evidence, which may list it as revoked.
  *
  * @example
  * ```ts
@@ -354,6 +373,13 @@ export async function checkCertificateRevocation(
 	resolveSignatureVerifiers(input.signatureVerifiers);
 	const evidence = input.evidence ?? [];
 	const checkedSources = evidence.map((entry) => entry.kind);
+	if (carriesNoRevAvail(input.certificate)) {
+		return revocationSuccess({
+			status: 'skipped',
+			skipReason: 'no_rev_avail',
+			message: 'Certificate carries noRevAvail, so no revocation evidence applies',
+		});
+	}
 	if (evidence.length === 0) {
 		return revocationSuccess({
 			status: 'indeterminate',
@@ -657,6 +683,16 @@ function normalizeCertificate(certificate: RevocationCertificateSource): ParsedC
 	return hasParsedCertificateShape(certificate)
 		? parseCertificateDerOrThrow(new Uint8Array(certificate.der))
 		: parseCertificateFromSource(certificate);
+}
+
+/** Whether `source` parses and carries noRevAvail in its signed DER. */
+function carriesNoRevAvail(source: RevocationCertificateSource): boolean {
+	try {
+		return normalizeCertificate(source).noRevAvail === true;
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return false;
+	}
 }
 
 function hasParsedCertificateShape(value: RevocationCertificateSource): value is ParsedCertificate {

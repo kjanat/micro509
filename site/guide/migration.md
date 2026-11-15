@@ -216,6 +216,11 @@ Add this case to exhaustive switches over `result.value.certificates` from
 validated `good` verdict. A skipped entry has no `source` or `revocationInfo`,
 and no revocation evidence was consulted for that certificate.
 
+`checkCertificateRevocation` returns `status: 'skipped'` with `skipReason:
+'no_rev_avail'` for a certificate carrying `noRevAvail`. A CRL never lists such
+a certificate (RFC 9608 §2), so a CRL without it shows nothing. A certificate
+carrying `id-pkix-ocsp-nocheck` is still checked against the evidence.
+
 ## Update exhaustive type handling
 
 `SubjectAltName` has additional typed variants, including `upn`,

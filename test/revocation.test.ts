@@ -18,6 +18,7 @@ import {
 	FAR_FUTURE_NEXT_UPDATE,
 	hexToBytes,
 	issueChain,
+	OCSP_NOCHECK_EXTENSION,
 	withoutCrlNextUpdate,
 	withRevokedEntryReasonCode,
 } from '#test/helpers';
@@ -486,6 +487,55 @@ describe('revocation boundary', () => {
 			},
 		});
 	});
+
+	it.each([
+		{ exemption: 'noRevAvail', listed: false, evidence: true, status: 'skipped' },
+		{ exemption: 'noRevAvail', listed: false, evidence: false, status: 'skipped' },
+		{ exemption: 'nocheck', listed: true, evidence: true, status: 'revoked' },
+		{ exemption: 'nocheck', listed: false, evidence: true, status: 'good' },
+	] as const)(
+		'checks a $exemption certificate (on the CRL $listed, evidence $evidence) as $status',
+		async ({ exemption, listed, evidence, status }) => {
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: 'Exemption CA' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const keys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Exemption CA' },
+				subject: { commonName: 'exemption.example' },
+				publicKey: keys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerCertificate: ca.certificate.der,
+				extensions:
+					exemption === 'noRevAvail'
+						? { noRevAvail: true }
+						: { customExtensions: [OCSP_NOCHECK_EXTENSION] },
+			});
+			const serialNumber = hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex);
+			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Exemption CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerCertificate: ca.certificate.der,
+				...(listed ? { revokedCertificates: [{ serialNumber }] } : {}),
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+			});
+			const result = await checkCertificateRevocation({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				...(evidence ? { evidence: [{ kind: 'crl', crl: crl.der }] } : {}),
+			});
+			expect(result).toMatchObject({
+				ok: true,
+				value:
+					status === 'skipped' ? { status, skipReason: 'no_rev_avail' } : { status, kind: 'crl' },
+			});
+		},
+	);
 
 	it('returns good when OCSP evidence is conclusive and CRL evidence is non-applicable', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();

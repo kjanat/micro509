@@ -684,6 +684,85 @@ describe('checkChainRevocation', () => {
 		expect(full.value.certificates[0]?.status).toBe('good');
 	});
 
+	it.each([
+		{ exemption: 'none', status: 'indeterminate' },
+		{ exemption: 'noRevAvail', status: 'good' },
+		{ exemption: 'nocheck', status: 'good' },
+	] as const)(
+		'exempts a delegated CRL signer carrying $exemption from its own revocation check (RFC 9608 §4)',
+		async ({ exemption, status }) => {
+			const at = new Date(Date.now() + 5_000);
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Exempt Signer Root' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 2 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const issueCa = async (commonName: string) => {
+				const keys = await generateKeyPair();
+				const certificate = await createCertificate({
+					issuer: { commonName: 'Exempt Signer Root' },
+					subject: { commonName },
+					publicKey: keys.publicKey,
+					signerPrivateKey: root.keyPair.privateKey,
+					issuerCertificate: root.certificate.der,
+					extensions: {
+						basicConstraints: { ca: true, pathLength: 0 },
+						keyUsage: ['keyCertSign', 'cRLSign'],
+					},
+				});
+				return { keys, certificate };
+			};
+			const intermediate = await issueCa('Exempt Signer Intermediate');
+			const signerCa = await issueCa('Exempt Signer CRL CA');
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'Exempt Signer CRL CA' },
+				subject: { commonName: 'Exempt Signer Intermediate' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: signerCa.keys.privateKey,
+				issuerCertificate: signerCa.certificate.der,
+				extensions: {
+					keyUsage: ['cRLSign'],
+					...(exemption === 'noRevAvail' ? { noRevAvail: true } : {}),
+					...(exemption === 'nocheck' ? { customExtensions: [OCSP_NOCHECK_EXTENSION] } : {}),
+				},
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Exempt Signer Intermediate' },
+				subject: { commonName: 'exempt-signer-leaf' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: intermediate.keys.privateKey,
+				issuerCertificate: intermediate.certificate.der,
+				extensions: { keyUsage: ['digitalSignature'] },
+			});
+			const leafCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Exempt Signer Intermediate' },
+				signerPrivateKey: signerKeys.privateKey,
+				issuerCertificate: signer.der,
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+				nextUpdate: new Date(at.getTime() + HOUR_MS),
+			});
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificatePem(intermediate.certificate.pem)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls: [leafCrl.der],
+				extraCertificates: [signer.pem, signerCa.certificate.pem],
+				at,
+				policy: { mode: 'soft-fail' },
+			});
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.value.certificates[0]?.status).toBe(status);
+		},
+	);
+
 	it('tries a later authorized signer when an earlier same-key candidate is unusable', async () => {
 		const at = new Date(Date.now() + 5_000);
 		const root = await createSelfSignedCertificate({

@@ -367,6 +367,7 @@ CRL or OCSP evidence. Use `unwrap(result).status` to decide what to do:
 | `good`          | Applicable evidence reports the certificate as not revoked.                                         |
 | `revoked`       | Evidence identifies the certificate as revoked. Inspect the revocation time and reason.             |
 | `indeterminate` | The supplied evidence cannot establish a status. Inspect the reason before deciding how to proceed. |
+| `skipped`       | The certificate carries `noRevAvail`, so no evidence was consulted (RFC 9608 §4).                   |
 
 This API represents unusable evidence as an `indeterminate` status inside an
 `ok` result. An `ok` result alone does not mean the certificate is good. Chain verification applies your revocation policy to that

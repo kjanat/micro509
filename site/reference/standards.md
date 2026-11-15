@@ -63,8 +63,10 @@ outline: [2, 3]
   `verifyCertificateChain({ revocation })` consume caller-supplied OCSP
   responses alongside CRLs
 - Chain-level revocation reports a certificate carrying `noRevAvail` or
-  `id-pkix-ocsp-nocheck` as `skipped` without consulting evidence ([RFC 9608
-  §4][rfc9608-section-4])
+  `id-pkix-ocsp-nocheck` as `skipped` without consulting evidence, and exempts
+  a delegated CRL signer carrying either from its own revocation check ([RFC 9608
+  §4][rfc9608-section-4]). `checkCertificateRevocation` reports a certificate
+  carrying `noRevAvail` as `skipped`
 
 ### CRL processing
 
