@@ -154,7 +154,9 @@ fails with `stale_crl`, and the chain reports it as `crl_expired`.
 | `responderRevocationCrlMaxAgeMs` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
 
 The chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
-delegated OCSP responders. `clockSkewMs`, on the same input or on the chain
+delegated OCSP responders. In `checkCertificateRevocation`, the complete CRLs
+in `evidence` also serve as revocation evidence for delegated OCSP responders,
+and `crlMaxAgeMs` and `unrecognizedReasonCode` apply to them. `clockSkewMs`, on the same input or on the chain
 `policy`, widens the bound by the same amount and also applies to the
 `thisUpdate` and `nextUpdate` checks.
 

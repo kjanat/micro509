@@ -25,6 +25,7 @@ import {
 import type {
 	OcspCertificateSource,
 	OcspRequestSource,
+	OcspResponderRevocationPolicy,
 	ParsedOcspResponse,
 	ValidateOcspResponseInput,
 } from '#micro509/revocation/ocsp';
@@ -118,6 +119,13 @@ export interface CheckCertificateRevocationInput {
 	 * {@linkcode ValidateOcspResponseInput.profile}. Defaults to `'rfc6960'`.
 	 */
 	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
+	/**
+	 * Revocation policy for delegated OCSP responders. The complete CRLs in
+	 * `evidence` serve as their revocation evidence. See
+	 * {@linkcode OcspResponderRevocationPolicy}. Defaults to
+	 * `'nocheck-or-evidence'`.
+	 */
+	readonly ocspResponderRevocation?: OcspResponderRevocationPolicy;
 	/**
 	 * Treatment of CRL or OCSP evidence whose CRLReason is unrecognized. See
 	 * {@linkcode UnrecognizedReasonCodePolicy}. `'reject'` turns that evidence
@@ -531,13 +539,12 @@ async function checkCertificateRevocationWithCrl(
 	};
 }
 
-/** Evaluates a single OCSP evidence entry via {@linkcode validateOcspResponse}. */
-async function checkCertificateRevocationWithOcsp(
+/** The {@linkcode validateOcspResponse} input for one OCSP evidence entry. */
+function ocspEvidenceValidationInput(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationOcspEvidenceInput,
-	certificate: ParsedCertificate,
-): Promise<RevocationEvidenceCheck> {
-	const response = await validateOcspResponse({
+): ValidateOcspResponseInput {
+	return {
 		response: evidence.response,
 		issuerCertificate: input.issuerCertificate,
 		...(evidence.request === undefined ? {} : { request: evidence.request }),
@@ -547,10 +554,31 @@ async function checkCertificateRevocationWithOcsp(
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 		...(input.ocspProfile === undefined ? {} : { profile: input.ocspProfile }),
+		...(input.ocspResponderRevocation === undefined
+			? {}
+			: { responderRevocationPolicy: input.ocspResponderRevocation }),
+		responderRevocationCrls: (input.evidence ?? []).flatMap((entry) =>
+			entry.kind === 'crl' ? [entry.crl] : [],
+		),
+		...(input.crlMaxAgeMs === undefined
+			? {}
+			: { responderRevocationCrlMaxAgeMs: input.crlMaxAgeMs }),
+		...(input.unrecognizedReasonCode === undefined
+			? {}
+			: { responderRevocationUnrecognizedReasonCode: input.unrecognizedReasonCode }),
 		...(input.signatureVerifiers === undefined
 			? {}
 			: { signatureVerifiers: input.signatureVerifiers }),
-	});
+	};
+}
+
+/** Evaluates a single OCSP evidence entry via {@linkcode validateOcspResponse}. */
+async function checkCertificateRevocationWithOcsp(
+	input: CheckCertificateRevocationInput,
+	evidence: RevocationOcspEvidenceInput,
+	certificate: ParsedCertificate,
+): Promise<RevocationEvidenceCheck> {
+	const response = await validateOcspResponse(ocspEvidenceValidationInput(input, evidence));
 	if (!response.ok) {
 		return {
 			status: 'indeterminate',

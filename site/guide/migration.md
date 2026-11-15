@@ -174,7 +174,9 @@ certificates with `id-pkix-ocsp-nocheck`.
 `'honor-nocheck'` keeps the tolerant behaviour: only a revoked verdict
 rejects. A responder with a critical cRLDistributionPoints extension still
 needs evidence under it. For chain revocation, set
-`policy.ocspResponderRevocation`.
+`policy.ocspResponderRevocation`. For `checkCertificateRevocation`, set
+`ocspResponderRevocation`; the complete CRLs in its `evidence` serve as
+responder evidence.
 
 ## Set an age policy for CRLs without `nextUpdate`
 

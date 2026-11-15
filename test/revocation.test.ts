@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { RevocationEvidenceInput } from '#micro509';
+import type { CertificateExtensionsInput, RevocationEvidenceInput } from '#micro509';
 import {
 	checkCertificateRevocation,
 	createCertificate,
@@ -18,8 +18,11 @@ import {
 	FAR_FUTURE_NEXT_UPDATE,
 	hexToBytes,
 	issueChain,
+	withoutCrlNextUpdate,
 	withRevokedEntryReasonCode,
 } from '#test/helpers';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('revocation boundary', () => {
 	it('returns unknown when no revocation evidence is provided', async () => {
@@ -720,6 +723,148 @@ describe('revocation boundary', () => {
 			},
 		});
 	});
+
+	it.each([
+		{ crl: 'clean', label: 'defaults', options: {}, status: 'revoked', ocspCode: undefined },
+		{
+			crl: 'none',
+			label: 'defaults',
+			options: {},
+			status: 'indeterminate',
+			ocspCode: 'responder_revocation_unknown',
+		},
+		{
+			crl: 'none',
+			label: "ocspResponderRevocation 'skip'",
+			options: { ocspResponderRevocation: 'skip' },
+			status: 'revoked',
+			ocspCode: undefined,
+		},
+		{
+			crl: 'open',
+			label: 'defaults',
+			options: {},
+			status: 'indeterminate',
+			ocspCode: 'responder_revocation_unknown',
+		},
+		{
+			crl: 'open',
+			label: 'crlMaxAgeMs',
+			options: { crlMaxAgeMs: DAY_MS },
+			status: 'revoked',
+			ocspCode: undefined,
+		},
+		{
+			crl: 'revokes responder',
+			label: 'defaults',
+			options: {},
+			status: 'indeterminate',
+			ocspCode: 'responder_revoked',
+		},
+		{
+			crl: 'revokes responder',
+			label: "unrecognizedReasonCode 'reject'",
+			options: { unrecognizedReasonCode: 'reject' },
+			status: 'indeterminate',
+			ocspCode: 'responder_revocation_unknown',
+		},
+	] as const)(
+		'checks a delegated responder against $crl CRL evidence under $label',
+		async ({ crl, options, status, ocspCode }) => {
+			const scoped = crl === 'revokes responder';
+			const pointName = (name: string) => ({
+				type: 'fullName' as const,
+				fullName: [{ type: 'uri' as const, value: `http://example.test/${name}.crl` }],
+			});
+			const distributionPoint = (name: string) => ({
+				crlDistributionPoints: [{ distributionPoint: pointName(name) }],
+			});
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: 'Responder Evidence CA' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const issue = async (commonName: string, extensions: CertificateExtensionsInput) => {
+				const keys = await generateKeyPair();
+				const built = await createCertificate({
+					issuer: { commonName: 'Responder Evidence CA' },
+					subject: { commonName },
+					publicKey: keys.publicKey,
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerCertificate: ca.certificate.der,
+					extensions,
+				});
+				return { keys, built };
+			};
+			const leaf = await issue(
+				'responder-evidence.example',
+				scoped ? distributionPoint('leaf') : {},
+			);
+			const responder = await issue('Responder Evidence responder', {
+				extendedKeyUsage: ['ocspSigning'],
+				...(scoped ? distributionPoint('responder') : {}),
+			});
+			const responderSerial = unwrap(parseCertificatePem(responder.built.pem)).serialNumberHex;
+			const issued = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Responder Evidence CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerCertificate: ca.certificate.der,
+				...(scoped
+					? {
+							issuingDistributionPoint: { distributionPoint: pointName('responder') },
+							revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
+						}
+					: {}),
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+			});
+			const crlDer =
+				crl === 'open'
+					? await withoutCrlNextUpdate(issued.der, ca.keyPair.privateKey)
+					: scoped
+						? await withRevokedEntryReasonCode(issued.der, ca.keyPair.privateKey, 7)
+						: issued.der;
+			const response = await createOcspResponse({
+				signerPrivateKey: responder.keys.privateKey,
+				signerCertificate: responder.built.pem,
+				includedCertificates: [responder.built.pem],
+				responses: [
+					{
+						certificate: leaf.built.pem,
+						issuerCertificate: ca.certificate.pem,
+						certStatus: 'revoked',
+						revokedAt: new Date('2024-02-01T00:00:00Z'),
+					},
+				],
+			});
+			const result = await checkCertificateRevocation({
+				certificate: leaf.built.pem,
+				issuerCertificate: ca.certificate.pem,
+				evidence: [
+					...(crl === 'none' ? [] : [{ kind: 'crl' as const, crl: crlDer }]),
+					{ kind: 'ocsp', response: response.der },
+				],
+				...options,
+			});
+			expect(result).toMatchObject(
+				ocspCode === undefined
+					? { ok: true, value: { status, kind: 'ocsp' } }
+					: {
+							ok: true,
+							value: {
+								status,
+								details: {
+									indeterminateEvidence: expect.arrayContaining([
+										expect.objectContaining({ kind: 'ocsp', code: ocspCode }),
+									]),
+								},
+							},
+						},
+			);
+		},
+	);
 
 	it('returns unknown when OCSP response omits the target certificate status', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
