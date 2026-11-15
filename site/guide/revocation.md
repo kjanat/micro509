@@ -156,9 +156,10 @@ does in a CRL past its `nextUpdate`.
 | `crlMaxAgeMs`                    | `policy` of `checkChainRevocation` and `verifyCertificateChain({ revocation })`   |
 | `responderRevocationCrlMaxAgeMs` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
 
-A delegated CRL signer outside the chain needs CRLs from its own issuer that
-cover every reason before its CRLs can report a certificate `good`, unless it
-carries `noRevAvail` or `id-pkix-ocsp-nocheck`. A CRL the signer signed covers
+A delegated CRL signer outside the chain needs CRLs from its issuer, or from an
+authorized indirect CRL issuer, that cover every reason before its CRLs can
+report a certificate `good`, unless it carries `noRevAvail` or
+`id-pkix-ocsp-nocheck`. Every CA on its path outside the chain needs the same. A CRL the signer signed covers
 the signer itself only when its cRLDistributionPoints names it as cRLIssuer;
 `policy.crlSignerSelfEvidence: 'any'` accepts any such CRL. The
 chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and

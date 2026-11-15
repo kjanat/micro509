@@ -1565,6 +1565,123 @@ describe('checkChainRevocation with a CRL signer that shares its CA name and sig
 	);
 });
 
+describe('checkChainRevocation with a CA above a CRL signer outside the chain', () => {
+	it.each([
+		{ caCrl: 'clean', decision: 'allow', reasons: undefined },
+		{
+			caCrl: 'revoking',
+			decision: 'deny',
+			reasons: ['no_applicable_ocsp', 'crl_signer_indeterminate'],
+		},
+		{
+			caCrl: 'none',
+			decision: 'deny',
+			reasons: ['no_applicable_ocsp', 'crl_signer_indeterminate'],
+		},
+	] as const)(
+		'checks that CA with the signer (root CRL $caCrl)',
+		async ({ caCrl, decision, reasons }) => {
+			const at = new Date(Date.now() + 5_000);
+			const window = {
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+				nextUpdate: new Date(at.getTime() + HOUR_MS),
+			};
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Signer Path Root' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 1 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const caKeys = await generateKeyPair();
+			const ca = await createCertificate({
+				issuer: { commonName: 'Signer Path Root' },
+				subject: { commonName: 'Signer Path CA' },
+				publicKey: caKeys.publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const point = {
+				type: 'fullName',
+				fullName: [{ type: 'uri', value: 'http://example.test/signer-path.crl' }],
+			} as const;
+			const signerName = { commonName: 'Signer Path CRL Issuer' };
+			const signerKeys = await generateKeyPair();
+			const signerSubject = unwrap(
+				parseCertificatePem(
+					(await createSelfSignedCertificate({ subject: signerName })).certificate.pem,
+				),
+			).subject.derHex;
+			const delegation = [
+				{
+					distributionPoint: point,
+					crlIssuer: [{ type: 'directoryName' as const, derHex: signerSubject }],
+				},
+			];
+			const signer = await createCertificate({
+				issuer: { commonName: 'Signer Path CA' },
+				subject: signerName,
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: caKeys.privateKey,
+				issuerCertificate: ca.der,
+				extensions: { keyUsage: ['cRLSign'], crlDistributionPoints: delegation },
+			});
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Signer Path Root' },
+				subject: { commonName: 'signer-path.example' },
+				publicKey: (await generateKeyPair()).publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				extensions: { crlDistributionPoints: delegation },
+			});
+			const signerCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: signerName,
+				signerPrivateKey: signerKeys.privateKey,
+				issuerCertificate: signer.der,
+				issuingDistributionPoint: { distributionPoint: point, indirectCrl: true },
+				...window,
+			});
+			const crls = [signerCrl.der];
+			if (caCrl !== 'none') {
+				const rootCrl = await createCertificateRevocationList({
+					crlNumber: 1,
+					issuer: { commonName: 'Signer Path Root' },
+					signerPrivateKey: root.keyPair.privateKey,
+					issuerCertificate: root.certificate.der,
+					...(caCrl === 'revoking'
+						? {
+								revokedCertificates: [
+									{
+										serialNumber: hexToBytes(unwrap(parseCertificatePem(ca.pem)).serialNumberHex),
+										reasonCode: 'cACompromise' as const,
+									},
+								],
+							}
+						: {}),
+					...window,
+				});
+				crls.push(rootCrl.der);
+			}
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls,
+				extraCertificates: [signer.pem, ca.pem],
+				at,
+			});
+			expect(result.value.decision).toBe(decision);
+			expect(result.value.certificates[0]?.indeterminateReasons).toEqual(reasons);
+		},
+	);
+});
+
 describe('checkChainRevocation with a CRL signer listed by another indirect CRL issuer', () => {
 	it.each([
 		{ authority: 'good', reasons: ['no_applicable_ocsp', 'crl_signer_revoked'] },

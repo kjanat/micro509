@@ -814,10 +814,22 @@ async function validateCrlSigner(
 		return 'resolved-indeterminate';
 	}
 
-	// Check signer's revocation status (recursive)
 	const signerRevocation = await checkSignerRevocation(signer, signerIssuer, ctx);
-	ctx.cache.set(key, signerRevocation);
-	return signerRevocation;
+	const status =
+		signerRevocation === 'resolved-valid'
+			? statusBelow(await validateCrlSigner(signerIssuer, ctx))
+			: signerRevocation;
+	ctx.cache.set(key, status);
+	return status;
+}
+
+/**
+ * A good signer's status once its issuer's is known: RFC 5280 §6.3.3 (f)
+ * validates the whole path of a CRL issuer, so an issuer that is not known
+ * good leaves the signer indeterminate.
+ */
+function statusBelow(issuerStatus: SignerValidationState): SignerValidationState {
+	return issuerStatus === 'resolved-valid' ? 'resolved-valid' : 'resolved-indeterminate';
 }
 
 /**

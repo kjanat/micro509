@@ -190,8 +190,10 @@ supply a CRL from each such certificate's issuer.
 ## Supply revocation evidence for delegated CRL signers
 
 A delegated CRL signer outside the chain without `noRevAvail` or
-`id-pkix-ocsp-nocheck` now needs CRLs from its own issuer that cover every
-reason, also when that issuer is a chain certificate or the trust anchor. Until they do, the chain reports `crl_signer_indeterminate` for
+`id-pkix-ocsp-nocheck` now needs CRLs that cover every reason, from its issuer
+or from an authorized indirect CRL issuer, also when that issuer is a chain
+certificate or the trust anchor. Every CA on the signer's path outside the
+chain needs the same. Until they do, the chain reports `crl_signer_indeterminate` for
 the certificates its CRLs cover, and only a revocation in those CRLs counts.
 Add the issuer's CRL to `crls`, or issue the signer certificate with
 `noRevAvail` or `id-pkix-ocsp-nocheck`.

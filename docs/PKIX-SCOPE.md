@@ -462,9 +462,11 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `id-ad-ocsp` authorityInfoAccess entry ([RFC 9608 §3][rfc9608-section-3], [§4][rfc9608-section-4]).
 - [x] Require revocation evidence for a delegated CRL signer outside the
       chain that carries neither `noRevAvail` nor `id-pkix-ocsp-nocheck`:
-      CRLs from its own issuer must cover every reason, also when that
-      issuer is a chain certificate or the trust anchor ([RFC 5280 §6.3.3][rfc5280-section-6.3.3]
-      step (f) validates the CRL issuer's path, revocation included). A
+      CRLs from its issuer, or from an authorized indirect CRL issuer, must
+      cover every reason, also when that issuer is a chain certificate or the
+      trust anchor. Every CA on the signer's validated path outside the chain
+      needs the same evidence ([RFC 5280 §6.3.3][rfc5280-section-6.3.3] step (f) validates the CRL
+      issuer's path, revocation included). A
       revocation in a CRL from a signer whose own status stays indeterminate
       still counts. Its path also honours the chain's `distrustedSpkiSha256`.
       A CRL the signer signed counts as evidence of its own status only as
