@@ -431,9 +431,10 @@ export type VerifyOcspResponseSignatureResult =
  *   CRL evidence must show it is not revoked, as RFC 9608 §4 runs the RFC 5280
  *   §6.1.3 (a)(3) check.
  * - `'honor-nocheck'`: as `'nocheck-or-evidence'`, but missing or unusable
- *   evidence is tolerated and only a revoked verdict rejects. A responder with
- *   a critical cRLDistributionPoints extension still needs evidence (X.509
- *   (2019) §9.6.2.1).
+ *   evidence is tolerated. A revoked verdict rejects, and so does an entry
+ *   whose reason code `responderRevocationUnrecognizedReasonCode: 'reject'`
+ *   refuses. A responder with a critical cRLDistributionPoints extension
+ *   still needs evidence (X.509 (2019) §9.6.2.1).
  * - `'require-evidence'`: `id-pkix-ocsp-nocheck` is ignored and CRL evidence
  *   must show the responder is not revoked (RFC 5280 §6.1 lets an application
  *   further limit the valid paths). A responder carrying noRevAvail is

@@ -174,9 +174,10 @@ certificates with `id-pkix-ocsp-nocheck`.
 `'require-evidence'` rejects a responder carrying `noRevAvail`, since no CRL
 can list it.
 
-`'honor-nocheck'` keeps the tolerant behaviour: only a revoked verdict
-rejects. A responder with a critical cRLDistributionPoints extension still
-needs evidence under it. For chain revocation, set
+`'honor-nocheck'` keeps the tolerant behaviour: a revoked verdict rejects,
+and so does a CRL entry for the responder whose reason code
+`unrecognizedReasonCode: 'reject'` refuses. A responder with a critical
+cRLDistributionPoints extension still needs evidence under it. For chain revocation, set
 `policy.ocspResponderRevocation`. For `checkCertificateRevocation`, set
 `ocspResponderRevocation`; the complete CRLs in its `evidence` serve as
 responder evidence.
