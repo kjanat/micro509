@@ -655,33 +655,59 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 	});
 
 	it.each([
-		{ label: 'the default', policy: undefined, noCheck: false, critical: false, accepted: false },
-		{ label: 'the default', policy: undefined, noCheck: true, critical: false, accepted: true },
+		{
+			label: 'the default',
+			policy: undefined,
+			exemption: 'none',
+			critical: false,
+			accepted: false,
+		},
+		{
+			label: 'the default',
+			policy: undefined,
+			exemption: 'nocheck',
+			critical: false,
+			accepted: true,
+		},
+		{
+			label: 'the default',
+			policy: undefined,
+			exemption: 'noRevAvail',
+			critical: false,
+			accepted: true,
+		},
 		{
 			label: 'nocheck-or-evidence',
 			policy: 'nocheck-or-evidence',
-			noCheck: false,
+			exemption: 'none',
 			critical: false,
 			accepted: false,
 		},
 		{
 			label: 'honor-nocheck',
 			policy: 'honor-nocheck',
-			noCheck: false,
+			exemption: 'none',
 			critical: false,
 			accepted: true,
 		},
 		{
 			label: 'honor-nocheck',
 			policy: 'honor-nocheck',
-			noCheck: false,
+			exemption: 'none',
 			critical: true,
 			accepted: false,
 		},
-		{ label: 'skip', policy: 'skip', noCheck: false, critical: false, accepted: true },
+		{
+			label: 'require-evidence',
+			policy: 'require-evidence',
+			exemption: 'noRevAvail',
+			critical: false,
+			accepted: false,
+		},
+		{ label: 'skip', policy: 'skip', exemption: 'none', critical: false, accepted: true },
 	] as const)(
-		'responder without CRL evidence under $label (nocheck $noCheck, critical CRL DP $critical)',
-		async ({ policy, noCheck, critical, accepted }) => {
+		'responder without CRL evidence under $label (exemption $exemption, critical CRL DP $critical)',
+		async ({ policy, exemption, critical, accepted }) => {
 			const authority = await issueAuthority('Policy Evidence CA');
 			const keys = await generateKeyPair();
 			const built = await createCertificate({
@@ -692,28 +718,32 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 				issuerCertificate: authority.ca.certificate.der,
 				extensions: {
 					extendedKeyUsage: ['ocspSigning'],
-					crlDistributionPoints: [
-						{
-							distributionPoint: {
-								type: 'fullName',
-								fullName: [{ type: 'uri', value: 'http://example.test/responder.crl' }],
-							},
-						},
-					],
-					...(noCheck ? { customExtensions: [OCSP_NOCHECK_EXTENSION] } : {}),
+					...(exemption === 'noRevAvail'
+						? { noRevAvail: true }
+						: {
+								crlDistributionPoints: [
+									{
+										distributionPoint: {
+											type: 'fullName',
+											fullName: [{ type: 'uri', value: 'http://example.test/responder.crl' }],
+										},
+									},
+								],
+							}),
+					...(exemption === 'nocheck' ? { customExtensions: [OCSP_NOCHECK_EXTENSION] } : {}),
 				},
 			});
 			const distributionPoints = unwrap(parseCertificatePem(built.pem)).extensions.find(
 				(extension) => extension.oid === OIDS.cRLDistributionPoints,
 			);
-			if (distributionPoints === undefined) throw new Error('expected cRLDistributionPoints');
-			const certificateDer = critical
-				? await replaceCertificateExtension(built.der, authority.ca.keyPair.privateKey, {
-						oid: OIDS.cRLDistributionPoints,
-						value: distributionPoints.valueDer,
-						critical: true,
-					})
-				: built.der;
+			const certificateDer =
+				critical && distributionPoints !== undefined
+					? await replaceCertificateExtension(built.der, authority.ca.keyPair.privateKey, {
+							oid: OIDS.cRLDistributionPoints,
+							value: distributionPoints.valueDer,
+							critical: true,
+						})
+					: built.der;
 			const response = await goodResponse(
 				authority,
 				keys.privateKey,

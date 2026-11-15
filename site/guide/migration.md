@@ -166,7 +166,7 @@ validated path.
 ## Supply revocation evidence for delegated OCSP responders
 
 `responderRevocationPolicy` now defaults to `'nocheck-or-evidence'`. A
-delegated responder without `id-pkix-ocsp-nocheck` fails with
+delegated responder without `id-pkix-ocsp-nocheck` or `noRevAvail` fails with
 `responder_revocation_unknown` unless `responderRevocationCrls` shows it is
 not revoked. Supply the responder's CRLs, or ask its CA to issue responder
 certificates with `id-pkix-ocsp-nocheck`.

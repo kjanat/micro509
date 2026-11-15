@@ -427,14 +427,16 @@ export type VerifyOcspResponseSignatureResult =
  * {@linkcode ValidateOcspResponseInput.responderRevocationCrls}.
  *
  * - `'nocheck-or-evidence'` (default): a responder carrying
- *   `id-pkix-ocsp-nocheck` is exempt. Otherwise CRL evidence must show it is
- *   not revoked, as RFC 9608 §4 runs the RFC 5280 §6.1.3 (a)(3) check.
+ *   `id-pkix-ocsp-nocheck` or noRevAvail is exempt (RFC 9608 §4). Otherwise
+ *   CRL evidence must show it is not revoked, as RFC 9608 §4 runs the RFC 5280
+ *   §6.1.3 (a)(3) check.
  * - `'honor-nocheck'`: as `'nocheck-or-evidence'`, but missing or unusable
  *   evidence is tolerated and only a revoked verdict rejects. A responder with
  *   a critical cRLDistributionPoints extension still needs evidence (X.509
  *   (2019) §9.6.2.1).
- * - `'require-evidence'`: `nocheck` is ignored and CRL evidence must show the
- *   responder is not revoked.
+ * - `'require-evidence'`: `id-pkix-ocsp-nocheck` and noRevAvail are ignored
+ *   and CRL evidence must show the responder is not revoked (RFC 5280 §6.1
+ *   lets an application further limit the valid paths).
  * - `'skip'`: no responder revocation checking.
  */
 export type OcspResponderRevocationPolicy =
@@ -1846,7 +1848,10 @@ async function checkDelegatedResponderRevocation(
 	if (policy === 'skip') {
 		return { ok: true };
 	}
-	if (policy !== 'require-evidence' && hasOcspNoCheckExtension(signer)) {
+	if (
+		policy !== 'require-evidence' &&
+		(signer.noRevAvail === true || hasOcspNoCheckExtension(signer))
+	) {
 		return { ok: true };
 	}
 	const crlCheck = responderCrlCheck(input);

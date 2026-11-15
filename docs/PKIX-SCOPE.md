@@ -436,7 +436,7 @@ Focused [RFC 9525][rfc9525] identity fixtures live in [`test/identity-fixtures.t
 - [x] Reject the response if the signer certificate meets none of those conditions.
 - [x] Decide and document responder-certificate revocation policy ([RFC 6960 §4.2.2.2.1][rfc6960-section-4.2.2.2.1]).
   - [x] Parse and expose `id-pkix-ocsp-nocheck` (`hasOcspNoCheckExtension()`).
-  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'nocheck-or-evidence'` (default) / `'honor-nocheck'` / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedOcspResponders` as the caller-local override.
+  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'nocheck-or-evidence'` (default) / `'honor-nocheck'` / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedOcspResponders` as the caller-local override. The default and `'honor-nocheck'` exempt a responder carrying `id-pkix-ocsp-nocheck` or `noRevAvail` ([RFC 9608 §4][rfc9608-section-4]).
   - [x] Add fixtures for each policy branch.
   - [x] Pass caller evaluation time through delegated responder chain validation.
 
