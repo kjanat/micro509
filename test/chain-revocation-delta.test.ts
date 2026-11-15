@@ -338,6 +338,38 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 	);
 });
 
+describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget', () => {
+	it.each([
+		{ remaining: 4, expected: 'good' },
+		{ remaining: 3, expected: 'unsettled' },
+		{ remaining: 0, expected: 'unsettled' },
+	] as const)(
+		'checks four forged delta CRLs with $remaining attempts left as $expected',
+		async ({ remaining, expected }) => {
+			const s = await scenario();
+			const parse = (der: Uint8Array) => unwrap(parseCertificateRevocationListDer(der));
+			const budget = { remaining };
+			const result = await checkCertificateRevocationAgainstCrlsBy(
+				unwrap(parseCertificatePem(s.leafPem)),
+				parse((await s.baseNumbered(5)).der),
+				(await s.forgedDeltas(4)).map(parse),
+				{ kind: 'certificate', certificate: s.caPem },
+				{ at: s.at },
+				callerVerification(undefined),
+				budget,
+			);
+			expect(
+				result.kind === 'unsettled'
+					? 'unsettled'
+					: result.result.ok
+						? result.result.value.status
+						: result.result.code,
+			).toBe(expected);
+			expect(budget.remaining).toBe(0);
+		},
+	);
+});
+
 describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation with a delta CRL that fails', () => {
 	it.each([
 		{ base: 'keyCompromise', delta: 'forged', crl: 'revoked', evidence: 'revoked' },
@@ -676,6 +708,175 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 			'delta_crl_retry_limit_exceeded',
 		]);
 	});
+});
+
+describe('checkChainRevocation delta CRL attempt limits for a CRL signer', () => {
+	it.each([
+		{ signerBases: 8, expected: 'good' },
+		{ signerBases: 9, expected: ['no_applicable_ocsp', 'crl_signer_indeterminate'] },
+	] as const)(
+		'counts the delta CRL checks for a CRL signer against the 32 per call ($signerBases signer base CRLs)',
+		async ({ signerBases, expected }) => {
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Signer Budget Root' },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+			});
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'Signer Budget Root' },
+				subject: { commonName: 'Signer Budget CRL Issuer' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				extensions: { keyUsage: ['cRLSign'] },
+			});
+			const uri = 'http://example.test/signer-budget.crl';
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Signer Budget Root' },
+				subject: { commonName: 'signer-budget.example' },
+				publicKey: (await generateKeyPair()).publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				extensions: {
+					crlDistributionPoints: [
+						{
+							distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: uri }] },
+							crlIssuer: [
+								{
+									type: 'directoryName',
+									derHex: unwrap(parseCertificatePem(signer.pem)).subject.derHex,
+								},
+							],
+						},
+					],
+				},
+			});
+			const at = new Date(Date.now() + 5_000);
+			const thisUpdate = new Date(at.getTime() - HOUR_MS);
+			const nextUpdate = new Date(at.getTime() + 24 * HOUR_MS);
+			const leafCrl = await createCertificateRevocationList({
+				issuer: { commonName: 'Signer Budget CRL Issuer' },
+				issuerCertificate: signer.der,
+				signerPrivateKey: signerKeys.privateKey,
+				crlNumber: 1,
+				thisUpdate,
+				nextUpdate,
+				issuingDistributionPoint: {
+					distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: uri }] },
+					indirectCrl: true,
+				},
+			});
+			const attackerKeys = await generateKeyPair();
+			const rootCrl = (crlNumber: number, baseCrlNumber?: number) =>
+				createCertificateRevocationList({
+					issuer: { commonName: 'Signer Budget Root' },
+					issuerCertificate: root.certificate.der,
+					signerPrivateKey:
+						baseCrlNumber === undefined ? root.keyPair.privateKey : attackerKeys.privateKey,
+					crlNumber,
+					...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+					thisUpdate,
+					nextUpdate,
+				});
+			const crls = [
+				leafCrl.der,
+				...(await Promise.all(
+					Array.from({ length: signerBases }, async (_, index) => (await rootCrl(index + 1)).der),
+				)),
+				...(await Promise.all(
+					[100, 101, 102, 103].map(async (crlNumber) => (await rootCrl(crlNumber, 1)).der),
+				)),
+			];
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls,
+				extraCertificates: [signer.pem],
+				at,
+			});
+			const status = result.value.certificates[0];
+			expect(status?.indeterminateReasons ?? status?.status).toEqual(expected);
+		},
+	);
+});
+
+describe('checkChainRevocation delta CRL attempt limits for a delegated OCSP responder', () => {
+	it.each([
+		{ bases: 4, expected: 'good' },
+		{ bases: 5, expected: ['delta_crl_retry_limit_exceeded'] },
+	] as const)(
+		'counts the delta CRL checks for the responder against the 32 per call ($bases base CRLs)',
+		async ({ bases, expected }) => {
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: 'Responder Budget CA' },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+			});
+			const issue = async (commonName: string, extendedKeyUsage?: readonly ['ocspSigning']) => {
+				const keys = await generateKeyPair();
+				const certificate = await createCertificate({
+					issuer: { commonName: 'Responder Budget CA' },
+					subject: { commonName },
+					publicKey: keys.publicKey,
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerCertificate: ca.certificate.der,
+					...(extendedKeyUsage === undefined ? {} : { extensions: { extendedKeyUsage } }),
+				});
+				return { keys, certificate };
+			};
+			const leaf = await issue('responder-budget.example');
+			const responder = await issue('Responder Budget Responder', ['ocspSigning']);
+			const at = new Date(Date.now() + 5_000);
+			const thisUpdate = new Date(at.getTime() - HOUR_MS);
+			const nextUpdate = new Date(at.getTime() + 24 * HOUR_MS);
+			const attackerKeys = await generateKeyPair();
+			const caCrl = (crlNumber: number, baseCrlNumber?: number) =>
+				createCertificateRevocationList({
+					issuer: { commonName: 'Responder Budget CA' },
+					issuerCertificate: ca.certificate.der,
+					signerPrivateKey:
+						baseCrlNumber === undefined ? ca.keyPair.privateKey : attackerKeys.privateKey,
+					crlNumber,
+					...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+					thisUpdate,
+					nextUpdate,
+				});
+			const crls = [
+				...(await Promise.all(
+					Array.from({ length: bases }, async (_, index) => (await caCrl(index + 1)).der),
+				)),
+				...(await Promise.all(
+					[100, 101, 102, 103].map(async (crlNumber) => (await caCrl(crlNumber, 1)).der),
+				)),
+			];
+			const response = await createOcspResponse({
+				signerPrivateKey: responder.keys.privateKey,
+				signerCertificate: responder.certificate.pem,
+				includedCertificates: [responder.certificate.pem],
+				responses: [
+					{
+						certificate: leaf.certificate.pem,
+						issuerCertificate: ca.certificate.pem,
+						certStatus: 'good',
+						thisUpdate,
+						nextUpdate,
+					},
+				],
+			});
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.certificate.pem)),
+					unwrap(parseCertificatePem(ca.certificate.pem)),
+				],
+				crls,
+				ocspResponses: [response.der],
+				at,
+			});
+			const status = result.value.certificates[0];
+			expect(status?.indeterminateReasons ?? status?.status).toEqual(expected);
+		},
+	);
 });
 
 describe('checkChainRevocation delta CRL attempt limits with a base CRL that lists the certificate', () => {

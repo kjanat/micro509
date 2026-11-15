@@ -714,6 +714,24 @@ async function delegatedOcspResponse(
 	return await resignedOcspResponse(built.der, responderKey, embedded);
 }
 
+/** A CRL named for 'Parameter Issuer', listing `revokedSerials`, for {@linkcode resignedCrl}. */
+async function issuerStandInCrl(
+	when: Date,
+	revokedSerials: readonly string[],
+): Promise<Uint8Array> {
+	const stand = await createSelfSignedCertificate({ subject: { commonName: 'Parameter Issuer' } });
+	const built = await createCertificateRevocationList({
+		crlNumber: 1,
+		issuer: { commonName: 'Parameter Issuer' },
+		signerPrivateKey: stand.keyPair.privateKey,
+		issuerCertificate: stand.certificate.der,
+		thisUpdate: new Date(when.getTime() - 60_000),
+		nextUpdate: new Date(when.getTime() + 60_000),
+		revokedCertificates: revokedSerials.map((serial) => ({ serialNumber: hexToBytes(serial) })),
+	});
+	return built.der;
+}
+
 describe('revocation signers and inherited key parameters', () => {
 	it('validates a responder under an issuer whose key inherits its parameters', async () => {
 		const root = parameterKey('P', true);
@@ -745,16 +763,40 @@ describe('revocation signers and inherited key parameters', () => {
 	});
 
 	it.each([
-		{ policy: 'skip', revokedByResponderCa: false, expected: { ok: true } },
-		{ policy: 'require-evidence', revokedByResponderCa: false, expected: { ok: true } },
+		{ policy: 'skip', revokedByResponderCa: false, issuerCrl: 'none', expected: { ok: true } },
+		{
+			policy: 'require-evidence',
+			revokedByResponderCa: false,
+			issuerCrl: 'clean',
+			expected: { ok: true },
+		},
+		{
+			policy: 'require-evidence',
+			revokedByResponderCa: false,
+			issuerCrl: 'none',
+			expected: { ok: false, code: 'responder_revocation_unknown' },
+		},
+		{
+			policy: 'require-evidence',
+			revokedByResponderCa: false,
+			issuerCrl: 'revoking',
+			expected: { ok: false, code: 'responder_revoked' },
+		},
+		{
+			policy: 'honor-nocheck',
+			revokedByResponderCa: false,
+			issuerCrl: 'revoking',
+			expected: { ok: false, code: 'responder_revoked' },
+		},
 		{
 			policy: 'honor-nocheck',
 			revokedByResponderCa: true,
+			issuerCrl: 'none',
 			expected: { ok: false, code: 'responder_revoked' },
 		},
 	] as const)(
-		'checks a chained responder with its own path under $policy (revoked $revokedByResponderCa)',
-		async ({ policy, revokedByResponderCa, expected }) => {
+		'checks a chained responder with its own path under $policy (revoked $revokedByResponderCa, issuer CRL $issuerCrl)',
+		async ({ policy, revokedByResponderCa, issuerCrl, expected }) => {
 			const issuer = parameterKey('P1', true);
 			const intermediate = parameterKey('P2', true);
 			const responder = parameterKey('P2', false);
@@ -798,6 +840,20 @@ describe('revocation signers and inherited key parameters', () => {
 				nextUpdate: new Date(now.getTime() + 60_000),
 				revokedCertificates: revokedByResponderCa ? [{ serialNumber: responderSerial }] : [],
 			});
+			const issuerCrls =
+				issuerCrl === 'none'
+					? []
+					: [
+							await resignedCrl(
+								await issuerStandInCrl(
+									now,
+									issuerCrl === 'revoking'
+										? [unwrap(parseCertificateDer(intermediateDer)).serialNumberHex]
+										: [],
+								),
+								issuer,
+							),
+						];
 			expect(
 				await validateOcspResponse({
 					response: await delegatedOcspResponse(
@@ -810,7 +866,10 @@ describe('revocation signers and inherited key parameters', () => {
 					issuerCertificate: issuerDer,
 					allowChainedResponderCertificate: true,
 					responderRevocationPolicy: policy,
-					responderRevocationCrls: [await resignedCrl(responderCaCrl.der, intermediate)],
+					responderRevocationCrls: [
+						await resignedCrl(responderCaCrl.der, intermediate),
+						...issuerCrls,
+					],
 					at: now,
 					signatureVerifiers: parameterSignatureVerifiers,
 				}),
@@ -870,7 +929,10 @@ describe('revocation signers and inherited key parameters', () => {
 					thisUpdate: new Date(now.getTime() - 60_000),
 					nextUpdate: new Date(now.getTime() + 60_000),
 				});
-			const crls = [await resignedCrl((await crl(1)).der, intermediate)];
+			const crls = [
+				await resignedCrl((await crl(1)).der, intermediate),
+				await resignedCrl(await issuerStandInCrl(now, []), issuer),
+			];
 			if (delta === 'revoking') crls.push(await resignedCrl((await crl(2, 1)).der, intermediate));
 			expect(
 				await validateOcspResponse({

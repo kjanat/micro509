@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	buildCandidatePath,
+	checkChainRevocation,
 	createCertificate,
 	createCertificateRevocationList,
 	createOcspResponse,
@@ -15,8 +16,9 @@ import {
 	validateForTlsServer,
 	verifyCertificateChain,
 } from '#micro509';
+import { generateKeyPair } from '#micro509/keys';
 import { subjectPublicKeyInfoFingerprint } from '#micro509/x509';
-import { expectRejectedWith, issueChain } from '#test/helpers';
+import { expectRejectedWith, issueChain, OCSP_NOCHECK_EXTENSION } from '#test/helpers';
 
 const validity = {
 	notBefore: new Date('2020-01-01T00:00:00.000Z'),
@@ -352,4 +354,113 @@ describe('SPKI distrust', () => {
 			index: 0,
 		});
 	});
+
+	it.each(['CRL signer', 'OCSP responder'] as const)(
+		'applies SPKI distrust to the path of a delegated %s under revocation',
+		async (signerKind) => {
+			const f = await fixture();
+			const now = Date.now();
+			const window = {
+				thisUpdate: new Date(now - 60_000),
+				nextUpdate: new Date(now + 3_600_000),
+			};
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'Verify Intermediate CA' },
+				subject: {
+					commonName: signerKind === 'CRL signer' ? 'Verify Intermediate CA' : 'Verify Responder',
+				},
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: f.chain.intermediateKeys.privateKey,
+				issuerCertificate: f.chain.intermediate.der,
+				extensions:
+					signerKind === 'CRL signer'
+						? { keyUsage: ['cRLSign'], customExtensions: [OCSP_NOCHECK_EXTENSION] }
+						: {
+								keyUsage: ['digitalSignature'],
+								extendedKeyUsage: ['ocspSigning'],
+								customExtensions: [OCSP_NOCHECK_EXTENSION],
+							},
+			});
+			const rootCrl = await createCertificateRevocationList({
+				crlNumber: 12,
+				issuer: { commonName: 'Verify Root CA' },
+				signerPrivateKey: f.chain.root.keyPair.privateKey,
+				issuerCertificate: f.chain.root.certificate.der,
+				...window,
+			});
+			const evidence =
+				signerKind === 'CRL signer'
+					? {
+							crls: [
+								rootCrl.der,
+								(
+									await createCertificateRevocationList({
+										crlNumber: 11,
+										issuer: { commonName: 'Verify Intermediate CA' },
+										signerPrivateKey: signerKeys.privateKey,
+										issuerCertificate: signer.der,
+										...window,
+									})
+								).der,
+							],
+							extraCertificates: [signer.pem],
+						}
+					: {
+							crls: [rootCrl.der],
+							ocspResponses: [
+								(
+									await createOcspResponse({
+										signerPrivateKey: signerKeys.privateKey,
+										signerCertificate: signer.pem,
+										includedCertificates: [signer.pem],
+										responses: [
+											{
+												certificate: f.chain.leaf.pem,
+												issuerCertificate: f.chain.intermediate.pem,
+												certStatus: 'good',
+												...window,
+											},
+										],
+									})
+								).der,
+							],
+						};
+			const signerHash = (
+				await subjectPublicKeyInfoFingerprint(unwrap(parseCertificatePem(signer.pem)))
+			).hex;
+			const verify = (distrustedSpkiSha256: readonly string[]) =>
+				verifyCertificateChain({
+					leaf: f.chain.leaf.pem,
+					intermediates: [f.chain.intermediate.pem],
+					roots: [f.chain.root.certificate.pem],
+					at: new Date(now + 5_000),
+					distrustedSpkiSha256,
+					revocation: { ...evidence, policy: { mode: 'hard-fail' } },
+				});
+			expect(await verify([])).toMatchObject({ ok: true });
+			expect(await verify([signerHash])).toMatchObject({
+				ok: false,
+				code: 'revocation_indeterminate',
+				index: 0,
+			});
+			const chainCheck = await checkChainRevocation({
+				chain: [f.leaf, f.intermediate, f.root],
+				...evidence,
+				at: new Date(now + 5_000),
+				distrustedSpkiSha256: [signerHash],
+			});
+			expect(chainCheck.value.certificates[0]?.indeterminateReasons).toContain(
+				signerKind === 'CRL signer' ? 'crl_signer_not_authorized' : 'ocsp_responder_not_authorized',
+			);
+			await expectRejectedWith(
+				checkChainRevocation({
+					chain: [f.leaf, f.intermediate, f.root],
+					...evidence,
+					distrustedSpkiSha256: ['not-a-hash'],
+				}),
+				RangeError,
+			);
+		},
+	);
 });

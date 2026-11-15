@@ -17,6 +17,7 @@ import type {
 } from '#micro509/internal/crypto/sig-verify';
 import { resolveSignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import { createSpkiDistrustCheck } from '#micro509/internal/verify/spki-distrust';
 import type { WorkingPublicKey } from '#micro509/internal/verify/verify-path';
 import {
 	anchorWorkingKey,
@@ -30,6 +31,7 @@ import type {
 	AuthenticatedCrlCheckOutcome,
 	CrlSource,
 	checkCertificateRevocationAgainstCrl,
+	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
 	ParsedRevocationReason,
 	UnrecognizedReasonCodePolicy,
@@ -191,6 +193,15 @@ export interface CheckChainRevocationInput {
 	 * no OID, or a value that is no function throws `RangeError`.
 	 */
 	readonly signatureVerifiers?: SignatureVerifiers;
+	/**
+	 * SHA-256 hashes of complete DER SubjectPublicKeyInfo values to distrust in
+	 * the certification paths of CRL signers and delegated OCSP responders
+	 * outside `chain`. Supply 64 hexadecimal characters per hash
+	 * (case-insensitive, no separators). Defaults to an empty list. Malformed
+	 * entries throw RangeError. A signer whose path carries one yields no
+	 * evidence.
+	 */
+	readonly distrustedSpkiSha256?: readonly string[];
 	/**
 	 * The bare trust anchor that issued the last certificate of `chain`, when
 	 * the path ends below one (RFC 5280 §6.1.1 (d)). The last certificate is
@@ -582,7 +593,7 @@ async function crlSignerChainsToAnchor(
 		intermediates: pool.map((certificate) => certificate.der),
 		roots: [trustAnchor.der],
 		at,
-		...(ctx.signatureVerifiers !== undefined && { signatureVerifiers: ctx.signatureVerifiers }),
+		...signerPathOptions(ctx),
 	});
 	if (result.ok) recordPathKeys(result.value, ctx);
 	return result.ok;
@@ -631,10 +642,23 @@ async function chainsToBareAnchor(
 		roots: [],
 		trustAnchors: [trustAnchor],
 		at,
-		...(ctx.signatureVerifiers !== undefined && { signatureVerifiers: ctx.signatureVerifiers }),
+		...signerPathOptions(ctx),
 	});
 	if (result.ok) recordPathKeys(result.value, ctx);
 	return result.ok;
+}
+
+/** The caller's verifiers and distrust for a signer's certification path. */
+function signerPathOptions(ctx: SignerValidationContext): {
+	readonly signatureVerifiers?: SignatureVerifiers;
+	readonly distrustedSpkiSha256?: readonly string[];
+} {
+	return {
+		...(ctx.signatureVerifiers !== undefined && { signatureVerifiers: ctx.signatureVerifiers }),
+		...(ctx.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: ctx.distrustedSpkiSha256,
+		}),
+	};
 }
 
 function parsedOrEmpty(source: RevocationCertificateSource): readonly ParsedCertificate[] {
@@ -668,7 +692,10 @@ interface SignerValidationContext {
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
 	readonly signatureVerifiers: SignatureVerifiers | undefined;
+	readonly distrustedSpkiSha256: readonly string[] | undefined;
 	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
+	/** Delta CRL checks left for the whole chain. */
+	readonly deltaBudget: DeltaCrlBudget;
 	/** The RFC 5280 §6.1 working key of a CRL or OCSP signer. */
 	readonly workingKeyOf: (certificate: ParsedCertificate) => WorkingPublicKey;
 	/** Working keys of signers outside the chain, from their validated paths. */
@@ -893,6 +920,7 @@ async function checkSignerAgainstCrl(
 			unrecognizedReasonCode: ctx.unrecognizedReasonCode,
 		},
 		signerVerification(ctx, issuer),
+		ctx.deltaBudget,
 	);
 	if (outcome.kind === 'unsettled') {
 		return { kind: 'unsettled_delta' };
@@ -1130,6 +1158,10 @@ async function validateOcspResponseWithResponderFallback(
 			issuer.kind === 'certificate'
 				? signerCtx.workingKeyOf(issuer.certificate)
 				: anchorWorkingKey(issuer.trustAnchor),
+		deltaBudget: signerCtx.deltaBudget,
+		...(signerCtx.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: signerCtx.distrustedSpkiSha256,
+		}),
 	};
 	const trustedOcspResponders = input.trustedOcspResponders
 		?.filter((trusted) => {
@@ -1645,11 +1677,6 @@ function distinctSignedCrls(
 	});
 }
 
-/** Delta CRL checks left to spend. */
-interface DeltaCrlBudget {
-	remaining: number;
-}
-
 const DELTA_CRL_ATTEMPTS_PER_CHAIN = 32;
 
 interface DeltaCandidateCheck {
@@ -2002,6 +2029,7 @@ async function checkChainRevocationAt(
 	const { chain, policy, crls = [], extraCertificates = [], at } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
 	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
+	createSpkiDistrustCheck(input.distrustedSpkiSha256);
 	assertIssuedByTrustAnchor(chain, input.trustAnchor);
 	const mode = policy?.mode ?? 'hard-fail';
 
@@ -2020,6 +2048,7 @@ async function checkChainRevocationAt(
 	// Create signer validation context with memoization cache
 	// This cache is shared across all certificate checks in this chain evaluation
 	const pathKeys = new Map<string, WorkingPublicKey>();
+	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
 	const chainKeys = chainWorkingKeys(
 		chain,
 		input.trustAnchor === undefined ? undefined : anchorWorkingKey(input.trustAnchor),
@@ -2034,14 +2063,15 @@ async function checkChainRevocationAt(
 		clockSkewMs: policy?.clockSkewMs,
 		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
 		signatureVerifiers: input.signatureVerifiers,
+		distrustedSpkiSha256: input.distrustedSpkiSha256,
 		verifiers,
+		deltaBudget,
 		workingKeyOf: (certificate) =>
 			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
 		pathKeys,
 		pathIssuers: new Map(),
 		trustAnchor: input.trustAnchor,
 	};
-	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
 
 	const certsToCheck = input.trustAnchor === undefined ? chain.slice(0, -1) : chain;
 	const certificates: CertificateRevocationStatus[] = [];

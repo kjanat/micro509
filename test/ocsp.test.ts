@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	createCertificate,
+	createCertificateRevocationList,
 	createOcspRequest,
 	createOcspResponse,
 	createSelfSignedCertificate,
@@ -3334,13 +3335,27 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const result = await validateOcspResponse({
-			response: response.der,
-			issuerCertificate: issuer.certificate.pem,
-			responderCertificate: responder.pem,
-			allowChainedResponderCertificate: true,
+		const issuerCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Allowed Indirect Responder CA' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerCertificate: issuer.certificate.der,
+			thisUpdate: new Date(Date.now() - 60_000),
+			nextUpdate: new Date(Date.now() + 60 * 60_000),
 		});
-		expect(result.ok).toBe(true);
+		const validate = (responderRevocationCrls: readonly Uint8Array[]) =>
+			validateOcspResponse({
+				response: response.der,
+				issuerCertificate: issuer.certificate.pem,
+				responderCertificate: responder.pem,
+				allowChainedResponderCertificate: true,
+				responderRevocationCrls,
+			});
+		expect(await validate([issuerCrl.der])).toMatchObject({ ok: true });
+		expect(await validate([])).toMatchObject({
+			ok: false,
+			code: 'responder_revocation_unknown',
+		});
 	});
 });
 

@@ -1471,6 +1471,9 @@ async function validateVerifiedChainRevocation(
 		...(input.signatureVerifiers !== undefined
 			? { signatureVerifiers: input.signatureVerifiers }
 			: {}),
+		...(input.distrustedSpkiSha256 !== undefined
+			? { distrustedSpkiSha256: input.distrustedSpkiSha256 }
+			: {}),
 	});
 	return revocationResult.value.decision === 'deny'
 		? revocationFailureResult(revocationResult.value)

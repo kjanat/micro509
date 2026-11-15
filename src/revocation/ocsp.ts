@@ -89,6 +89,7 @@ import {
 import type {
 	CrlCheckOptions,
 	CrlSource,
+	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
@@ -98,7 +99,7 @@ import {
 	coversAllDistributionPointReasons,
 	normalizeCrl,
 } from '#micro509/revocation/crl';
-import type { TrustAnchor } from '#micro509/verify/verify';
+import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
 import { trustAnchorFromCertificate, verifyCertificateChain } from '#micro509/verify/verify';
 import type {
 	NameFieldKey,
@@ -459,7 +460,11 @@ export interface ValidateOcspResponseInput {
 	readonly request?: OcspRequestSource;
 	/** Explicit responder certificate — overrides embedded certificate discovery. */
 	readonly responderCertificate?: OcspCertificateSource;
-	/** When `true`, allows delegated responder chain validation beyond direct issuance. */
+	/**
+	 * When `true`, allows delegated responder chain validation beyond direct
+	 * issuance. `responderRevocationPolicy` then also applies to each CA
+	 * certificate between the issuer and the responder.
+	 */
 	readonly allowChainedResponderCertificate?: boolean;
 	/**
 	 * Explicitly trusted responder certificates for this issuer's scope
@@ -545,7 +550,16 @@ export interface OcspCallerVerification {
 	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
 	/** The issuer's working key; defaults to its own key parameters. */
 	readonly issuerWorkingKey?: WorkingPublicKey;
+	/** SHA-256 SPKI hashes that a delegated responder's certification path must not carry. */
+	readonly distrustedSpkiSha256?: readonly string[];
+	/** Delta CRL checks left for the revocation check this validation serves. */
+	readonly deltaBudget?: DeltaCrlBudget;
 }
+
+/** {@linkcode OcspCallerVerification} with the issuer's working key resolved. */
+type ResolvedOcspCallerVerification = OcspCallerVerification & {
+	readonly issuerWorkingKey: WorkingPublicKey;
+};
 
 /** Failure codes produced by {@linkcode validateOcspResponse}. */
 export type ValidateOcspResponseErrorCode =
@@ -1285,13 +1299,14 @@ export async function validateOcspResponseBy(
 		(issuer.kind === 'certificate'
 			? certificateWorkingKey(issuer.certificate)
 			: anchorWorkingKey(issuer.trustAnchor));
+	const resolvedContext = { ...context, issuerWorkingKey };
 	const responder = await classifyOcspResponder(
 		input,
 		parsedResponse,
 		issuer,
 		signer,
 		trustedResponders,
-		issuerWorkingKey,
+		resolvedContext,
 	);
 	const signature = await verifyOcspResponseSignatureByKey(parsedResponse, ocspKeyOf(signer), {
 		verifiers: context.verifiers,
@@ -1304,7 +1319,7 @@ export async function validateOcspResponseBy(
 		input,
 		parsedResponse,
 		responder,
-		{ verifiers: context.verifiers, issuerWorkingKey },
+		resolvedContext,
 	);
 	if (responderAuthorization !== undefined) return responderAuthorization;
 	const at = input.at ?? new Date();
@@ -1417,10 +1432,18 @@ type OcspResponder =
 			readonly path: DelegatedResponderPath;
 	  };
 
+/** A certificate of a delegated responder's path with the issuer whose CRLs cover it. */
+interface ResponderPathLink {
+	readonly certificate: ParsedCertificate;
+	readonly issuer: ResolvedOcspKey;
+	readonly issuerWorkingKey: WorkingPublicKey;
+}
+
 /**
  * A delegated responder's validated path: the parameters it gives the
- * responder's key, and the responder's immediate issuer with its working key,
- * whose CRLs cover the responder. Otherwise why the path does not validate.
+ * responder's key, the responder's immediate issuer with its working key,
+ * whose CRLs cover the responder, and each CA certificate between that issuer
+ * and the OCSP issuer. Otherwise why the path does not validate.
  */
 type DelegatedResponderPath =
 	| {
@@ -1428,6 +1451,7 @@ type DelegatedResponderPath =
 			readonly parametersDer: Uint8Array | undefined;
 			readonly issuer: ResolvedOcspKey;
 			readonly issuerWorkingKey: WorkingPublicKey;
+			readonly caCertificates: readonly ResponderPathLink[];
 	  }
 	| ValidateOcspResponseFailureBranch;
 
@@ -1437,7 +1461,7 @@ async function classifyOcspResponder(
 	issuer: ResolvedOcspKey,
 	signer: ResolvedOcspKey,
 	trustedResponders: readonly ParsedCertificate[],
-	issuerWorkingKey: WorkingPublicKey,
+	context: ResolvedOcspCallerVerification,
 ): Promise<OcspResponder> {
 	if (signer.kind === 'trust_anchor' || isOcspIssuer(signer.certificate, issuer)) {
 		return { kind: 'issuer', signer };
@@ -1449,13 +1473,7 @@ async function classifyOcspResponder(
 	return {
 		kind: 'delegated',
 		certificate,
-		path: await validateDelegatedResponderPath(
-			input,
-			parsedResponse,
-			issuer,
-			certificate,
-			issuerWorkingKey,
-		),
+		path: await validateDelegatedResponderPath(input, parsedResponse, issuer, certificate, context),
 	};
 }
 
@@ -1477,7 +1495,7 @@ async function validateOcspResponderAuthorization(
 	input: OcspValidationOptions,
 	parsedResponse: ParsedOcspResponse,
 	responder: OcspResponder,
-	context: Required<OcspCallerVerification>,
+	context: ResolvedOcspCallerVerification,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	const responderBinding = await safeValidateOcspResponderIdBinding(
 		parsedResponse,
@@ -1492,10 +1510,26 @@ async function validateOcspResponderAuthorization(
 	if (!responder.path.ok) {
 		return responder.path;
 	}
-	return await validateDelegatedOcspResponder(input, responder.path.issuer, responder.certificate, {
-		verifiers: context.verifiers,
-		issuerWorkingKey: responder.path.issuerWorkingKey,
-	});
+	const responderFailure = await validateDelegatedOcspResponder(
+		input,
+		responder.path.issuer,
+		responder.certificate,
+		{ ...context, issuerWorkingKey: responder.path.issuerWorkingKey },
+	);
+	if (responderFailure !== undefined) return responderFailure;
+	for (const link of responder.path.caCertificates) {
+		const revocation = await checkDelegatedResponderRevocation(
+			link.certificate,
+			link.issuer,
+			input,
+			{
+				...context,
+				issuerWorkingKey: link.issuerWorkingKey,
+			},
+		);
+		if (!revocation.ok) return revocation;
+	}
+	return undefined;
 }
 
 /**
@@ -1536,8 +1570,9 @@ async function validateDelegatedResponderPath(
 	parsedResponse: ParsedOcspResponse,
 	issuer: ResolvedOcspKey,
 	signer: ParsedCertificate,
-	issuerWorkingKey: WorkingPublicKey,
+	context: ResolvedOcspCallerVerification,
 ): Promise<DelegatedResponderPath> {
+	const issuerWorkingKey = context.issuerWorkingKey;
 	const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
 	if (
 		!allowChainedResponderCertificate &&
@@ -1562,6 +1597,9 @@ async function validateDelegatedResponderPath(
 		...(input.signatureVerifiers !== undefined && {
 			signatureVerifiers: input.signatureVerifiers,
 		}),
+		...(context.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: context.distrustedSpkiSha256,
+		}),
 	});
 	if (!chain.ok) {
 		return validateOcspResponseFailureResult(
@@ -1569,17 +1607,41 @@ async function validateDelegatedResponderPath(
 			'OCSP responder certificate chain does not validate',
 		);
 	}
-	const immediateIssuer = chain.value.chain[1];
+	const [responderLink, ...caCertificates] = responderPathLinks(
+		chain.value,
+		issuer,
+		issuerWorkingKey,
+	);
 	return {
 		ok: true,
 		parametersDer: pathWorkingKey(chain.value, 0).parametersDer,
-		...(immediateIssuer === undefined
-			? { issuer, issuerWorkingKey }
-			: {
-					issuer: { kind: 'certificate', certificate: immediateIssuer },
-					issuerWorkingKey: pathWorkingKey(chain.value, 1),
-				}),
+		issuer: responderLink?.issuer ?? issuer,
+		issuerWorkingKey: responderLink?.issuerWorkingKey ?? issuerWorkingKey,
+		caCertificates,
 	};
+}
+
+/**
+ * Each certificate of a delegated responder's validated path below the OCSP
+ * issuer, with the next certificate as its issuer and the OCSP issuer above
+ * the last.
+ */
+function responderPathLinks(
+	path: CandidatePath,
+	issuer: ResolvedOcspKey,
+	issuerWorkingKey: WorkingPublicKey,
+): readonly ResponderPathLink[] {
+	const below = path.anchorCertificateInChain ? path.chain.slice(0, -1) : path.chain;
+	return below.map((certificate, index) => {
+		const next = path.chain[index + 1];
+		return next === undefined
+			? { certificate, issuer, issuerWorkingKey }
+			: {
+					certificate,
+					issuer: { kind: 'certificate', certificate: next },
+					issuerWorkingKey: pathWorkingKey(path, index + 1),
+				};
+	});
 }
 
 /**
@@ -1616,7 +1678,7 @@ async function validateDelegatedOcspResponder(
 	input: OcspValidationOptions,
 	issuer: ResolvedOcspKey,
 	signer: ParsedCertificate,
-	context: Required<OcspCallerVerification>,
+	context: ResolvedOcspCallerVerification,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
 		return validateOcspResponseFailureResult(
@@ -1892,7 +1954,7 @@ async function checkDelegatedResponderRevocation(
 	signer: ParsedCertificate,
 	issuer: ResolvedOcspKey,
 	input: OcspValidationOptions,
-	context: Required<OcspCallerVerification>,
+	context: ResolvedOcspCallerVerification,
 ): Promise<{ readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult>> {
 	const policy = input.responderRevocationPolicy ?? 'nocheck-or-evidence';
 	const settled = responderRevocationSettledWithoutCrls(signer, policy);
@@ -1916,6 +1978,7 @@ async function checkDelegatedResponderRevocation(
 			issuer,
 			crlCheck,
 			verification,
+			context.deltaBudget,
 		);
 		if (outcome.kind === 'unsettled') {
 			sawUnsettledDelta = true;

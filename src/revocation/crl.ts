@@ -1420,8 +1420,20 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 export const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
 
 /**
- * Every delta CRL that can update `baseCrl`, newest first, in the order to try
- * authenticating them.
+ * Delta CRL checks left to spend across one revocation check, an
+ * implementation limit shared by every complete CRL it reads.
+ *
+ * @internal
+ */
+export interface DeltaCrlBudget {
+	remaining: number;
+}
+
+/**
+ * Every delta CRL that can update `baseCrl` and was issued by `at`, in the
+ * order to try authenticating them: current ones first, each group newest
+ * first. A delta CRL that is no longer current still settles a revocation no
+ * later CRL could remove (RFC 5280 §5.3.1).
  *
  * @internal
  */
@@ -1472,7 +1484,8 @@ function isNewerDeltaCrl(
 /**
  * Result of {@linkcode checkCertificateRevocationAgainstCrlsBy}. `unsettled`
  * means an applicable delta CRL could not settle the status, or the
- * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit ran out first. A delta CRL
+ * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit or the shared
+ * {@linkcode DeltaCrlBudget} ran out first. A delta CRL
  * may then revoke the certificate, so the complete CRL's good is no evidence.
  *
  * @internal
@@ -1485,7 +1498,8 @@ export type CrlsCheckOutcome =
  * Checks `certificate` against `completeCrl`, which `authority` signs,
  * updated by the newest delta CRL in `deltaCrls` that applies to it. A
  * revocation in the complete CRL that no delta CRL could remove settles the
- * status even when the delta CRLs do not.
+ * status even when the delta CRLs do not. Each delta CRL check spends one
+ * from `budget`.
  *
  * @internal
  */
@@ -1496,6 +1510,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 	authority: CrlAuthority,
 	options: CrlCheckOptions,
 	verification: CallerVerification,
+	budget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE },
 ): Promise<CrlsCheckOutcome> {
 	const authenticated = await authenticateCrl(completeCrl, authority, verification);
 	if (!authenticated.ok) {
@@ -1515,7 +1530,11 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		options.clockSkewMs ?? 0,
 		options.maxAgeMs,
 	);
-	for (const deltaCrl of candidates.slice(0, DELTA_CRL_ATTEMPTS_PER_BASE)) {
+	let attempts = 0;
+	for (const deltaCrl of candidates) {
+		if (attempts >= DELTA_CRL_ATTEMPTS_PER_BASE || budget.remaining <= 0) break;
+		attempts += 1;
+		budget.remaining -= 1;
 		const outcome = await checkRevocationAgainstAuthenticatedCrl(
 			certificate,
 			authenticated.value,
@@ -1536,7 +1555,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		verification,
 	);
 	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
-	return candidates.length > DELTA_CRL_ATTEMPTS_PER_BASE
+	return candidates.length > attempts
 		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at))
 		: { kind: 'checked', result: aloneResult };
 }
