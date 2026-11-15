@@ -371,11 +371,11 @@ export function resolveOcspResponderCandidates(
  * distinct complete CRL is checked once, updated by the newest delta CRL
  * among them that applies to it, as `checkChainRevocation` does, within the
  * same attempt limits, which the CRL checks of delegated OCSP responders
- * share. A delta CRL
- * that cannot settle the status yields `delta_crl_unusable`, and a candidate
- * the limits leave unread that could change the status
- * `delta_crl_retry_limit_exceeded`; either keeps other
- * evidence from settling it as `good`.
+ * share. A delta CRL that cannot settle the status records
+ * `delta_crl_unusable` in `details.indeterminateEvidence`, and a candidate
+ * the limits leave unread that could change the status records
+ * `delta_crl_retry_limit_exceeded` there; either keeps other evidence from
+ * settling the status as `good`.
  * A certificate carrying noRevAvail is `skipped` without consulting evidence
  * (RFC 9608 §4). One carrying id-pkix-ocsp-nocheck is still checked against
  * the evidence, which may list it as revoked.

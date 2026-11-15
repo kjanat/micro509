@@ -231,11 +231,14 @@ updated by the newest applicable delta CRL among every `deltaCrl` in
 `evidence`, as `checkChainRevocation` does. Two entries for one complete CRL,
 one with an older delta CRL that holds the certificate and one with a newer
 clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
-yields the new indeterminate code `delta_crl_unusable`, and candidates left
-after the attempt limits yield `delta_crl_retry_limit_exceeded`. Either one
-keeps OCSP or other CRL evidence from settling the status as `good`. An
-undecodable `deltaCrl` no longer hides its complete CRL, and evidence that
-does not decode reports `malformed`.
+records the new code `delta_crl_unusable` in `details.indeterminateEvidence`,
+and a candidate the attempt limits leave unread that could change the status
+records `delta_crl_retry_limit_exceeded` there. Either one keeps OCSP or other
+CRL evidence from settling the status as `good`, and the result is
+`indeterminate` with the top-level code `revocation_status_indeterminate`.
+An undecodable `deltaCrl` no longer hides its complete CRL, so a clean
+complete CRL beside it can still yield `good`. Evidence that does not decode
+records `malformed` in `details.indeterminateEvidence`.
 
 Each CRL in `evidence` now counts as a delta CRL when it carries the delta CRL
 indicator and as a complete CRL otherwise, whichever of `crl` and `deltaCrl`
