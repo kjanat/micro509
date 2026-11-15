@@ -1458,6 +1458,13 @@ async function resolveBaseCrlAgainstSigners(
 			at,
 			signerCtx,
 		);
+		const verification = signerVerification(signerCtx, candidate);
+		if (!authorized) {
+			state.sawCrlSignerNotAuthorized ||= (
+				await authenticateCrl(baseCrl, candidate, verification)
+			).ok;
+			continue;
+		}
 		const resolved = await checkCrlAgainstDeltaCandidates({
 			cert,
 			baseCrl,
@@ -1469,13 +1476,9 @@ async function resolveBaseCrlAgainstSigners(
 			unrecognizedReasonCode,
 			budgets: [baseBudget, deltaBudget],
 			state,
-			verification: signerVerification(signerCtx, candidate),
+			verification,
 		});
 		if (resolved.kind === 'unusable_base') {
-			continue;
-		}
-		if (!authorized) {
-			state.sawCrlSignerNotAuthorized = true;
 			continue;
 		}
 		const verdict = settleCrlSignerCandidate(

@@ -678,7 +678,7 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 		});
 	});
 
-	it('shares the per-base limit between CRL signer candidates', async () => {
+	it('spends no delta CRL attempts on a CRL signer candidate that is not authorized', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Delta Budget Root' },
 			extensions: {
@@ -783,10 +783,8 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 			);
 		};
 		expect(await evaluate([genuineSigner.pem])).toBe('good');
-		expect(await evaluate([rogueSigner.pem, genuineSigner.pem])).toEqual([
-			'no_applicable_ocsp',
-			'delta_crl_retry_limit_exceeded',
-		]);
+		expect(await evaluate([rogueSigner.pem, genuineSigner.pem])).toBe('good');
+		expect(await evaluate([genuineSigner.pem, rogueSigner.pem])).toBe('good');
 	});
 });
 
