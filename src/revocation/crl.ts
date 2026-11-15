@@ -346,7 +346,8 @@ export interface ValidateCertificateRevocationListInput {
 	readonly at?: Date;
 	/**
 	 * Tolerance in milliseconds for clock skew when checking `thisUpdate` and
-	 * `nextUpdate`. It also widens `maxAgeMs` by the same amount.
+	 * `nextUpdate`. It also widens `maxAgeMs` by the same amount. Throws
+	 * `RangeError` when negative or not finite.
 	 */
 	readonly clockSkewMs?: number;
 	/**
@@ -429,7 +430,10 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly deltaCrl?: CrlSource;
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds for freshness checks. It also widens `maxAgeMs`. */
+	/**
+	 * Clock-skew tolerance in milliseconds for freshness checks. It also widens
+	 * `maxAgeMs`. Throws `RangeError` when negative or not finite.
+	 */
 	readonly clockSkewMs?: number;
 	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly maxAgeMs?: number;
@@ -961,6 +965,7 @@ async function validateCrlBy(
 	verification: CallerVerification,
 ): Promise<ValidateCertificateRevocationListResult> {
 	assertCrlMaxAge(input.maxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	const authenticated = await authenticateCrl(input.crl, authority, verification);
 	if (!authenticated.ok) {
 		return authenticated;
@@ -1135,6 +1140,12 @@ export function assertCrlMaxAge(maxAgeMs: number | undefined): void {
 	}
 }
 
+export function assertClockSkew(clockSkewMs: number | undefined): void {
+	if (clockSkewMs !== undefined && (!Number.isFinite(clockSkewMs) || clockSkewMs < 0)) {
+		throw new RangeError(`Invalid clockSkewMs: must be a non-negative number, got ${clockSkewMs}`);
+	}
+}
+
 function crlFreshnessFailure(
 	crl: ParsedCertificateRevocationList,
 	at: Date,
@@ -1214,6 +1225,7 @@ export async function checkCertificateRevocationAgainstCrlWith(
 	verification: CallerVerification,
 ): Promise<CheckCertificateRevocationAgainstCrlResult> {
 	assertCrlMaxAge(input.maxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	let certificate: ParsedCertificate;
 	try {
 		certificate = normalizeCrlCertificate(input.certificate);
@@ -1791,6 +1803,7 @@ async function validateOptionalDeltaCrl(
 > {
 	if (input.deltaCrl === undefined) return { ok: true };
 	assertCrlMaxAge(input.maxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	const authenticated = await authenticateCrl(input.deltaCrl, authority, verification);
 	if (!authenticated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(

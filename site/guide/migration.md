@@ -254,6 +254,14 @@ no delta CRL read supersedes, the result is indeterminate with
 `thisUpdate` and CRL number order them differently rank alike, and the
 stricter of their results stands.
 
+## Pass a valid `clockSkewMs`
+
+A negative or non-finite `clockSkewMs` now throws `RangeError`, as an invalid
+CRL maximum age does, in `validateCertificateRevocationList`,
+`checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation`,
+`validateOcspResponse`, `checkChainRevocation` and
+`verifyCertificateChain({ revocation })`.
+
 ## Set an age policy for CRLs without `nextUpdate`
 
 A received complete CRL without `nextUpdate` now fails with `stale_crl` unless

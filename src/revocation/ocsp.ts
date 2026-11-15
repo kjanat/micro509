@@ -94,6 +94,7 @@ import type {
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
+	assertClockSkew,
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
@@ -507,7 +508,8 @@ export interface ValidateOcspResponseInput {
 	/**
 	 * Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`,
 	 * including those of `responderRevocationCrls`. It also widens
-	 * `responderRevocationCrlMaxAgeMs`.
+	 * `responderRevocationCrlMaxAgeMs`. Throws `RangeError` when negative or
+	 * not finite.
 	 */
 	readonly clockSkewMs?: number;
 	/**
@@ -1281,6 +1283,7 @@ export async function validateOcspResponseBy(
 ): Promise<ValidateOcspResponseResult> {
 	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	assertCrlMaxAge(input.responderRevocationCrlMaxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	let parsedResponse: ParsedOcspResponse;
 	try {
 		parsedResponse = normalizeOcspResponse(input.response);

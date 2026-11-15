@@ -15,6 +15,7 @@ import {
 	validateForCodeSigning,
 	validateForTlsClient,
 	validateForTlsServer,
+	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
 import { parsePkcs12MacData } from '#micro509/pkcs';
@@ -121,6 +122,88 @@ describe('an invalid CRL maximum age throws before any evidence is read', () => 
 			RangeError,
 		);
 	});
+});
+
+describe('an invalid clock skew throws before any evidence is read', () => {
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'validateCertificateRevocationList (%p)',
+		async (clockSkewMs) => {
+			await expectRejectedWith(
+				validateCertificateRevocationList({
+					crl: garbage,
+					issuerCertificate: garbage,
+					clockSkewMs,
+				}),
+				RangeError,
+			);
+		},
+	);
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'checkCertificateRevocationAgainstCrl (%p)',
+		async (clockSkewMs) => {
+			await expectRejectedWith(
+				checkCertificateRevocationAgainstCrl({
+					certificate: garbage,
+					issuerCertificate: garbage,
+					crl: garbage,
+					clockSkewMs,
+				}),
+				RangeError,
+			);
+		},
+	);
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'checkCertificateRevocation (%p)',
+		async (clockSkewMs) => {
+			await expectRejectedWith(
+				checkCertificateRevocation({
+					certificate: garbage,
+					issuerCertificate: garbage,
+					evidence: [],
+					clockSkewMs,
+				}),
+				RangeError,
+			);
+		},
+	);
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'checkChainRevocation (%p)',
+		async (clockSkewMs) => {
+			await expectRejectedWith(
+				checkChainRevocation({ chain: [], policy: { clockSkewMs } }),
+				RangeError,
+			);
+		},
+	);
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'validateOcspResponse (%p)',
+		async (clockSkewMs) => {
+			await expectRejectedWith(
+				validateOcspResponse({ response: garbage, issuerCertificate: garbage, clockSkewMs }),
+				RangeError,
+			);
+		},
+	);
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'verifyCertificateChain (%p)',
+		async (clockSkewMs) => {
+			const leaf = await createSelfSignedCertificate({ subject: { commonName: 'leaf.example' } });
+			const root = await createSelfSignedCertificate({ subject: { commonName: 'Unrelated Root' } });
+			await expectRejectedWith(
+				verifyCertificateChain({
+					leaf: leaf.certificate.pem,
+					roots: [root.certificate.pem],
+					revocation: { policy: { clockSkewMs } },
+				}),
+				RangeError,
+			);
+		},
+	);
 });
 
 describe('an invalid maxPathBuildingChecks throws before the input is parsed', () => {

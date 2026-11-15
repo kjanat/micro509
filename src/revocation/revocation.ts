@@ -23,6 +23,7 @@ import type {
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
+	assertClockSkew,
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
@@ -121,7 +122,10 @@ export interface CheckCertificateRevocationInput {
 	readonly evidence?: readonly RevocationEvidenceInput[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds. It also widens `crlMaxAgeMs`. */
+	/**
+	 * Clock-skew tolerance in milliseconds. It also widens `crlMaxAgeMs`.
+	 * Throws `RangeError` when negative or not finite.
+	 */
 	readonly clockSkewMs?: number;
 	/** Maximum age of each CRL's `thisUpdate` in milliseconds. Unbounded by default. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly crlMaxAgeMs?: number;
@@ -395,6 +399,7 @@ export async function checkCertificateRevocation(
 ): Promise<CheckCertificateRevocationResult> {
 	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	assertCrlMaxAge(input.crlMaxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	resolveSignatureVerifiers(input.signatureVerifiers);
 	const evidence = input.evidence ?? [];
 	const checkedSources = evidence.map((entry) => entry.kind);

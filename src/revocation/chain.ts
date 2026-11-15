@@ -36,6 +36,7 @@ import type {
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
+	assertClockSkew,
 	assertCrlMaxAge,
 	authenticateCrl,
 	checkCertificateRevocationAgainstCrlsBy,
@@ -140,7 +141,7 @@ export interface RevocationPolicy {
 	/**
 	 * Clock-skew tolerance in milliseconds for CRL and OCSP `thisUpdate`/
 	 * `nextUpdate` checks. It also widens `crlMaxAgeMs` by the same amount.
-	 * Defaults to `0`.
+	 * Defaults to `0`. Throws `RangeError` when negative or not finite.
 	 */
 	readonly clockSkewMs?: number;
 	/**
@@ -2004,6 +2005,7 @@ async function checkChainRevocationAt(
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
+	assertClockSkew(policy?.clockSkewMs);
 	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
 	createSpkiDistrustCheck(input.distrustedSpkiSha256);
 	assertIssuedByTrustAnchor(chain, input.trustAnchor);

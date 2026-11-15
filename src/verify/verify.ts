@@ -90,7 +90,7 @@ import type {
 	TrustedOcspResponder,
 } from '#micro509/revocation/chain';
 import { checkChainRevocation } from '#micro509/revocation/chain';
-import { assertCrlMaxAge } from '#micro509/revocation/crl';
+import { assertClockSkew, assertCrlMaxAge } from '#micro509/revocation/crl';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
@@ -1364,6 +1364,7 @@ export async function verifyCertificateChain(
 	const distrustedSpkiSha256 =
 		input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256];
 	assertCrlMaxAge(input.revocation?.policy?.crlMaxAgeMs);
+	assertClockSkew(input.revocation?.policy?.clockSkewMs);
 	const buildResult = await buildCandidatePath(chainBuildInput(input, distrustedSpkiSha256));
 	if (!buildResult.ok) {
 		return buildResult;
