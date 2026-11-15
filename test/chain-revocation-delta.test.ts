@@ -405,6 +405,18 @@ function olderCleanAndNewerExpiredRevoking(
 	]);
 }
 
+function newerExpiredCleanAndOlderCurrentRevoking(
+	s: Scenario,
+	expired: number,
+): Promise<readonly Uint8Array[]> {
+	return ders([
+		s.deltaAt(7, -2, { reasonCode: 'keyCompromise' }),
+		...Array.from({ length: expired }, (_, index) =>
+			s.deltaAt(40 - index, -1 - index / 20, { nextUpdateHours: -0.5 }),
+		),
+	]);
+}
+
 const HELPER_BASES = {
 	clean: (s: Scenario) => s.baseNumbered(5),
 	keyCompromise: (s: Scenario) => s.baseNumbered(5, 'keyCompromise'),
@@ -464,6 +476,16 @@ const HELPER_DELTAS = {
 		]),
 	'newer current clean with a lower CRL number and older current holding': async (s: Scenario) =>
 		ders([s.deltaAt(9, -2, { reasonCode: 'certificateHold' }), s.deltaAt(7, -1)]),
+	'four newer expired clean and older current revoking': (s: Scenario) =>
+		newerExpiredCleanAndOlderCurrentRevoking(s, 4),
+	'three newer expired clean and older current revoking': (s: Scenario) =>
+		newerExpiredCleanAndOlderCurrentRevoking(s, 3),
+	'newest expired clean, current clean and alike-ranked current revoking': async (s: Scenario) =>
+		ders([
+			s.deltaAt(20, -2, { reasonCode: 'keyCompromise' }),
+			s.deltaAt(8, -1.5),
+			s.deltaAt(40, -0.5, { nextUpdateHours: -0.25 }),
+		]),
 	'four forged and older current clean': async (s: Scenario) => [
 		...(await s.forgedDeltas(4)),
 		...(await ders([s.deltaAt(6, -2)])),
@@ -484,6 +506,12 @@ const NEWEST_FIRST_CASES = [
 		expected: 'revoked',
 	},
 	{ deltas: 'four forged and older current clean', expected: 'unsettled' },
+	{ deltas: 'four newer expired clean and older current revoking', expected: 'unsettled' },
+	{ deltas: 'three newer expired clean and older current revoking', expected: 'revoked' },
+	{
+		deltas: 'newest expired clean, current clean and alike-ranked current revoking',
+		expected: 'revoked',
+	},
 ] as const;
 
 describe('checkCertificateRevocationAgainstCrlsBy', () => {
@@ -776,6 +804,17 @@ describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget
 			remaining: 1,
 			expected: 'unsettled',
 		},
+		{
+			deltas: 'newest expired clean, current clean and alike-ranked current revoking',
+			remaining: 2,
+			expected: 'unsettled',
+		},
+		{
+			deltas: 'four newer expired clean and older current revoking',
+			remaining: 1,
+			expected: 'unsettled',
+		},
+		{ deltas: 'six expired clean', remaining: 1, expected: 'good' },
 	] as const)(
 		'checks $deltas delta CRLs with $remaining attempts left as $expected',
 		async ({ deltas, remaining, expected }) => {

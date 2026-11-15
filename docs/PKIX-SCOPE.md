@@ -539,10 +539,12 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       omits. An omitted entry makes the certificate revoked, and an older
       entry `unrecognizedReasonCode: 'reject'` refuses, or one that cannot
       settle the status, keeps the good verdict from standing. When the
-      limits end the search, the delta CRLs read so far decide only if one
-      of them supersedes every unread candidate; withholding a superseded
-      delta CRL has the same effect. If those delta CRLs are all past their
-      `nextUpdate` without such an entry, the base CRL alone decides.
+      limits end the search, a good verdict stands only if the delta CRL
+      that settled it supersedes every unread candidate; withholding a
+      superseded delta CRL has the same effect. Without a good verdict, the
+      base CRL alone decides only if every unread candidate is past its
+      `nextUpdate` and superseded by a delta CRL read. Any other unread
+      candidate could change the status.
       `checkCertificateRevocationAgainstCrl` applies these rules to
       its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
@@ -561,7 +563,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       from settling the status as `good`. A base CRL that does not cover
       the certificate spends none, and repeated copies of one base or delta
       CRL count once. Pre-parsed CRLs are read from their `der`. A candidate
-      left unchecked that no delta CRL read supersedes makes the result indeterminate with
+      left unchecked that could change the status makes the result indeterminate with
       `delta_crl_retry_limit_exceeded`. Both reasons outrank a `good` verdict from other evidence. Neither
       replaces a base CRL revocation that no delta can remove: one with a
       reason other than `certificateHold`, for a certificate that has not

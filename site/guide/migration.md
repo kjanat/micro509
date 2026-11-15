@@ -249,8 +249,10 @@ newer delta CRL past its `nextUpdate` that revokes an unexpired certificate
 for a reason other than `certificateHold` yields `revoked` beside older
 current clean ones. A delta CRL past its `nextUpdate` without such an entry no
 longer ends the search. When the attempt limits leave a delta CRL unread that
-no delta CRL read supersedes, the result is indeterminate with
-`delta_crl_retry_limit_exceeded` instead of `good`. Two delta CRLs whose
+could change the status, the result is indeterminate with
+`delta_crl_retry_limit_exceeded` instead of `good`: one that the delta CRL
+settling a good status does not supersede, or, without a good status, a
+current one or one that no delta CRL read supersedes. Two delta CRLs whose
 `thisUpdate` and CRL number order them differently rank alike, and the
 stricter of their results stands.
 

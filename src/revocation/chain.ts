@@ -276,8 +276,8 @@ function signerCertificateOf(
  *   `ocsp_next_update_missing`
  * - **Delta CRL**: `delta_crl_unusable` when an authenticated, current delta
  *   CRL cannot settle the status, `delta_crl_retry_limit_exceeded` when the
- *   attempt limits leave a delta CRL candidate unread that no delta CRL read
- *   supersedes. Either one outranks a
+ *   attempt limits leave a delta CRL candidate unread that could change the
+ *   status. Either one outranks a
  *   `good` verdict from other evidence.
  * - **Reason code**: `crl_reason_code_unrecognized` and
  *   `ocsp_reason_code_unrecognized` when evidence revokes the certificate with

@@ -1552,9 +1552,9 @@ function supersedesDeltaCrl(
  * names the delta CRL its result came from, if any. `unsettled` means an
  * applicable delta CRL could not settle the status (`delta_unusable`), or the
  * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit or a shared
- * {@linkcode DeltaCrlBudget} ran out before a delta CRL that supersedes every
- * unread one was examined (`retry_limit`). An unread delta CRL may then
- * revoke the certificate, so the complete CRL's good is no evidence.
+ * {@linkcode DeltaCrlBudget} left a delta CRL unread that could change the
+ * status (`retry_limit`). An unread delta CRL may then revoke the
+ * certificate, so the complete CRL's good is no evidence.
  *
  * @internal
  */
@@ -1575,9 +1575,9 @@ export type CrlsCheckOutcome =
  * could remove (RFC 5280 §5.3.1, §3.3). After a good status, older delta CRLs
  * are still read for such a revocation the newer one omits. Each delta CRL
  * check spends one from {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} and from every
- * budget in `budgets`. When they run out before a delta CRL that supersedes
- * every unread one was examined, the outcome is `retry_limit` unless the complete
- * CRL holds such a revocation. A complete CRL that does not cover
+ * budget in `budgets`. When they leave a delta CRL unread that
+ * {@linkcode mayChangeSettledStatus} finds could change the status, the
+ * outcome is `retry_limit` unless the complete CRL holds such a revocation. A complete CRL that does not cover
  * `certificate` spends none.
  *
  * @internal
@@ -1605,10 +1605,10 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 	const candidates = checkCrlApplicability(certificate, authenticated.value).ok
 		? rankApplicableDeltaCrls(authenticated.value, deltaCrls, at, options.clockSkewMs ?? 0)
 		: [];
-	const search: DeltaCrlSearch = { attempts: 0 };
-	for (const deltaCrl of candidates) {
+	const search: DeltaCrlSearch = { attempts: 0, unread: [] };
+	for (const [index, deltaCrl] of candidates.entries()) {
 		if (!spendDeltaCrlAttempt(search, budgets)) {
-			search.unread = deltaCrl;
+			search.unread = candidates.slice(index);
 			break;
 		}
 		recordDeltaCrlOutcome(
@@ -1626,10 +1626,10 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		);
 		if (search.result !== undefined) return search.result;
 	}
-	const unreadMayBeNewer =
-		search.unread !== undefined &&
-		(search.newest === undefined || !supersedesDeltaCrl(search.newest, search.unread));
-	if (!unreadMayBeNewer && search.good !== undefined) return search.good;
+	const unreadMaySettle = search.unread.some((deltaCrl) =>
+		mayChangeSettledStatus(search, deltaCrl, at, options),
+	);
+	if (!unreadMaySettle && search.good !== undefined) return search.good;
 	const alone = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
 		authenticated.value,
@@ -1638,7 +1638,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		verification,
 	);
 	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
-	return unreadMayBeNewer
+	return unreadMaySettle
 		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at), 'retry_limit')
 		: { kind: 'checked', result: aloneResult };
 }
@@ -1646,18 +1646,38 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 /**
  * Where {@linkcode checkCertificateRevocationAgainstCrlsBy} stands in its
  * delta CRL candidates: `newest` is the first one examined that was not
- * rejected, and `unread` the first one the limits left unread.
+ * rejected, and `unread` the ones the limits left unread.
  */
 interface DeltaCrlSearch {
 	attempts: number;
 	newest?: ParsedCertificateRevocationList;
-	unread?: ParsedCertificateRevocationList;
+	unread: readonly ParsedCertificateRevocationList[];
 	good?: {
 		readonly kind: 'checked';
 		readonly result: CheckCertificateRevocationAgainstCrlResult;
 		readonly deltaCrl: ParsedCertificateRevocationList;
 	};
 	result?: CrlsCheckOutcome;
+}
+
+/**
+ * Whether reading the unread `deltaCrl` could change the status `search`
+ * reached by more than an older entry its newer delta CRLs omit. After a good
+ * status, only a delta CRL that the one settling it supersedes cannot.
+ * Otherwise only one past its `nextUpdate` that a delta CRL examined
+ * supersedes cannot, since a current one settles the status.
+ */
+function mayChangeSettledStatus(
+	search: DeltaCrlSearch,
+	deltaCrl: ParsedCertificateRevocationList,
+	at: Date,
+	options: CrlCheckOptions,
+): boolean {
+	if (search.good !== undefined) return !supersedesDeltaCrl(search.good.deltaCrl, deltaCrl);
+	const current =
+		deltaCrlFreshnessFailure(deltaCrl, at, options.clockSkewMs ?? 0, options.maxAgeMs) ===
+		undefined;
+	return current || search.newest === undefined || !supersedesDeltaCrl(search.newest, deltaCrl);
 }
 
 /** Spends one delta CRL check from the per-base limit and every budget, or none when any is spent. */

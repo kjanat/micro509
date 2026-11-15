@@ -373,7 +373,7 @@ export function resolveOcspResponderCandidates(
  * same attempt limits, which the CRL checks of delegated OCSP responders
  * share. A delta CRL
  * that cannot settle the status yields `delta_crl_unusable`, and a candidate
- * the limits leave unread that no delta CRL read supersedes
+ * the limits leave unread that could change the status
  * `delta_crl_retry_limit_exceeded`; either keeps other
  * evidence from settling it as `good`.
  * A certificate carrying noRevAvail is `skipped` without consulting evidence
@@ -668,7 +668,7 @@ async function checkCertificateRevocationWithCrl(
 						kind: 'crl',
 						code: 'delta_crl_retry_limit_exceeded',
 						message:
-							'A delta CRL candidate that may supersede the ones read remained after the attempt limit',
+							'A delta CRL candidate that could change the status remained after the attempt limit',
 					}
 				: {
 						kind: 'crl',
