@@ -144,7 +144,10 @@ to local policy. micro509 fails such a CRL with `stale_crl` unless you set a max
 governs it.
 
 Bound the age of `thisUpdate` with these options. A CRL older than the bound
-fails with `stale_crl`, and the chain reports it as `crl_expired`.
+fails with `stale_crl`, and the chain reports it as `crl_expired`. A
+revocation it lists with a reason other than `certificateHold` or
+`removeFromCRL`, of a certificate that has not expired, still counts, as it
+does in a CRL past its `nextUpdate`.
 
 | Option                           | Where                                                                             |
 | -------------------------------- | --------------------------------------------------------------------------------- |

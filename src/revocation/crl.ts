@@ -354,7 +354,9 @@ export interface ValidateCertificateRevocationListInput {
 	 * this fails with `stale_crl` even when `nextUpdate` is absent or later.
 	 * Unbounded by default, in which case a CRL without `nextUpdate` fails with
 	 * `stale_crl`. RFC 5280 §3.3 leaves the required recency of revocation data
-	 * to local policy.
+	 * to local policy. {@linkcode checkCertificateRevocationAgainstCrl} still
+	 * reports a revocation such a CRL lists with a reason other than
+	 * certificateHold, for a certificate that has not expired (RFC 5280 §5.3.1).
 	 */
 	readonly maxAgeMs?: number;
 	/**
@@ -1165,13 +1167,9 @@ function deltaCrlFreshnessFailure(
 		: crlFreshnessFailure(deltaCrl, at, skew, maxAgeMs);
 }
 
-/** Whether `deltaCrl` was issued by `at`, so its entries record revocations known then. */
-function isIssuedDeltaCrl(
-	deltaCrl: ParsedCertificateRevocationList,
-	at: Date,
-	skew: number,
-): boolean {
-	return deltaCrl.thisUpdate.getTime() - skew <= at.getTime();
+/** Whether `crl` was issued by `at`, so its entries record revocations known then. */
+function isIssuedCrl(crl: ParsedCertificateRevocationList, at: Date, skew: number): boolean {
+	return crl.thisUpdate.getTime() - skew <= at.getTime();
 }
 
 /**
@@ -1360,7 +1358,12 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 		if (freshnessFailure !== undefined) {
 			return {
 				kind: 'checked',
-				result: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+				result: staleCompleteCrlResult(
+					certificate,
+					completeCrl,
+					checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+					input,
+				),
 			};
 		}
 	}
@@ -1478,7 +1481,7 @@ export function rankApplicableDeltaCrls(
 	return deltaCrls
 		.filter(
 			(deltaCrl) =>
-				isCompatibleDeltaCrl(baseCrl, deltaCrl) && isIssuedDeltaCrl(deltaCrl, at, clockSkewMs),
+				isCompatibleDeltaCrl(baseCrl, deltaCrl) && isIssuedCrl(deltaCrl, at, clockSkewMs),
 		)
 		.sort((left, right) => {
 			const currentOrder = Number(isCurrent(right)) - Number(isCurrent(left));
@@ -1672,7 +1675,7 @@ async function validateOptionalDeltaCrl(
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
 	const freshnessFailure = deltaCrlFreshnessFailure(authenticated.value, at, skew, input.maxAgeMs);
-	if (freshnessFailure !== undefined && !isIssuedDeltaCrl(authenticated.value, at, skew)) {
+	if (freshnessFailure !== undefined && !isIssuedCrl(authenticated.value, at, skew)) {
 		return checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure);
 	}
 	let compatibilityFailure: CrlApplicabilityFailure | undefined;
@@ -1695,6 +1698,36 @@ async function validateOptionalDeltaCrl(
 					stale: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
 				}),
 	};
+}
+
+/**
+ * The result of `completeCrl`, which is not current at `input.at`: its
+ * revocation of `certificate` when no later CRL could remove it (RFC 5280
+ * §5.3.1, §3.3), otherwise `stale`. A CRL issued after `input.at` yields
+ * `stale`.
+ */
+function staleCompleteCrlResult(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	stale: CheckCertificateRevocationAgainstCrlResult,
+	input: CrlCheckOptions,
+): CheckCertificateRevocationAgainstCrlResult {
+	const at = input.at ?? new Date();
+	if (
+		!isIssuedCrl(completeCrl, at, input.clockSkewMs ?? 0) ||
+		!checkCrlApplicability(certificate, completeCrl).ok
+	) {
+		return stale;
+	}
+	const lookup = findRevokedCertificateEntry(certificate, completeCrl);
+	if (!lookup.ok || lookup.entry === undefined) return stale;
+	const result = revokedEntryResult(
+		completeCrl,
+		lookup.entry,
+		input.unrecognizedReasonCode ?? 'revoked',
+	);
+	if (!result.ok) return result;
+	return irremovableCrlRevocation(certificate, result, at) ?? stale;
 }
 
 /**

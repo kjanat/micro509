@@ -955,6 +955,18 @@ describe('revocation boundary', () => {
 			expected: 'responder_revocation_unknown',
 		},
 		{
+			name: 'a stale base CRL that revokes it',
+			base: { stale: true, reason: 'keyCompromise' },
+			delta: undefined,
+			expected: 'responder_revoked',
+		},
+		{
+			name: 'a stale base CRL that holds it',
+			base: { stale: true, reason: 'certificateHold' },
+			delta: undefined,
+			expected: 'responder_revocation_unknown',
+		},
+		{
 			name: 'an expired delta CRL that revokes it',
 			base: {},
 			delta: { reason: 'keyCompromise', stale: true },

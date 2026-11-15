@@ -660,93 +660,110 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 		}
 	});
 
-	it('crlMaxAgeMs reaches the CRLs that check a delegated CRL signer', async () => {
-		const at = evaluationTime();
-		const root = await createSelfSignedCertificate({
-			subject: { commonName: 'RFC 5280 Signer Root' },
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 1 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const intermediateKeys = await generateKeyPair();
-		const intermediate = await createCertificate({
-			issuer: { commonName: 'RFC 5280 Signer Root' },
-			subject: { commonName: 'RFC 5280 Signer Intermediate' },
-			publicKey: intermediateKeys.publicKey,
-			signerPrivateKey: root.keyPair.privateKey,
-			issuerCertificate: root.certificate.der,
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const signerKeys = await generateKeyPair();
-		const signer = await createCertificate({
-			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
-			subject: { commonName: 'RFC 5280 Signer Intermediate' },
-			publicKey: signerKeys.publicKey,
-			signerPrivateKey: intermediateKeys.privateKey,
-			issuerCertificate: intermediate.der,
-			extensions: { keyUsage: ['cRLSign'] },
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
-			subject: { commonName: 'rfc5280-signer-leaf.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: intermediateKeys.privateKey,
-			issuerCertificate: intermediate.der,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const signerRevokedByOldCrl = await createCertificateRevocationList({
-			crlNumber: 1,
-			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
-			signerPrivateKey: intermediateKeys.privateKey,
-			issuerCertificate: intermediate.der,
-			thisUpdate: shift(at, -10 * DAY_MS),
-			nextUpdate: shift(at, 10 * DAY_MS),
-			revokedCertificates: [
-				{
-					serialNumber: hexToBytes(unwrap(parseCertificatePem(signer.pem)).serialNumberHex),
-					revocationDate: shift(at, -10 * DAY_MS),
-					reasonCode: 'keyCompromise',
+	it.each([
+		{ oldCrl: 'clean', crlMaxAgeMs: undefined, status: 'good', reason: undefined },
+		{
+			oldCrl: 'clean',
+			crlMaxAgeMs: DAY_MS,
+			status: 'indeterminate',
+			reason: 'crl_signer_indeterminate',
+		},
+		{
+			oldCrl: 'revoking',
+			crlMaxAgeMs: DAY_MS,
+			status: 'indeterminate',
+			reason: 'crl_signer_revoked',
+		},
+	] as const)(
+		'crlMaxAgeMs $crlMaxAgeMs reaches the CRLs that check a delegated CRL signer ($oldCrl old CRL)',
+		async ({ oldCrl, crlMaxAgeMs, status, reason }) => {
+			const at = evaluationTime();
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'RFC 5280 Signer Root' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 1 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
 				},
-			],
-		});
-		const leafCrl = await createCertificateRevocationList({
-			crlNumber: 1,
-			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
-			signerPrivateKey: signerKeys.privateKey,
-			issuerCertificate: signer.der,
-			thisUpdate: shift(at, -HOUR_MS),
-			nextUpdate: shift(at, HOUR_MS),
-		});
-		const signerCleanCrl = await createCertificateRevocationList({
-			crlNumber: 2,
-			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
-			signerPrivateKey: intermediateKeys.privateKey,
-			issuerCertificate: intermediate.der,
-			thisUpdate: shift(at, -2 * HOUR_MS),
-			nextUpdate: shift(at, HOUR_MS),
-		});
-		const result = await checkChainRevocation({
-			chain: [
-				unwrap(parseCertificatePem(leaf.pem)),
-				unwrap(parseCertificatePem(intermediate.pem)),
-				unwrap(parseCertificatePem(root.certificate.pem)),
-			],
-			crls: [signerRevokedByOldCrl.der, signerCleanCrl.der, leafCrl.der],
-			extraCertificates: [signer.pem],
-			at,
-			policy: { mode: 'soft-fail', crlMaxAgeMs: DAY_MS },
-		});
-		const leafStatus = result.value.certificates[0];
-		expect(leafStatus?.status).toBe('good');
-		expect(leafStatus?.source?.signerCertificate?.serialNumberHex).toBe(
-			unwrap(parseCertificatePem(signer.pem)).serialNumberHex,
-		);
-	});
+			});
+			const intermediateKeys = await generateKeyPair();
+			const intermediate = await createCertificate({
+				issuer: { commonName: 'RFC 5280 Signer Root' },
+				subject: { commonName: 'RFC 5280 Signer Intermediate' },
+				publicKey: intermediateKeys.publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'RFC 5280 Signer Intermediate' },
+				subject: { commonName: 'RFC 5280 Signer Intermediate' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: intermediateKeys.privateKey,
+				issuerCertificate: intermediate.der,
+				extensions: { keyUsage: ['cRLSign'] },
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'RFC 5280 Signer Intermediate' },
+				subject: { commonName: 'rfc5280-signer-leaf.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: intermediateKeys.privateKey,
+				issuerCertificate: intermediate.der,
+				extensions: { keyUsage: ['digitalSignature'] },
+			});
+			const oldIntermediateCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'RFC 5280 Signer Intermediate' },
+				signerPrivateKey: intermediateKeys.privateKey,
+				issuerCertificate: intermediate.der,
+				thisUpdate: shift(at, -10 * DAY_MS),
+				nextUpdate: shift(at, 10 * DAY_MS),
+				...(oldCrl === 'revoking'
+					? {
+							revokedCertificates: [
+								{
+									serialNumber: hexToBytes(unwrap(parseCertificatePem(signer.pem)).serialNumberHex),
+									revocationDate: shift(at, -10 * DAY_MS),
+									reasonCode: 'keyCompromise' as const,
+								},
+							],
+						}
+					: {}),
+			});
+			const leafCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'RFC 5280 Signer Intermediate' },
+				signerPrivateKey: signerKeys.privateKey,
+				issuerCertificate: signer.der,
+				thisUpdate: shift(at, -HOUR_MS),
+				nextUpdate: shift(at, HOUR_MS),
+			});
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificatePem(intermediate.pem)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls: [oldIntermediateCrl.der, leafCrl.der],
+				extraCertificates: [signer.pem],
+				at,
+				policy: { mode: 'soft-fail', ...(crlMaxAgeMs === undefined ? {} : { crlMaxAgeMs }) },
+			});
+			const leafStatus = result.value.certificates[0];
+			expect(leafStatus?.status).toBe(status);
+			if (reason === undefined) {
+				expect(leafStatus?.source?.signerCertificate?.serialNumberHex).toBe(
+					unwrap(parseCertificatePem(signer.pem)).serialNumberHex,
+				);
+			} else {
+				expect(leafStatus?.indeterminateReasons).toContain(reason);
+			}
+		},
+	);
 
 	describe('delegated OCSP responder CRLs', () => {
 		async function delegatedResponse() {
@@ -1083,6 +1100,43 @@ describe('RFC 5280 §5.3.1 L3847-3851: only removeFromCRL takes a certificate of
 			'All other reason codes may appear in any CRL and indicate that the specified certificate should be considered revoked.',
 		);
 	});
+
+	it.each([
+		{ reasonCode: 'keyCompromise', expected: 'revoked' },
+		{ reasonCode: 'certificateHold', expected: 'stale_crl' },
+	] as const)(
+		'keeps a $reasonCode entry of a complete CRL past its nextUpdate as $expected',
+		async ({ reasonCode, expected }) => {
+			const { ca, leaf, chain, issueCrl } = await crlPki();
+			const at = evaluationTime();
+			const expired = await issueCrl({
+				thisUpdate: shift(at, -2 * DAY_MS),
+				nextUpdate: shift(at, -DAY_MS),
+				crlNumber: 10,
+				revokesLeaf: true,
+				reasonCode,
+			});
+			const checked = await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: expired,
+				at,
+			});
+			expect(checked.ok ? checked.value.status : checked.code).toBe(expected);
+			const single = await checkCertificateRevocation({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				evidence: [{ kind: 'crl', crl: expired }],
+				at,
+			});
+			expect(single).toMatchObject({
+				ok: true,
+				value: { status: expected === 'revoked' ? 'revoked' : 'indeterminate' },
+			});
+			const status = await leafRevocation(chain, [expired], at);
+			expect(status?.status).toBe(expected === 'revoked' ? 'revoked' : 'indeterminate');
+		},
+	);
 
 	it.each([
 		{ reasonCode: 'keyCompromise', direct: 'revoked', chain: 'revoked' },

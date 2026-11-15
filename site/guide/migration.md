@@ -206,15 +206,16 @@ or `policy.crlSignerSelfEvidence: 'any'`.
 or delegated OCSP responder whose path carries a listed key yields no
 evidence.
 
-## Expect revocations from delta CRLs past `nextUpdate`
+## Expect revocations from CRLs past `nextUpdate`
 
-A delta CRL past its `nextUpdate`, or without one, still revokes an unexpired
-certificate it lists with a reason other than `certificateHold` or
-`removeFromCRL` ([RFC 5280
-§5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)). A clean
-current base CRL beside such a delta CRL now yields `revoked` in chain
-revocation, `checkCertificateRevocation` and
-`checkCertificateRevocationAgainstCrl`.
+A CRL past its `nextUpdate`, older than the age bound, or without
+`nextUpdate` and an age bound still revokes an unexpired certificate it lists
+with a reason other than `certificateHold` or `removeFromCRL` ([RFC 5280
+§5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)). This
+holds for complete and delta CRLs. Such a CRL now yields `revoked` instead of
+`stale_crl` in chain revocation, `checkCertificateRevocation`,
+`checkCertificateRevocationAgainstCrl` and delegated responder checks. A clean
+current base CRL beside such a delta CRL also yields `revoked`.
 
 ## Set an age policy for CRLs without `nextUpdate`
 

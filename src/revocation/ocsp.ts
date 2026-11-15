@@ -488,9 +488,10 @@ export interface ValidateOcspResponseInput {
 	readonly responderRevocationCrls?: readonly CrlSource[];
 	/**
 	 * Maximum age of each `responderRevocationCrls` entry's `thisUpdate` at
-	 * `at`, in milliseconds. An older CRL yields no evidence. Unbounded by
-	 * default, in which case a CRL without `nextUpdate` yields no evidence.
-	 * Throws `RangeError` when negative or not finite.
+	 * `at`, in milliseconds. An older CRL, or one without `nextUpdate` when
+	 * this is unset, settles only a revocation other than certificateHold of
+	 * the responder (RFC 5280 §5.3.1). Unbounded by default. Throws
+	 * `RangeError` when negative or not finite.
 	 */
 	readonly responderRevocationCrlMaxAgeMs?: number;
 	/**

@@ -244,6 +244,13 @@ async function scenario() {
 						).der,
 				),
 			),
+		newerCleanDelta: () =>
+			crl({
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber: 7,
+				baseCrlNumber: 5,
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+			}),
 		revokingDelta: (baseCrlNumber = 5, crlNumber = 6) =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -310,6 +317,10 @@ const HELPER_DELTAS = {
 	'expired revoking': async (s: Scenario) => [(await s.expiredDelta('keyCompromise')).der],
 	'expired holding': async (s: Scenario) => [(await s.expiredDelta('certificateHold')).der],
 	'six expired clean': (s: Scenario) => s.expiredCleanDeltas(6),
+	'newer current clean and older expired revoking': async (s: Scenario) => [
+		(await s.expiredDelta('keyCompromise')).der,
+		(await s.newerCleanDelta()).der,
+	],
 	'forged and expired revoking': async (s: Scenario) => [
 		...(await s.forgedDeltas(1)),
 		(await s.expiredDelta('keyCompromise')).der,
@@ -334,6 +345,7 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 		{ base: 'clean', deltas: 'forged and expired revoking', expected: 'revoked' },
 		{ base: 'clean', deltas: 'expired holding', expected: 'good' },
 		{ base: 'clean', deltas: 'six expired clean', expected: 'good' },
+		{ base: 'clean', deltas: 'newer current clean and older expired revoking', expected: 'good' },
 	] as const)(
 		'checks a $base base CRL with $deltas delta CRLs as $expected',
 		async ({ base, deltas, expected }) => {
@@ -1005,17 +1017,29 @@ describe('checkChainRevocation keeping a base CRL revocation beside delta CRLs i
 		).toEqual({ decision: 'deny', status: 'revoked', indeterminateReasons: undefined });
 	});
 
-	it('does not let unexamined delta CRLs stand in for an over-age base CRL', async () => {
-		const s = await scenario();
-		const crls = [(await s.base(true)).der, ...(await s.forgedDeltas(5))];
-		expect(
-			await leafStatus(s, crls, [s.ocspGood], 'soft-fail', { crlMaxAgeMs: 2 * HOUR_MS }),
-		).toEqual({
-			decision: 'allow',
-			status: 'indeterminate',
-			indeterminateReasons: ['delta_crl_retry_limit_exceeded'],
-		});
-	});
+	it.each([
+		{
+			revokes: false,
+			expected: {
+				decision: 'allow',
+				status: 'indeterminate',
+				indeterminateReasons: ['delta_crl_retry_limit_exceeded'],
+			},
+		},
+		{
+			revokes: true,
+			expected: { decision: 'deny', status: 'revoked', indeterminateReasons: undefined },
+		},
+	] as const)(
+		'does not let unexamined delta CRLs stand in for an over-age base CRL (base revokes $revokes)',
+		async ({ revokes, expected }) => {
+			const s = await scenario();
+			const crls = [(await s.base(revokes)).der, ...(await s.forgedDeltas(5))];
+			expect(
+				await leafStatus(s, crls, [s.ocspGood], 'soft-fail', { crlMaxAgeMs: 2 * HOUR_MS }),
+			).toEqual(expected);
+		},
+	);
 });
 
 describe('checkChainRevocation delta CRL attempt limits and evidence that cannot matter', () => {
