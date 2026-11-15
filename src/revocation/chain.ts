@@ -802,20 +802,16 @@ async function validateCrlSigner(
 		return 'resolved-valid';
 	}
 
-	if (revocationSkipReason(signer) !== undefined) {
-		ctx.cache.set(key, 'resolved-valid');
-		return 'resolved-valid';
-	}
-
-	// Signer is not in chain — need to check its revocation status against
-	// the issuer its validated path gives it
 	const signerIssuer = ctx.pathIssuers.get(key);
 	if (signerIssuer === undefined) {
 		ctx.cache.set(key, 'resolved-indeterminate');
 		return 'resolved-indeterminate';
 	}
 
-	const signerRevocation = await checkSignerRevocation(signer, signerIssuer, ctx);
+	const signerRevocation =
+		revocationSkipReason(signer) === undefined
+			? await checkSignerRevocation(signer, signerIssuer, ctx)
+			: 'resolved-valid';
 	const status =
 		signerRevocation === 'resolved-valid'
 			? statusBelow(await validateCrlSigner(signerIssuer, ctx))
@@ -825,9 +821,10 @@ async function validateCrlSigner(
 }
 
 /**
- * A good signer's status once its issuer's is known: RFC 5280 §6.3.3 (f)
- * validates the whole path of a CRL issuer, so an issuer that is not known
- * good leaves the signer indeterminate.
+ * A good or exempt signer's status once its issuer's is known: RFC 5280
+ * §6.3.3 (f) validates the whole path of a CRL issuer, so an issuer that is
+ * not known good leaves the signer indeterminate. RFC 9608 §4 exempts only the
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck.
  */
 function statusBelow(issuerStatus: SignerValidationState): SignerValidationState {
 	return issuerStatus === 'resolved-valid' ? 'resolved-valid' : 'resolved-indeterminate';

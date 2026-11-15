@@ -704,12 +704,14 @@ describe('checkChainRevocation', () => {
 	});
 
 	it.each([
-		{ exemption: 'none', status: 'indeterminate' },
-		{ exemption: 'noRevAvail', status: 'good' },
-		{ exemption: 'nocheck', status: 'good' },
+		{ exemption: 'none', signerCa: 'good', status: 'indeterminate' },
+		{ exemption: 'noRevAvail', signerCa: 'good', status: 'good' },
+		{ exemption: 'nocheck', signerCa: 'good', status: 'good' },
+		{ exemption: 'noRevAvail', signerCa: 'revoked', status: 'indeterminate' },
+		{ exemption: 'nocheck', signerCa: 'revoked', status: 'indeterminate' },
 	] as const)(
-		'exempts a delegated CRL signer carrying $exemption from its own revocation check (RFC 9608 §4)',
-		async ({ exemption, status }) => {
+		'exempts a delegated CRL signer carrying $exemption from its own revocation check, not its $signerCa CA (RFC 9608 §4)',
+		async ({ exemption, signerCa: signerCaStatus, status }) => {
 			const at = new Date(Date.now() + 5_000);
 			const root = await createSelfSignedCertificate({
 				subject: { commonName: 'Exempt Signer Root' },
@@ -765,13 +767,33 @@ describe('checkChainRevocation', () => {
 				thisUpdate: new Date(at.getTime() - HOUR_MS),
 				nextUpdate: new Date(at.getTime() + HOUR_MS),
 			});
+			const rootCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Exempt Signer Root' },
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+				nextUpdate: new Date(at.getTime() + HOUR_MS),
+				...(signerCaStatus === 'revoked'
+					? {
+							revokedCertificates: [
+								{
+									serialNumber: hexToBytes(
+										unwrap(parseCertificatePem(signerCa.certificate.pem)).serialNumberHex,
+									),
+									reasonCode: 'cACompromise' as const,
+								},
+							],
+						}
+					: {}),
+			});
 			const result = await checkChainRevocation({
 				chain: [
 					unwrap(parseCertificatePem(leaf.pem)),
 					unwrap(parseCertificatePem(intermediate.certificate.pem)),
 					unwrap(parseCertificatePem(root.certificate.pem)),
 				],
-				crls: [leafCrl.der],
+				crls: [leafCrl.der, rootCrl.der],
 				extraCertificates: [signer.pem, signerCa.certificate.pem],
 				at,
 				policy: { mode: 'soft-fail' },
