@@ -433,6 +433,13 @@ Focused [RFC 9525][rfc9525] identity fixtures live in [`test/identity-fixtures.t
   - [x] Add positive and negative fixtures for locally authorized signer scope.
 - [x] Accept it if the signer is the issuing CA certificate itself.
 - [x] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
+  - [x] With `allowChainedResponderCertificate`, check every CA certificate
+        between that CA and the responder under the same
+        `responderRevocationPolicy` as the responder. Under the default policy
+        each one needs CRL evidence from its own issuer.
+  - [x] Apply the chain's `distrustedSpkiSha256` to the delegated
+        responder's path in `checkChainRevocation` and
+        `verifyCertificateChain({ revocation })`.
 - [x] Reject the response if the signer certificate meets none of those conditions.
 - [x] Decide and document responder-certificate revocation policy ([RFC 6960 §4.2.2.2.1][rfc6960-section-4.2.2.2.1]).
   - [x] Parse and expose `id-pkix-ocsp-nocheck` (`hasOcspNoCheckExtension()`).
@@ -453,6 +460,12 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       and reject a certificate pairing
       `noRevAvail` with cA TRUE, cRLDistributionPoints, freshestCRL or an
       `id-ad-ocsp` authorityInfoAccess entry ([RFC 9608 §3][rfc9608-section-3], [§4][rfc9608-section-4]).
+- [x] Require revocation evidence for a delegated CRL signer outside the
+      chain: CRLs from its own issuer must cover every reason, also when that
+      issuer is a chain certificate or the trust anchor ([RFC 5280 §6.3.3][rfc5280-section-6.3.3]
+      step (f) validates the CRL issuer's path, revocation included). A
+      revocation in a CRL from a signer whose own status stays indeterminate
+      still counts. Its path also honours the chain's `distrustedSpkiSha256`.
 - [x] Require keyUsage with `cRLSign` on a v3 CRL issuer certificate, and skip
       the check for v1 and v2 issuers ([RFC 10007 §4][rfc10007-section-4], updating [RFC 5280 §6.3.3][rfc5280-section-6.3.3]
       step (f)).
@@ -493,15 +506,23 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
-      Chain evaluation uses only a current delta CRL whose CRL number exceeds
-      the base CRL's ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), and it tries candidates from the
-      latest `thisUpdate` down ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). A candidate that fails
+      Chain evaluation updates a base CRL with a current delta CRL whose CRL
+      number exceeds the base CRL's ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), and it tries candidates
+      from the latest `thisUpdate` down ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). After the current
+      candidates it reads delta CRLs issued by the evaluation time that are no
+      longer current or carry no `nextUpdate`. Such a delta CRL settles only
+      a revocation with a reason other than `certificateHold` of a certificate
+      that has not expired, which every later CRL must keep listing ([RFC 5280
+      §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is
+      micro509 policy. `checkCertificateRevocationAgainstCrl` applies it to
+      its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
       and the base CRL is evaluated alone once every candidate is skipped. A
       candidate that passes those checks is used, and when its revoked entries
       cannot settle the certificate's status the result is indeterminate with
       `delta_crl_unusable`. At most four candidates are checked per base CRL
-      and 32 per `checkChainRevocation` call. A base CRL that does not cover
+      and 32 per `checkChainRevocation` call, the checks for CRL signers and
+      delegated OCSP responders included. A base CRL that does not cover
       the certificate spends none, and repeated copies of one base or delta
       CRL count once. Pre-parsed CRLs are read from their `der`. A candidate
       left unchecked makes the result indeterminate with

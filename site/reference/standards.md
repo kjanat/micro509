@@ -49,7 +49,8 @@ outline: [2, 3]
   locally trusted responders per [RFC 6960 §4.2.2.2][rfc6960-section-4.2.2.2] criterion 1)
 - Delegated responder revocation policy: `id-pkix-ocsp-nocheck`
   (`hasOcspNoCheckExtension()`) and `noRevAvail` exemptions, `nocheck-or-evidence` (default) / `honor-nocheck` / `require-evidence` /
-  `skip` knobs with CRL evidence
+  `skip` knobs with CRL evidence, applied also to each CA certificate between
+  the issuer and a chained responder (`allowChainedResponderCertificate`)
 - Historical-time responder chain validation (`at` flows through delegated
   chain checks)
 - Nonce matching
@@ -72,7 +73,12 @@ outline: [2, 3]
 
 - Delta CRL merge using only a current delta whose CRL number exceeds its
   base's and preferring the latest `thisUpdate` ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), with a
-  `thisUpdate` no earlier than the base's (X.509 Annex E.5.2)
+  `thisUpdate` no earlier than the base's (X.509 Annex E.5.2). A delta CRL past
+  its `nextUpdate` still settles a revocation other than `certificateHold` of
+  an unexpired certificate ([RFC 5280 §5.3.1][rfc5280-section-5.3.1])
+- A delegated CRL signer outside the chain needs CRL evidence from its own
+  issuer, and `checkChainRevocation` applies `distrustedSpkiSha256` to the
+  paths of CRL signers and delegated OCSP responders
 - Generated CRLs always carry `nextUpdate` ([RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5])
 - Received CRLs without `nextUpdate` stay usable unless `maxAgeMs` /
   `crlMaxAgeMs` bounds the age of `thisUpdate` ([RFC 5280 §3.3][rfc5280-section-3.3] local policy);
@@ -133,6 +139,7 @@ For the authoritative scope boundary, see
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
 [rfc5280-section-5.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.4
+[rfc5280-section-5.3.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1
 [rfc5652]: https://www.rfc-editor.org/rfc/rfc5652.html
 [rfc5891]: https://www.rfc-editor.org/rfc/rfc5891.html
 [rfc5895]: https://www.rfc-editor.org/rfc/rfc5895.html
