@@ -1019,6 +1019,130 @@ describe('checkChainRevocation', () => {
 		},
 	);
 
+	it.each([
+		{ rogue: false, status: 'indeterminate' },
+		{ rogue: true, status: 'indeterminate' },
+	] as const)(
+		"checks a CRL signer against its validated issuer's CRLs (rogue same-name issuer $rogue)",
+		async ({ rogue, status }) => {
+			const at = new Date(Date.now() + 5_000);
+			const pointName = (name: string) => ({
+				type: 'fullName' as const,
+				fullName: [{ type: 'uri' as const, value: `http://example.test/${name}.crl` }],
+			});
+			const caExtensions = {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			} as const;
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Signer Issuer Root' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 1 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const underRoot = async (commonName: string, signerPrivateKey: CryptoKey) => {
+				const keys = await generateKeyPair();
+				const der = (
+					await createCertificate({
+						issuer: { commonName: 'Signer Issuer Root' },
+						subject: { commonName },
+						publicKey: keys.publicKey,
+						signerPrivateKey,
+						issuerCertificate: root.certificate.der,
+						extensions: caExtensions,
+					})
+				).der;
+				return { keys, der };
+			};
+			const intermediate = await underRoot('Signer Issuer Intermediate', root.keyPair.privateKey);
+			const signerCa = await underRoot('Signer Issuer CRL CA', root.keyPair.privateKey);
+			const attacker = await generateKeyPair();
+			const rogueCa = await underRoot('Signer Issuer CRL CA', attacker.privateKey);
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'Signer Issuer CRL CA' },
+				subject: { commonName: 'Signer Issuer Intermediate' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: signerCa.keys.privateKey,
+				issuerCertificate: signerCa.der,
+				extensions: {
+					keyUsage: ['cRLSign'],
+					crlDistributionPoints: [{ distributionPoint: pointName('signer') }],
+				},
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Signer Issuer Intermediate' },
+				subject: { commonName: 'signer-issuer-leaf' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: intermediate.keys.privateKey,
+				issuerCertificate: intermediate.der,
+				extensions: {
+					keyUsage: ['digitalSignature'],
+					crlDistributionPoints: [{ distributionPoint: pointName('leaf') }],
+				},
+			});
+			const window = {
+				thisUpdate: new Date(at.getTime() - HOUR_MS),
+				nextUpdate: new Date(at.getTime() + HOUR_MS),
+			};
+			const leafCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Signer Issuer Intermediate' },
+				signerPrivateKey: signerKeys.privateKey,
+				issuerCertificate: signer.der,
+				issuingDistributionPoint: { distributionPoint: pointName('leaf') },
+				...window,
+			});
+			const signerCaCrl = (
+				signerPrivateKey: CryptoKey,
+				issuerCertificate: Uint8Array,
+				revokes: boolean,
+			) =>
+				createCertificateRevocationList({
+					crlNumber: 1,
+					issuer: { commonName: 'Signer Issuer CRL CA' },
+					signerPrivateKey,
+					issuerCertificate,
+					issuingDistributionPoint: { distributionPoint: pointName('signer') },
+					...window,
+					...(revokes
+						? {
+								revokedCertificates: [
+									{
+										serialNumber: hexToBytes(
+											unwrap(parseCertificatePem(signer.pem)).serialNumberHex,
+										),
+										reasonCode: 'keyCompromise' as const,
+									},
+								],
+							}
+						: {}),
+				});
+			const revoking = await signerCaCrl(signerCa.keys.privateKey, signerCa.der, true);
+			const forged = await signerCaCrl(attacker.privateKey, rogueCa.der, false);
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificateDer(intermediate.der)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls: [leafCrl.der, revoking.der, ...(rogue ? [forged.der] : [])],
+				extraCertificates: [...(rogue ? [rogueCa.der] : []), signerCa.der, signer.pem],
+				at,
+				policy: { mode: 'soft-fail' },
+			});
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.value.certificates[0]?.status).toBe(status);
+			expect(result.value.certificates[0]?.indeterminateReasons).toEqual([
+				'no_applicable_ocsp',
+				'crl_signer_revoked',
+			]);
+		},
+	);
+
 	it('tries a later authorized signer when an earlier same-key candidate is unusable', async () => {
 		const at = new Date(Date.now() + 5_000);
 		const root = await createSelfSignedCertificate({

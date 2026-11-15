@@ -589,13 +589,20 @@ async function crlSignerChainsToAnchor(
 }
 
 /**
- * Remembers the working key that a signer's validated path gives each of its
- * certificates outside the checked chain (RFC 5280 §6.1.4 (e)).
+ * Remembers the working key (RFC 5280 §6.1.4 (e)) and the issuer that a
+ * signer's validated path gives each of its certificates outside the checked
+ * chain.
  */
 function recordPathKeys(path: CandidatePath, ctx: SignerValidationContext): void {
 	path.chain.forEach((certificate, index) => {
-		if (!ctx.chain.some((member) => sameCertificate(member, certificate))) {
-			ctx.pathKeys.set(certCacheKey(certificate), pathWorkingKey(path, index));
+		if (ctx.chain.some((member) => sameCertificate(member, certificate))) return;
+		const key = certCacheKey(certificate);
+		ctx.pathKeys.set(key, pathWorkingKey(path, index));
+		const issuer = path.chain[index + 1];
+		if (issuer !== undefined) {
+			ctx.pathIssuers.set(key, issuerOf(issuer, ctx.trustAnchor));
+		} else if (!path.anchorCertificateInChain) {
+			ctx.pathIssuers.set(key, { kind: 'trust_anchor', trustAnchor: path.trustAnchor });
 		}
 	});
 }
@@ -666,6 +673,8 @@ interface SignerValidationContext {
 	readonly workingKeyOf: (certificate: ParsedCertificate) => WorkingPublicKey;
 	/** Working keys of signers outside the chain, from their validated paths. */
 	readonly pathKeys: Map<string, WorkingPublicKey>;
+	/** Issuers of signers outside the chain, from their validated paths. */
+	readonly pathIssuers: Map<string, RevocationIssuer>;
 	/** The bare trust anchor above the chain, when it ends below one. */
 	readonly trustAnchor: TrustAnchor | undefined;
 }
@@ -708,12 +717,9 @@ function chainWorkingKeys(
 	};
 }
 
-/**
- * Builds a unique cache key for a certificate.
- * Uses issuer DN + serial number which uniquely identifies a cert.
- */
+/** A cache key for a certificate: its DER, so two certificates never share one. */
 function certCacheKey(cert: ParsedCertificate): string {
-	return `${cert.issuer.derHex}:${cert.serialNumberHex}`;
+	return toHex(cert.der);
 }
 
 /**
@@ -728,7 +734,6 @@ async function validateCrlSigner(
 		return 'resolved-valid';
 	}
 	const signer = candidate.certificate;
-	// Use issuer+serial as cache key (unique per certificate)
 	const key = certCacheKey(signer);
 	const cached = ctx.cache.get(key);
 
@@ -758,9 +763,9 @@ async function validateCrlSigner(
 		return 'resolved-valid';
 	}
 
-	// Signer is not in chain — need to check its revocation status
-	// Find signer's issuer to perform revocation check
-	const signerIssuer = findSignerIssuer(signer, ctx);
+	// Signer is not in chain — need to check its revocation status against
+	// the issuer its validated path gives it
+	const signerIssuer = ctx.pathIssuers.get(key);
 	if (signerIssuer === undefined) {
 		ctx.cache.set(key, 'resolved-indeterminate');
 		return 'resolved-indeterminate';
@@ -770,47 +775,6 @@ async function validateCrlSigner(
 	const signerRevocation = await checkSignerRevocation(signer, signerIssuer, ctx);
 	ctx.cache.set(key, signerRevocation);
 	return signerRevocation;
-}
-
-/**
- * Finds the issuer certificate for a CRL signer.
- * Searches the chain and extraCertificates by AKI/SKI or DN matching.
- */
-function findSignerIssuer(
-	signer: ParsedCertificate,
-	ctx: SignerValidationContext,
-): RevocationIssuer | undefined {
-	// Parse extra certificates
-	const parsedExtras: ParsedCertificate[] = [];
-	for (const source of ctx.extraCertificates) {
-		const parsed = parseCertificateSafe(source);
-		if (parsed !== undefined) {
-			parsedExtras.push(parsed);
-		}
-	}
-
-	const candidates = [...ctx.chain, ...parsedExtras];
-
-	for (const candidate of candidates) {
-		// Match by AKI → SKI (preferred, more specific)
-		if (
-			signer.authorityKeyIdentifier !== undefined &&
-			candidate.subjectKeyIdentifier !== undefined &&
-			normalizeHex(signer.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
-		) {
-			return issuerOf(candidate, ctx.trustAnchor);
-		}
-
-		// Match by issuer DN → subject DN
-		if (signer.issuer.derHex === candidate.subject.derHex) {
-			return issuerOf(candidate, ctx.trustAnchor);
-		}
-	}
-
-	const anchor = ctx.trustAnchor;
-	return anchor !== undefined && compareDistinguishedNames(signer.issuer, anchor.subject)
-		? { kind: 'trust_anchor', trustAnchor: anchor }
-		: undefined;
 }
 
 /**
@@ -2010,6 +1974,7 @@ export async function checkChainRevocation(
 		workingKeyOf: (certificate) =>
 			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
 		pathKeys,
+		pathIssuers: new Map(),
 		trustAnchor: input.trustAnchor,
 	};
 	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
