@@ -1302,7 +1302,7 @@ describe('ocsp', () => {
 		});
 		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePemOrThrow(response.pem);
 		const result = await verifyOcspResponseSignature(parsedWithoutDer, issuer.certificate.pem);
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('verifyOcspResponseSignature fails closed for malformed signer certificate input', async () => {
@@ -1325,7 +1325,7 @@ describe('ocsp', () => {
 			],
 		});
 		const result = await verifyOcspResponseSignature(response.der, Uint8Array.of(0xff, 0xff));
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse ignores tampered signed content fields on pre-parsed response input', async () => {
@@ -1389,7 +1389,7 @@ describe('ocsp', () => {
 			response: parsedWithoutDer,
 			issuerCertificate: issuer.certificate.pem,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for malformed issuer certificate input', async () => {
@@ -1415,7 +1415,7 @@ describe('ocsp', () => {
 			response: response.der,
 			issuerCertificate: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for malformed responder certificate input', async () => {
@@ -1442,7 +1442,7 @@ describe('ocsp', () => {
 			issuerCertificate: issuer.certificate.pem,
 			responderCertificate: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for malformed request input', async () => {
@@ -1469,7 +1469,7 @@ describe('ocsp', () => {
 			issuerCertificate: issuer.certificate.pem,
 			request: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for unsupported CertID hash algorithms', async () => {
@@ -2235,7 +2235,7 @@ describe('ocsp', () => {
 			issuerCertificate: issuer.certificate.pem,
 			request: parsedRequestWithoutDer,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for duplicate OCSP response CertIDs', async () => {
@@ -2269,7 +2269,7 @@ describe('ocsp', () => {
 			response: duplicateFirstOcspSingleResponse(response.der),
 			issuerCertificate: issuer.certificate.pem,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse rejects multiple status entries for the same certificate across hash algorithms', async () => {

@@ -79,12 +79,7 @@ import {
 	workingParametersAt,
 } from '#micro509/internal/verify/verify-path';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type {
-	DecodeFailureCode,
-	DecodeRefusalCode,
-	ErrorResult,
-	Micro509Error,
-} from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
@@ -403,7 +398,7 @@ export interface OcspResponseMaterial {
  * decode (see {@linkcode ParseOcspResponseErrorCode}).
  */
 export interface VerifyOcspResponseSignatureFailure
-	extends Micro509Error<'signature_invalid' | DecodeRefusalCode> {
+	extends Micro509Error<'signature_invalid' | DecodeFailureCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -420,7 +415,7 @@ export type VerifyOcspResponseSignatureResult =
 			readonly value: ParsedOcspResponse;
 	  }
 	| ErrorResult<
-			'signature_invalid' | DecodeRefusalCode,
+			'signature_invalid' | DecodeFailureCode,
 			Record<never, never>,
 			VerifyOcspResponseSignatureFailure
 	  >;
@@ -549,7 +544,7 @@ export type ValidateOcspResponseErrorCode =
 	| 'responder_revoked'
 	| 'responder_revocation_unknown'
 	| 'stale_response'
-	| DecodeRefusalCode;
+	| DecodeFailureCode;
 
 /**
  * Failure detail for {@linkcode validateOcspResponse}.
@@ -1112,10 +1107,7 @@ async function verifyOcspResponseSignatureWith(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? verifyOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP response signed content is malformed',
-				)
+			? verifyOcspResponseFailureResult('malformed', 'OCSP response signed content is malformed')
 			: verifyOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	if (
@@ -1131,10 +1123,7 @@ async function verifyOcspResponseSignatureWith(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? verifyOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP signer certificate input is malformed',
-				)
+			? verifyOcspResponseFailureResult('malformed', 'OCSP signer certificate input is malformed')
 			: verifyOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	return await verifyOcspResponseSignatureByKey(parsed, signer, verification);
@@ -1259,10 +1248,7 @@ export async function validateOcspResponseBy(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? validateOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP response signed content is malformed',
-				)
+			? validateOcspResponseFailureResult('malformed', 'OCSP response signed content is malformed')
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	if (parsedResponse.responseStatus !== 'successful') {
@@ -1339,10 +1325,7 @@ async function normalizeOcspValidationInput(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? validateOcspResponseFailureResult(
-					'signature_invalid',
-					'issuer certificate input is malformed',
-				)
+			? validateOcspResponseFailureResult('malformed', 'issuer certificate input is malformed')
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	try {
@@ -1367,7 +1350,7 @@ async function normalizeOcspValidationInput(
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? validateOcspResponseFailureResult(
-					'signature_invalid',
+					'malformed',
 					'OCSP responder certificate input is malformed',
 				)
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
@@ -1518,7 +1501,7 @@ async function safeValidateOcspResponderIdBinding(
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? validateOcspResponseFailureResult(
-					'signature_invalid',
+					'malformed',
 					'OCSP responder certificate input is malformed',
 				)
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
@@ -1739,7 +1722,7 @@ function validateOcspRequestCoverage(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? validateOcspResponseFailureResult('request_mismatch', 'OCSP request input is malformed')
+			? validateOcspResponseFailureResult('malformed', 'OCSP request input is malformed')
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
@@ -1781,10 +1764,10 @@ function validateOcspRequestIdCoverage(
 
 /** Builds a `VerifyOcspResponseSignatureFailureResult`. */
 function verifyOcspResponseFailureResult(
-	code: 'signature_invalid' | DecodeRefusalCode,
+	code: 'signature_invalid' | DecodeFailureCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid' | DecodeRefusalCode,
+	'signature_invalid' | DecodeFailureCode,
 	Record<never, never>,
 	VerifyOcspResponseSignatureFailure
 > {

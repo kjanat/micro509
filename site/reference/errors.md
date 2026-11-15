@@ -229,6 +229,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `issuer_mismatch`              | CertID does not hash to the supplied issuer                                                                 |
 | `limit_exceeded`               | A response, request or certificate exceeds a micro509 decoding limit, see `ParseOcspResponseErrorCode`      |
+| `malformed`                    | A response, request or certificate does not decode                                                          |
 | `next_update_missing`          | A response omits `nextUpdate` under `profile: 'rfc9919'` ([RFC 9919 §5][rfc9919-section-5])                 |
 | `nonce_mismatch`               | Response nonce differs from the request's                                                                   |
 | `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                                                             |
