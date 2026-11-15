@@ -2234,4 +2234,18 @@ describe('checkChainRevocation below a bare trust anchor (RFC 5280 §6.1.3 (a)(3
 			RangeError,
 		);
 	});
+
+	it('leaves a self-signed leaf that is the anchor certificate out of revocation', async () => {
+		const { trustAnchor, root, at } = await createBareAnchorFixture();
+		expect(
+			await verifyCertificateChain({
+				leaf: root.certificate.der,
+				roots: [],
+				trustAnchors: [trustAnchor],
+				allowSelfSignedLeaf: true,
+				at,
+				revocation: { policy: { mode: 'hard-fail' } },
+			}),
+		).toMatchObject({ ok: true, value: { anchorCertificateInChain: false, trustAnchor } });
+	});
 });

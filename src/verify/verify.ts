@@ -49,6 +49,7 @@ import {
 	assertPathBuildingChecks,
 	authorityKeyIdentifierMismatch,
 	buildChainInternal,
+	carriesTrustAnchorKey,
 	certificateWorkingKey,
 	countCaCertificatesBelowParsed,
 	isSelfIssued,
@@ -1433,13 +1434,24 @@ function chainBuildInput(
 	};
 }
 
+/**
+ * The bare anchor that issued the last certificate of `path`. A path that ends
+ * with the anchor's own certificate has none: that certificate is the anchor,
+ * which revocation checking leaves out.
+ */
+function revocationTrustAnchor(path: CandidatePath): TrustAnchor | undefined {
+	const top = path.chain[path.chain.length - 1];
+	if (path.trustAnchor === undefined || top === undefined) return undefined;
+	return carriesTrustAnchorKey(top, path.trustAnchor) ? undefined : path.trustAnchor;
+}
+
 /** Applies optional revocation evidence to an otherwise verified certificate chain. */
 async function validateVerifiedChainRevocation(
 	input: VerifyCertificateChainInput,
 	path: CandidatePath,
 ): Promise<VerifyChainResult | undefined> {
 	if (input.revocation === undefined) return undefined;
-	const trustAnchor = path.trustAnchor;
+	const trustAnchor = revocationTrustAnchor(path);
 	const revocationResult = await checkChainRevocation({
 		chain: path.chain,
 		...(trustAnchor !== undefined && { trustAnchor }),
