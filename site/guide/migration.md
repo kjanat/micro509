@@ -196,6 +196,11 @@ the certificates its CRLs cover, and only a revocation in those CRLs counts.
 Add the issuer's CRL to `crls`, or issue the signer certificate with
 `noRevAvail` or `id-pkix-ocsp-nocheck`.
 
+A CRL the signer signed itself proves its own status only when the signer's
+cRLDistributionPoints names it as cRLIssuer. A signer that shares its CA's
+name and signs the CA's CRLs with a separate key needs a CRL from the CA key,
+or `policy.crlSignerSelfEvidence: 'any'`.
+
 `checkChainRevocation` accepts `distrustedSpkiSha256`, and
 `verifyCertificateChain({ revocation })` passes its own list on. A CRL signer
 or delegated OCSP responder whose path carries a listed key yields no

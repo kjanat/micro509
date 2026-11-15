@@ -162,6 +162,19 @@ export interface RevocationPolicy {
 	 * other evidence. Defaults to `'revoked'`.
 	 */
 	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Whether a CRL that a delegated CRL signer signed may establish that
+	 * signer's own status. RFC 5280 §6.3.3 (f) and X.509 (2019) §9.1.5 leave
+	 * it open.
+	 *
+	 * - `'delegated'`: only when the signer's cRLDistributionPoints names the
+	 *   signer as cRLIssuer, the delegation PKITS 4.14.30 validates (default)
+	 * - `'any'`: any such CRL that covers the signer, such as one under its
+	 *   issuer's name signed with the signer's separate CRL key
+	 *
+	 * A revocation of the signer in such a CRL counts under either value.
+	 */
+	readonly crlSignerSelfEvidence?: 'delegated' | 'any';
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -692,6 +705,7 @@ interface SignerValidationContext {
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
+	readonly crlSignerSelfEvidence: NonNullable<RevocationPolicy['crlSignerSelfEvidence']>;
 	readonly signatureVerifiers: SignatureVerifiers | undefined;
 	readonly distrustedSpkiSha256: readonly string[] | undefined;
 	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
@@ -902,7 +916,7 @@ async function checkSignerAgainstCrlAuthorities(
  * Evaluates one CRL against a signer. A CRL that does not parse or does not
  * apply yields no evidence. Its `good` needs a CRL signer known good, and its
  * revocation one not known revoked. A CRL the signer itself signed vouches
- * for it, as an indirect CRL may cover its own issuer.
+ * for it as `crlSignerSelfEvidence` allows.
  */
 async function checkSignerAgainstCrl(
 	signer: ParsedCertificate,
@@ -935,6 +949,9 @@ async function checkSignerAgainstCrl(
 			: SIGNER_CRL_NO_EVIDENCE;
 	}
 	const selfSigned = issuer.kind === 'certificate' && sameCertificate(issuer.certificate, signer);
+	if (selfSigned && ctx.crlSignerSelfEvidence === 'delegated' && !delegatesOwnStatus(signer)) {
+		return result.value.status === 'revoked' ? { kind: 'revoked' } : SIGNER_CRL_NO_EVIDENCE;
+	}
 	const issuerStatus = selfSigned ? 'resolved-valid' : await validateCrlSigner(issuer, ctx);
 	if (result.value.status === 'revoked') {
 		return issuerStatus === 'resolved-revoked' ? SIGNER_CRL_NO_EVIDENCE : { kind: 'revoked' };
@@ -942,6 +959,17 @@ async function checkSignerAgainstCrl(
 	return issuerStatus === 'resolved-valid'
 		? { kind: 'reasons', reasons: result.value.coveredReasons }
 		: SIGNER_CRL_NO_EVIDENCE;
+}
+
+/** Whether `signer`'s cRLDistributionPoints names `signer` itself as cRLIssuer. */
+function delegatesOwnStatus(signer: ParsedCertificate): boolean {
+	const subject = signer.subject.derHex.toLowerCase();
+	return (signer.crlDistributionPoints ?? []).some(
+		(point) =>
+			point.crlIssuer?.some(
+				(name) => name.type === 'directoryName' && name.derHex.toLowerCase() === subject,
+			) === true,
+	);
 }
 
 /** Builds the `revoked` CertificateRevocationStatus for a CRL hit. */
@@ -2029,6 +2057,7 @@ function signerValidationContext(
 		crlMaxAgeMs: policy?.crlMaxAgeMs,
 		clockSkewMs: policy?.clockSkewMs,
 		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
+		crlSignerSelfEvidence: policy?.crlSignerSelfEvidence ?? 'delegated',
 		signatureVerifiers: input.signatureVerifiers,
 		distrustedSpkiSha256:
 			input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256],

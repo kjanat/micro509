@@ -155,7 +155,9 @@ fails with `stale_crl`, and the chain reports it as `crl_expired`.
 
 A delegated CRL signer outside the chain needs CRLs from its own issuer that
 cover every reason before its CRLs can report a certificate `good`, unless it
-carries `noRevAvail` or `id-pkix-ocsp-nocheck`. The
+carries `noRevAvail` or `id-pkix-ocsp-nocheck`. A CRL the signer signed covers
+the signer itself only when its cRLDistributionPoints names it as cRLIssuer;
+`policy.crlSignerSelfEvidence: 'any'` accepts any such CRL. The
 chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
 delegated OCSP responders. In `checkCertificateRevocation`, the CRLs in
 `evidence`, delta CRLs included, also serve as revocation evidence for delegated OCSP responders,

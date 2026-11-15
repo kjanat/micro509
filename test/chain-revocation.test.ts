@@ -1425,6 +1425,146 @@ describe('checkChainRevocation with an indirect CRL issuer that a chain CA certi
 	);
 });
 
+describe('checkChainRevocation with a CRL signer that shares its CA name and signs its own CRL', () => {
+	it.each([
+		{
+			evidence: 'its own CRL',
+			option: undefined,
+			label: 'the default',
+			status: 'indeterminate',
+			reasons: ['no_applicable_ocsp', 'crl_signer_indeterminate'],
+		},
+		{
+			evidence: 'its own CRL',
+			option: 'delegated',
+			label: "'delegated'",
+			status: 'indeterminate',
+			reasons: ['no_applicable_ocsp', 'crl_signer_indeterminate'],
+		},
+		{ evidence: 'its own CRL', option: 'any', label: "'any'", status: 'good', reasons: undefined },
+		{
+			evidence: 'a CRL from the CA key',
+			option: undefined,
+			label: 'the default',
+			status: 'good',
+			reasons: undefined,
+		},
+		{
+			evidence: 'its own CRL listing it',
+			option: undefined,
+			label: 'the default',
+			status: 'indeterminate',
+			reasons: ['no_applicable_ocsp', 'crl_signer_revoked'],
+		},
+	] as const)(
+		'reads $evidence under $label crlSignerSelfEvidence as $status',
+		async ({ evidence, option, status, reasons }) => {
+			const at = new Date(Date.now() + 5_000);
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: 'Same Name Root' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 1 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const caKeys = await generateKeyPair();
+			const ca = await createCertificate({
+				issuer: { commonName: 'Same Name Root' },
+				subject: { commonName: 'Same Name CA' },
+				publicKey: caKeys.publicKey,
+				signerPrivateKey: root.keyPair.privateKey,
+				issuerCertificate: root.certificate.der,
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const signerKeys = await generateKeyPair();
+			const signer = await createCertificate({
+				issuer: { commonName: 'Same Name CA' },
+				subject: { commonName: 'Same Name CA' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: caKeys.privateKey,
+				issuerCertificate: ca.der,
+				extensions: { keyUsage: ['cRLSign'] },
+			});
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Same Name CA' },
+				subject: { commonName: 'same-name-leaf.example' },
+				publicKey: (await generateKeyPair()).publicKey,
+				signerPrivateKey: caKeys.privateKey,
+				issuerCertificate: ca.der,
+			});
+			const signerSerial = unwrap(parseCertificatePem(signer.pem)).serialNumberHex;
+			const crl = (
+				commonName: string,
+				privateKey: CryptoKey,
+				issuerCertificate: Uint8Array,
+				thisUpdate: Date,
+				revokedSerialHex?: string,
+			) =>
+				createCertificateRevocationList({
+					crlNumber: 1,
+					issuer: { commonName },
+					signerPrivateKey: privateKey,
+					issuerCertificate,
+					thisUpdate,
+					nextUpdate: new Date(at.getTime() + HOUR_MS),
+					...(revokedSerialHex === undefined
+						? {}
+						: {
+								revokedCertificates: [
+									{ serialNumber: hexToBytes(revokedSerialHex), reasonCode: 'keyCompromise' },
+								],
+							}),
+				});
+			const signerCrl = await crl(
+				'Same Name CA',
+				signerKeys.privateKey,
+				signer.der,
+				new Date(at.getTime() - HOUR_MS),
+				evidence === 'its own CRL listing it' ? signerSerial : undefined,
+			);
+			const rootCrl = await crl(
+				'Same Name Root',
+				root.keyPair.privateKey,
+				root.certificate.der,
+				new Date(at.getTime() - HOUR_MS),
+			);
+			const crls = [signerCrl.der, rootCrl.der];
+			if (evidence === 'a CRL from the CA key') {
+				crls.push(
+					(
+						await crl(
+							'Same Name CA',
+							caKeys.privateKey,
+							ca.der,
+							new Date(at.getTime() - 2 * HOUR_MS),
+						)
+					).der,
+				);
+			}
+			const result = await checkChainRevocation({
+				chain: [
+					unwrap(parseCertificatePem(leaf.pem)),
+					unwrap(parseCertificatePem(ca.pem)),
+					unwrap(parseCertificatePem(root.certificate.pem)),
+				],
+				crls,
+				extraCertificates: [signer.pem],
+				at,
+				...(option === undefined ? {} : { policy: { crlSignerSelfEvidence: option } }),
+			});
+			const leafStatus = result.value.certificates[0];
+			expect(leafStatus?.status).toBe(status);
+			expect(leafStatus?.indeterminateReasons).toEqual(reasons);
+			if (status === 'good') {
+				expect(leafStatus?.source?.signerCertificate?.serialNumberHex).toBe(signerSerial);
+			}
+		},
+	);
+});
+
 describe('checkChainRevocation with a CRL signer listed by another indirect CRL issuer', () => {
 	it.each([
 		{ authority: 'good', reasons: ['no_applicable_ocsp', 'crl_signer_revoked'] },

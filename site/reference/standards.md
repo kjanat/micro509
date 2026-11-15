@@ -77,8 +77,10 @@ outline: [2, 3]
   its `nextUpdate` still settles a revocation other than `certificateHold` or
   `removeFromCRL` of an unexpired certificate ([RFC 5280 §5.3.1][rfc5280-section-5.3.1])
 - A delegated CRL signer outside the chain needs CRL evidence from its own
-  issuer unless it carries `noRevAvail` or `id-pkix-ocsp-nocheck`, and `checkChainRevocation` applies `distrustedSpkiSha256` to the
-  paths of CRL signers and delegated OCSP responders
+  issuer unless it carries `noRevAvail` or `id-pkix-ocsp-nocheck`. A CRL the
+  signer signed counts as that evidence as `crlSignerSelfEvidence` allows
+- `checkChainRevocation` applies `distrustedSpkiSha256` to the paths of CRL
+  signers and delegated OCSP responders
 - Generated CRLs always carry `nextUpdate` ([RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5])
 - Received CRLs without `nextUpdate` stay usable unless `maxAgeMs` /
   `crlMaxAgeMs` bounds the age of `thisUpdate` ([RFC 5280 §3.3][rfc5280-section-3.3] local policy);

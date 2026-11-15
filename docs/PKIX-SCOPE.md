@@ -467,6 +467,12 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       step (f) validates the CRL issuer's path, revocation included). A
       revocation in a CRL from a signer whose own status stays indeterminate
       still counts. Its path also honours the chain's `distrustedSpkiSha256`.
+      A CRL the signer signed counts as evidence of its own status only as
+      `crlSignerSelfEvidence` allows: `'delegated'` (default) when the
+      signer's cRLDistributionPoints names it as cRLIssuer, as [PKITS](./rfc/pkits.txt)
+      4.14.30 requires, or `'any'`. [RFC 5280 §6.3.3][rfc5280-section-6.3.3] step (f) and X.509
+      (2019) §9.1.5 leave the choice open. A revocation of the signer in such a
+      CRL counts under either value.
 - [x] Require keyUsage with `cRLSign` on a v3 CRL issuer certificate, and skip
       the check for v1 and v2 issuers ([RFC 10007 §4][rfc10007-section-4], updating [RFC 5280 §6.3.3][rfc5280-section-6.3.3]
       step (f)).
