@@ -10,6 +10,7 @@
 
 import { toHex } from '#micro509/internal/asn1/asn1';
 import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import { readSequenceChildren, sequence } from '#micro509/internal/asn1/der';
 import type {
 	CallerVerification,
 	SignatureVerifier,
@@ -293,6 +294,29 @@ export function carriesTrustAnchorKey(
 	);
 }
 
+/**
+ * `anchor` with `parametersDer` in its SubjectPublicKeyInfo: the trust anchor
+ * information of RFC 5280 §6.1.1 (d) for a key whose path supplies its
+ * parameters (§6.1.4 (e)).
+ */
+export function withWorkingParameters(anchor: TrustAnchor, parametersDer: Uint8Array): TrustAnchor {
+	const spki = anchor.subjectPublicKeyInfoDer;
+	const [algorithm, subjectPublicKey] = readSequenceChildren(spki);
+	if (algorithm === undefined || subjectPublicKey === undefined) {
+		throw new Error('SubjectPublicKeyInfo lacks its algorithm or key');
+	}
+	const algorithmDer = spki.subarray(algorithm.start - algorithm.headerLength, algorithm.end);
+	const [oid] = readSequenceChildren(algorithmDer);
+	if (oid === undefined) throw new Error('AlgorithmIdentifier lacks its OID');
+	return {
+		...anchor,
+		subjectPublicKeyInfoDer: sequence([
+			sequence([algorithmDer.subarray(oid.start - oid.headerLength, oid.end), parametersDer]),
+			spki.subarray(subjectPublicKey.start - subjectPublicKey.headerLength, subjectPublicKey.end),
+		]),
+	};
+}
+
 /** The working key a certificate used as trust anchor initializes. */
 export function certificateWorkingKey(certificate: ParsedCertificate): WorkingPublicKey {
 	return {
@@ -535,9 +559,11 @@ export async function buildChainInternal(
 		path: readonly ParsedCertificate[],
 		pending: readonly number[],
 	): Promise<readonly ParsedCertificate[] | undefined | 'open'> {
-		if (rootFingerprints.has(fingerprint(current))) {
-			const start = certificateWorkingKey(current);
-			return (await verifyInheritedLinks(path, pending, start, path.length - 2)) ? path : 'open';
+		if (
+			rootFingerprints.has(fingerprint(current)) &&
+			(await verifyInheritedLinks(path, pending, certificateWorkingKey(current), path.length - 2))
+		) {
+			return path;
 		}
 		const matchedAnchor = await matchTrustAnchor(
 			current,

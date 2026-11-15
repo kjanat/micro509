@@ -74,6 +74,7 @@ import {
 	anchorWorkingKey,
 	carriesTrustAnchorKey,
 	certificateWorkingKey,
+	withWorkingParameters,
 	workingParametersAt,
 } from '#micro509/internal/verify/verify-path';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
@@ -102,8 +103,8 @@ import {
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
 } from '#micro509/revocation/crl';
-import type { TrustAnchor } from '#micro509/verify/verify';
-import { verifyCertificateChain } from '#micro509/verify/verify';
+import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
+import { trustAnchorFromCertificate, verifyCertificateChain } from '#micro509/verify/verify';
 import type {
 	NameFieldKey,
 	ParsedCertificate,
@@ -1279,14 +1280,17 @@ export async function validateOcspResponseBy(
 		(issuer.kind === 'certificate'
 			? certificateWorkingKey(issuer.certificate)
 			: anchorWorkingKey(issuer.trustAnchor));
+	const responder = await classifyOcspResponder(
+		input,
+		parsedResponse,
+		issuer,
+		signer,
+		trustedResponders,
+		issuerWorkingKey,
+	);
 	const signature = await verifyOcspResponseSignatureByKey(parsedResponse, ocspKeyOf(signer), {
 		verifiers: context.verifiers,
-		workingParameters: {
-			parametersDer:
-				signer.kind === 'certificate' && !isOcspIssuer(signer.certificate, issuer)
-					? workingParametersAt([signer.certificate], 0, 0, issuerWorkingKey)
-					: issuerWorkingKey.parametersDer,
-		},
+		workingParameters: { parametersDer: responderWorkingParameters(responder, issuerWorkingKey) },
 	});
 	if (!signature.ok) {
 		return validateOcspResponseFailureResult(signature.code, signature.message);
@@ -1295,8 +1299,7 @@ export async function validateOcspResponseBy(
 		input,
 		parsedResponse,
 		issuer,
-		signer,
-		trustedResponders,
+		responder,
 		{ verifiers: context.verifiers, issuerWorkingKey },
 	);
 	if (responderAuthorization !== undefined) return responderAuthorization;
@@ -1400,37 +1403,87 @@ async function resolveOcspResponderCertificate(
 		: parsedResponse.certificates?.[0];
 }
 
-async function validateOcspResponderAuthorization(
+/**
+ * Who signed an OCSP response: the issuer itself, a locally trusted responder,
+ * or a delegated responder with the outcome of validating its path.
+ */
+type OcspResponder =
+	| { readonly kind: 'issuer'; readonly signer: ResolvedOcspKey }
+	| { readonly kind: 'trusted'; readonly certificate: ParsedCertificate }
+	| {
+			readonly kind: 'delegated';
+			readonly certificate: ParsedCertificate;
+			readonly path: DelegatedResponderPath;
+	  };
+
+/** The certification path of a delegated responder, or why it does not validate. */
+type DelegatedResponderPath =
+	| { readonly ok: true; readonly parametersDer: Uint8Array | undefined }
+	| ValidateOcspResponseFailureBranch;
+
+async function classifyOcspResponder(
 	input: OcspValidationOptions,
 	parsedResponse: ParsedOcspResponse,
 	issuer: ResolvedOcspKey,
 	signer: ResolvedOcspKey,
 	trustedResponders: readonly ParsedCertificate[],
+	issuerWorkingKey: WorkingPublicKey,
+): Promise<OcspResponder> {
+	if (signer.kind === 'trust_anchor' || isOcspIssuer(signer.certificate, issuer)) {
+		return { kind: 'issuer', signer };
+	}
+	const certificate = signer.certificate;
+	if (trustedResponders.some((trusted) => isSameOcspCertificate(certificate, trusted))) {
+		return { kind: 'trusted', certificate };
+	}
+	return {
+		kind: 'delegated',
+		certificate,
+		path: await validateDelegatedResponderPath(
+			input,
+			parsedResponse,
+			issuer,
+			certificate,
+			issuerWorkingKey,
+		),
+	};
+}
+
+/**
+ * The key parameters a responder's signature verifies with: the issuer's
+ * working key, a trusted responder's own or inherited parameters, or those its
+ * delegated path gives it.
+ */
+function responderWorkingParameters(
+	responder: OcspResponder,
+	issuerWorkingKey: WorkingPublicKey,
+): Uint8Array | undefined {
+	if (responder.kind === 'issuer') return issuerWorkingKey.parametersDer;
+	if (responder.kind === 'delegated' && responder.path.ok) return responder.path.parametersDer;
+	return workingParametersAt([responder.certificate], 0, 0, issuerWorkingKey);
+}
+
+async function validateOcspResponderAuthorization(
+	input: OcspValidationOptions,
+	parsedResponse: ParsedOcspResponse,
+	issuer: ResolvedOcspKey,
+	responder: OcspResponder,
 	context: Required<OcspCallerVerification>,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	const responderBinding = await safeValidateOcspResponderIdBinding(
 		parsedResponse,
-		ocspKeyOf(signer),
+		responder.kind === 'issuer' ? ocspKeyOf(responder.signer) : responder.certificate,
 	);
 	if (!responderBinding.ok) {
 		return responderBinding;
 	}
-	if (signer.kind === 'trust_anchor') {
+	if (responder.kind !== 'delegated') {
 		return undefined;
 	}
-	const isLocallyTrustedResponder = trustedResponders.some((trusted) =>
-		isSameOcspCertificate(signer.certificate, trusted),
-	);
-	if (isOcspIssuer(signer.certificate, issuer) || isLocallyTrustedResponder) {
-		return undefined;
+	if (!responder.path.ok) {
+		return responder.path;
 	}
-	return await validateDelegatedOcspResponder(
-		input,
-		parsedResponse,
-		issuer,
-		signer.certificate,
-		context,
-	);
+	return await validateDelegatedOcspResponder(input, issuer, responder.certificate, context);
 }
 
 /**
@@ -1461,13 +1514,18 @@ async function safeValidateOcspResponderIdBinding(
 	}
 }
 
-async function validateDelegatedOcspResponder(
+/**
+ * Validates a delegated responder's certification path below `issuer`, which
+ * starts from the issuer's working key (RFC 5280 §6.1.4 (e)), and returns the
+ * parameters that path gives the responder's key.
+ */
+async function validateDelegatedResponderPath(
 	input: OcspValidationOptions,
 	parsedResponse: ParsedOcspResponse,
 	issuer: ResolvedOcspKey,
 	signer: ParsedCertificate,
-	context: Required<OcspCallerVerification>,
-): Promise<ValidateOcspResponseFailureBranch | undefined> {
+	issuerWorkingKey: WorkingPublicKey,
+): Promise<DelegatedResponderPath> {
 	const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
 	if (
 		!allowChainedResponderCertificate &&
@@ -1487,9 +1545,7 @@ async function validateDelegatedOcspResponder(
 					ocspCertificateOf(issuer),
 				)
 			: [],
-		...(issuer.kind === 'certificate'
-			? { roots: [issuer.certificate.der] }
-			: { roots: [], trustAnchors: [issuer.trustAnchor] }),
+		...delegatedPathStart(issuer, issuerWorkingKey),
 		...(input.at !== undefined ? { at: input.at } : {}),
 		...(input.signatureVerifiers !== undefined && {
 			signatureVerifiers: input.signatureVerifiers,
@@ -1501,6 +1557,54 @@ async function validateDelegatedOcspResponder(
 			'OCSP responder certificate chain does not validate',
 		);
 	}
+	return { ok: true, parametersDer: pathSignerParameters(chain.value) };
+}
+
+/**
+ * Where a delegated responder's path starts: the issuer certificate as root,
+ * or trust anchor information carrying the issuer's working key when the
+ * issuer inherits its parameters or is a bare anchor.
+ */
+function delegatedPathStart(
+	issuer: ResolvedOcspKey,
+	issuerWorkingKey: WorkingPublicKey,
+):
+	| { readonly roots: readonly Uint8Array[] }
+	| { readonly roots: readonly Uint8Array[]; readonly trustAnchors: readonly TrustAnchor[] } {
+	if (issuer.kind === 'trust_anchor') {
+		return { roots: [], trustAnchors: [issuer.trustAnchor] };
+	}
+	const own = certificateWorkingKey(issuer.certificate).parametersDer;
+	const working = issuerWorkingKey.parametersDer;
+	if (working === undefined || (own !== undefined && sameDer(own, working))) {
+		return { roots: [issuer.certificate.der] };
+	}
+	return {
+		roots: [],
+		trustAnchors: [withWorkingParameters(trustAnchorFromCertificate(issuer.certificate), working)],
+	};
+}
+
+/** The key parameters a validated path gives its first certificate. */
+function pathSignerParameters(path: CandidatePath): Uint8Array | undefined {
+	const top = path.chain[path.chain.length - 1];
+	if (top === undefined) return undefined;
+	return path.anchorCertificateInChain
+		? workingParametersAt(path.chain, 0, path.chain.length - 2, certificateWorkingKey(top))
+		: workingParametersAt(path.chain, 0, path.chain.length - 1, anchorWorkingKey(path.trustAnchor));
+}
+
+function sameDer(left: Uint8Array, right: Uint8Array): boolean {
+	return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+/** The ocspSigning and revocation checks on a delegated responder whose path validated. */
+async function validateDelegatedOcspResponder(
+	input: OcspValidationOptions,
+	issuer: ResolvedOcspKey,
+	signer: ParsedCertificate,
+	context: Required<OcspCallerVerification>,
+): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
 		return validateOcspResponseFailureResult(
 			'ocsp_signing_missing',

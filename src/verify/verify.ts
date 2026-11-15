@@ -500,17 +500,12 @@ export interface VerifyCertificateChainInput
 }
 
 /** Fully verified certificate chain returned on success from {@linkcode verifyCertificateChain}. */
-export interface VerifiedCertificateChain {
-	/** Parsed end-entity certificate. */
-	readonly leaf: ParsedCertificate;
-	/** Full chain in leaf-to-root order. */
-	readonly chain: readonly ParsedCertificate[];
-	/** Trusted root that terminates the path. */
-	readonly root: ParsedCertificate;
+export type VerifiedCertificateChain = CandidatePath & VerifiedPolicyOutcome;
+
+/** The policy outputs of a {@linkcode VerifiedCertificateChain}. */
+export interface VerifiedPolicyOutcome {
 	/** Final RFC 5280 §6 / RFC 9618 constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
-	/** Selected bare trust anchor, when the path terminates without a root certificate. */
-	readonly trustAnchor?: TrustAnchor;
 }
 
 /** Result of {@linkcode verifyCertificateChain}. On success, contains the {@linkcode VerifiedCertificateChain}. */

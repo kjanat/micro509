@@ -17,6 +17,7 @@ test/
 ├── helpers.ts             # shared DER/cert builders and fixture utilities
 ├── oracles/openssl.ts     # normalized OpenSSL wrapper
 ├── oracles/dsa.ts         # FIPS 186-4 DSA verifier for signatureVerifiers tests
+├── oracles/parameter-signature.ts # test-only signature algorithm keyed by its key parameters
 ├── fixtures/dsa/          # OpenSSL DSA CA, leaf, CSR, CRL, OCSP and CMS; generate.sh rebuilds them
 └── fixtures/pkits/certs/  # vendored PKITS certificates
 ```

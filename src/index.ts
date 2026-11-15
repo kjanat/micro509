@@ -439,6 +439,7 @@ export type {
 	ValidateForTlsClientInput,
 	ValidateForTlsServerInput,
 	VerifiedCertificateChain,
+	VerifiedPolicyOutcome,
 	VerifyCertificateChainInput,
 	VerifyCertificateSigningRequestOptions,
 	VerifyChainFailure,

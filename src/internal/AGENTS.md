@@ -92,7 +92,8 @@ internal/
   memory.
 - `verify/verify-path.ts` defers a link whose issuer key inherits DSA
   parameters (RFC 5280 §6.1.4 (e)) until a root or bare anchor ends the path.
-  An anchor that leaves a deferred link unverified keeps the search open.
+  A root that leaves a deferred link unverified falls through to the bare
+  anchors, and an anchor that does keeps the search open.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.
 - Keep complexity-reduction helpers in the codec or engine that owns their

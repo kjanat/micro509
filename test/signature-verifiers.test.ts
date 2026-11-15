@@ -9,12 +9,14 @@ import {
 	readSequenceChildren,
 	sequence,
 } from '#micro509/internal/asn1/der';
+import { generateKeyPair } from '#micro509/keys';
 import { verifyPkcs7SignedData } from '#micro509/pkcs';
 import { unwrap } from '#micro509/result';
 import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
 	checkChainRevocation,
+	createOcspResponse,
 	validateCertificateRevocationList,
 	validateOcspResponse,
 	verifyCertificateRevocationListSignature,
@@ -28,9 +30,20 @@ import {
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
 } from '#micro509/verify';
-import { parseCertificateDer } from '#micro509/x509';
+import {
+	createCertificate,
+	createSelfSignedCertificate,
+	parseCertificateDer,
+} from '#micro509/x509';
 import { callUntyped, issueChain, sliceElement, withSignatureValue } from '#test/helpers';
 import { DSA_WITH_SHA1, DSA_WITH_SHA256, dsaSignatureVerifiers } from '#test/oracles/dsa';
+import type { ParameterKey } from '#test/oracles/parameter-signature';
+import {
+	parameterKey,
+	parameterSignatureVerifiers,
+	rekeyedCertificate,
+	resignedOcspResponse,
+} from '#test/oracles/parameter-signature';
 
 const at = new Date('2011-04-15T00:00:00Z');
 
@@ -210,6 +223,21 @@ describe('signatureVerifiers', () => {
 				inheritedCa,
 				dsaCa,
 			]);
+	});
+
+	it('lets a bare anchor end the path when a root leaves an inherited link without parameters', async () => {
+		const trustAnchor = trustAnchorFromCertificate(unwrap(parseCertificateDer(dsaCa)));
+		const input = {
+			leaf: test5Leaf,
+			roots: [inheritedCa],
+			trustAnchors: [trustAnchor],
+			at,
+			signatureVerifiers: dsaSignatureVerifiers,
+		};
+		const built = unwrap(await buildCandidatePath(input));
+		expect(built.chain.map((member) => member.der)).toEqual([test5Leaf, inheritedCa]);
+		expect(built).toMatchObject({ anchorCertificateInChain: false, trustAnchor });
+		expect(await verifyCertificateChain(input)).toMatchObject({ ok: true });
 	});
 
 	it('refuses a path whose deferred inherited-parameter link fails', async () => {
@@ -611,3 +639,142 @@ async function evenSignatureChain(): ReturnType<typeof issueChain> {
 	}
 	throw new Error('no ECDSA signature ending in a zero bit after 64 chains');
 }
+
+type CertificateExtensions = Parameters<typeof createCertificate>[0]['extensions'];
+
+/**
+ * A certificate built with an ECDSA key for its names and extensions, then
+ * rekeyed to `key` and signed by `issuer` under the parameter signature algorithm.
+ */
+async function parameterCertificate(
+	commonName: string,
+	key: ParameterKey,
+	issuer: { readonly commonName: string; readonly key: ParameterKey } | 'self',
+	extensions: CertificateExtensions,
+): Promise<Uint8Array> {
+	const built =
+		issuer === 'self'
+			? (
+					await createSelfSignedCertificate({
+						subject: { commonName },
+						...(extensions === undefined ? {} : { extensions }),
+					})
+				).certificate.der
+			: (
+					await createCertificate({
+						issuer: { commonName: issuer.commonName },
+						subject: { commonName },
+						publicKey: (await generateKeyPair()).publicKey,
+						signerPrivateKey: (await generateKeyPair()).privateKey,
+						...(extensions === undefined ? {} : { extensions }),
+					})
+				).der;
+	return await rekeyedCertificate(built, key, issuer === 'self' ? key : issuer.key);
+}
+
+const CA_EXTENSIONS = {
+	basicConstraints: { ca: true },
+	keyUsage: ['keyCertSign', 'cRLSign'],
+} as const satisfies CertificateExtensions;
+const RESPONDER_EXTENSIONS = {
+	extendedKeyUsage: ['ocspSigning'],
+} as const satisfies CertificateExtensions;
+
+async function delegatedOcspResponse(
+	leaf: Uint8Array,
+	issuer: Uint8Array,
+	responderKey: ParameterKey,
+	embedded: readonly Uint8Array[],
+	when: Date,
+): Promise<Uint8Array> {
+	const stand = await createSelfSignedCertificate({ subject: { commonName: 'Stand-in Signer' } });
+	const built = await createOcspResponse({
+		signerPrivateKey: stand.keyPair.privateKey,
+		signerCertificate: stand.certificate.der,
+		responses: [
+			{
+				certificate: leaf,
+				issuerCertificate: issuer,
+				certStatus: 'good',
+				thisUpdate: new Date(when.getTime() - 60_000),
+				nextUpdate: new Date(when.getTime() + 60_000),
+			},
+		],
+	});
+	return await resignedOcspResponse(built.der, responderKey, embedded);
+}
+
+describe('delegated OCSP responders and inherited key parameters', () => {
+	it('validates a responder under an issuer whose key inherits its parameters', async () => {
+		const root = parameterKey('P', true);
+		const ca = parameterKey('P', false);
+		const responder = parameterKey('P', false);
+		const leaf = parameterKey('P', false);
+		const rootDer = await parameterCertificate('Parameter Root', root, 'self', CA_EXTENSIONS);
+		const caIssuer = { commonName: 'Parameter Root', key: root };
+		const caDer = await parameterCertificate('Parameter CA', ca, caIssuer, CA_EXTENSIONS);
+		const underCa = { commonName: 'Parameter CA', key: ca };
+		const responderDer = await parameterCertificate(
+			'Parameter Responder',
+			responder,
+			underCa,
+			RESPONDER_EXTENSIONS,
+		);
+		const leafDer = await parameterCertificate('parameter-leaf.example', leaf, underCa, undefined);
+		const now = new Date(Date.now() + 5_000);
+		const result = await checkChainRevocation({
+			chain: [leafDer, caDer, rootDer].map((der) => unwrap(parseCertificateDer(der))),
+			ocspResponses: [await delegatedOcspResponse(leafDer, caDer, responder, [responderDer], now)],
+			at: now,
+			signatureVerifiers: parameterSignatureVerifiers,
+		});
+		expect(result.value.certificates[0]).toMatchObject({
+			status: 'good',
+			source: { kind: 'ocsp' },
+		});
+	});
+
+	it('verifies a chained responder with the parameters its own path gives it', async () => {
+		const issuer = parameterKey('P1', true);
+		const intermediate = parameterKey('P2', true);
+		const responder = parameterKey('P2', false);
+		const leaf = parameterKey('P1', false);
+		const issuerDer = await parameterCertificate('Parameter Issuer', issuer, 'self', CA_EXTENSIONS);
+		const underIssuer = { commonName: 'Parameter Issuer', key: issuer };
+		const intermediateDer = await parameterCertificate(
+			'Parameter Responder CA',
+			intermediate,
+			underIssuer,
+			CA_EXTENSIONS,
+		);
+		const responderDer = await parameterCertificate(
+			'Parameter Chained Responder',
+			responder,
+			{ commonName: 'Parameter Responder CA', key: intermediate },
+			RESPONDER_EXTENSIONS,
+		);
+		const leafDer = await parameterCertificate(
+			'parameter-chained.example',
+			leaf,
+			underIssuer,
+			undefined,
+		);
+		const now = new Date(Date.now() + 5_000);
+		expect(
+			await validateOcspResponse({
+				response: await delegatedOcspResponse(
+					leafDer,
+					issuerDer,
+					responder,
+					[responderDer, intermediateDer],
+					now,
+				),
+				issuerCertificate: issuerDer,
+				allowChainedResponderCertificate: true,
+				responderRevocationPolicy: 'skip',
+				at: now,
+				signatureVerifiers: parameterSignatureVerifiers,
+			}),
+		).toMatchObject({ ok: true });
+	});
+});
