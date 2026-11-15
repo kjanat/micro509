@@ -2005,11 +2005,48 @@ export async function checkChainRevocation(
 	return await checkChainRevocationAt({ ...input, at: input.at ?? new Date() });
 }
 
+/**
+ * The signer validation state shared by every certificate check of one
+ * {@linkcode checkChainRevocation} call, with its delta CRL budget and the
+ * caller's distrust list as it stood when the call began.
+ */
+function signerValidationContext(
+	input: CheckChainRevocationInput & { readonly at: Date },
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+): SignerValidationContext {
+	const { chain, policy } = input;
+	const pathKeys = new Map<string, WorkingPublicKey>();
+	const chainKeys = chainWorkingKeys(
+		chain,
+		input.trustAnchor === undefined ? undefined : anchorWorkingKey(input.trustAnchor),
+	);
+	return {
+		cache: new Map(),
+		chain,
+		crls: input.crls ?? [],
+		extraCertificates: input.extraCertificates ?? [],
+		at: input.at,
+		crlMaxAgeMs: policy?.crlMaxAgeMs,
+		clockSkewMs: policy?.clockSkewMs,
+		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
+		signatureVerifiers: input.signatureVerifiers,
+		distrustedSpkiSha256:
+			input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256],
+		verifiers,
+		deltaBudget: { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN },
+		workingKeyOf: (certificate) =>
+			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
+		pathKeys,
+		pathIssuers: new Map(),
+		trustAnchor: input.trustAnchor,
+	};
+}
+
 /** {@linkcode checkChainRevocation} with its evaluation time resolved once for every check. */
 async function checkChainRevocationAt(
 	input: CheckChainRevocationInput & { readonly at: Date },
 ): Promise<CheckChainRevocationResult> {
-	const { chain, policy, crls = [], extraCertificates = [], at } = input;
+	const { chain, policy } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
 	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
 	createSpkiDistrustCheck(input.distrustedSpkiSha256);
@@ -2028,33 +2065,8 @@ async function checkChainRevocationAt(
 		};
 	}
 
-	// Create signer validation context with memoization cache
-	// This cache is shared across all certificate checks in this chain evaluation
-	const pathKeys = new Map<string, WorkingPublicKey>();
-	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
-	const chainKeys = chainWorkingKeys(
-		chain,
-		input.trustAnchor === undefined ? undefined : anchorWorkingKey(input.trustAnchor),
-	);
-	const signerCtx: SignerValidationContext = {
-		cache: new Map(),
-		chain,
-		crls,
-		extraCertificates,
-		at,
-		crlMaxAgeMs: policy?.crlMaxAgeMs,
-		clockSkewMs: policy?.clockSkewMs,
-		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
-		signatureVerifiers: input.signatureVerifiers,
-		distrustedSpkiSha256: input.distrustedSpkiSha256,
-		verifiers,
-		deltaBudget,
-		workingKeyOf: (certificate) =>
-			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
-		pathKeys,
-		pathIssuers: new Map(),
-		trustAnchor: input.trustAnchor,
-	};
+	const signerCtx = signerValidationContext(input, verifiers);
+	const deltaBudget = signerCtx.deltaBudget;
 
 	const certsToCheck = input.trustAnchor === undefined ? chain.slice(0, -1) : chain;
 	const certificates: CertificateRevocationStatus[] = [];

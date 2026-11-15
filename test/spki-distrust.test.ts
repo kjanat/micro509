@@ -444,6 +444,22 @@ describe('SPKI distrust', () => {
 				code: 'revocation_indeterminate',
 				index: 0,
 			});
+			let iterations = 0;
+			const shrinking = new Proxy([signerHash], {
+				get(target, property, receiver) {
+					if (property === Symbol.iterator) {
+						iterations += 1;
+						const source: readonly string[] = iterations === 1 ? target : [];
+						return () => source[Symbol.iterator]();
+					}
+					return Reflect.get(target, property, receiver);
+				},
+			});
+			expect(await verify(shrinking)).toMatchObject({
+				ok: false,
+				code: 'revocation_indeterminate',
+				index: 0,
+			});
 			const chainCheck = await checkChainRevocation({
 				chain: [f.leaf, f.intermediate, f.root],
 				...evidence,

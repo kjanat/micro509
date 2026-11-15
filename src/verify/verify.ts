@@ -1404,7 +1404,11 @@ export async function verifyCertificateChain(
 
 	// Revocation checking (optional)
 	if (input.revocation !== undefined) {
-		const revocationFailure = await validateVerifiedChainRevocation(input, buildResult.value);
+		const revocationFailure = await validateVerifiedChainRevocation(
+			input,
+			buildResult.value,
+			distrustedSpkiSha256,
+		);
 		if (revocationFailure !== undefined) return revocationFailure;
 	}
 
@@ -1457,6 +1461,7 @@ function revocationTrustAnchor(path: CandidatePath): TrustAnchor | undefined {
 async function validateVerifiedChainRevocation(
 	input: VerifyCertificateChainInput,
 	path: CandidatePath,
+	distrustedSpkiSha256: readonly string[] | undefined,
 ): Promise<VerifyChainResult | undefined> {
 	if (input.revocation === undefined) return undefined;
 	const trustAnchor = revocationTrustAnchor(path);
@@ -1478,9 +1483,7 @@ async function validateVerifiedChainRevocation(
 		...(input.signatureVerifiers !== undefined
 			? { signatureVerifiers: input.signatureVerifiers }
 			: {}),
-		...(input.distrustedSpkiSha256 !== undefined
-			? { distrustedSpkiSha256: input.distrustedSpkiSha256 }
-			: {}),
+		...(distrustedSpkiSha256 !== undefined ? { distrustedSpkiSha256 } : {}),
 	});
 	return revocationResult.value.decision === 'deny'
 		? revocationFailureResult(revocationResult.value)
