@@ -261,6 +261,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | `certificate_status_missing`   | Response carries no entry for the certificate                                                |
 | `certificate_status_unknown`   | Responder answered `unknown`                                                                 |
 | `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                        |
+| `delta_crl_unusable`           | A delta CRL could not settle the status; other evidence cannot settle it as good either      |
 | `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                                      |
 | `limit_exceeded`               | Evidence or a certificate it names exceeds a micro509 decoding limit                         |
 | `malformed`                    | Evidence or a certificate it names does not decode                                           |

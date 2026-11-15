@@ -270,6 +270,17 @@ async function scenario() {
 				ca.keyPair.privateKey,
 				11,
 			),
+		heldDelta: () =>
+			crl({
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber: 6,
+				baseCrlNumber: 5,
+				thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+				revokedCertificates: revocation.map((entry) => ({
+					...entry,
+					reasonCode: 'certificateHold' as const,
+				})),
+			}),
 		newerCleanDelta: () =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -471,6 +482,40 @@ describe('checkCertificateRevocationAgainstCrlsBy with an older delta CRL that a
 	);
 });
 
+describe('checkCertificateRevocation and checkChainRevocation with several delta CRLs for one base CRL', () => {
+	it.each([
+		{ older: 'certificateHold', expected: 'good', decision: 'allow' },
+		{ older: 'keyCompromise', expected: 'revoked', decision: 'deny' },
+	] as const)(
+		'give one verdict for a newer clean delta CRL beside an older $older one',
+		async ({ older, expected, decision }) => {
+			const s = await scenario();
+			const base = (await s.baseNumbered(5)).der;
+			const olderDelta = (
+				older === 'certificateHold' ? await s.heldDelta() : await s.revokingDelta()
+			).der;
+			const newerDelta = (await s.newerCleanDelta()).der;
+			const single = await checkCertificateRevocation({
+				certificate: s.leafPem,
+				issuerCertificate: s.caPem,
+				evidence: [
+					{ kind: 'crl', crl: base, deltaCrl: olderDelta },
+					{ kind: 'crl', crl: base, deltaCrl: newerDelta },
+				],
+				at: s.at,
+			});
+			expect(single).toMatchObject({ ok: true, value: { status: expected } });
+			const chain = await checkChainRevocation({
+				chain: s.chain,
+				crls: [base, olderDelta, newerDelta],
+				at: s.at,
+			});
+			expect(chain.value.decision).toBe(decision);
+			expect(chain.value.certificates[0]?.status).toBe(expected);
+		},
+	);
+});
+
 describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget', () => {
 	it.each([
 		{ remaining: 4, expected: 'good' },
@@ -545,9 +590,14 @@ describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation wi
 	it.each([
 		{ base: 'keyCompromise', delta: 'forged', crl: 'revoked', evidence: 'revoked' },
 		{ base: 'keyCompromise', delta: 'unresolvable', crl: 'revoked', evidence: 'revoked' },
-		{ base: 'certificateHold', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
+		{ base: 'certificateHold', delta: 'forged', crl: 'signature_invalid', evidence: 'revoked' },
 		{ base: 'clean', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
-		{ base: 'clean', delta: 'unresolvable', crl: 'signature_invalid', evidence: 'good' },
+		{
+			base: 'clean',
+			delta: 'unresolvable',
+			crl: 'signature_invalid',
+			evidence: 'indeterminate',
+		},
 		{ base: 'clean', delta: 'expired revoking', crl: 'revoked', evidence: 'revoked' },
 		{ base: 'clean', delta: 'expired holding', crl: 'good', evidence: 'good' },
 	] as const)(

@@ -223,6 +223,17 @@ A delta CRL past its `nextUpdate` that lists no such entry now leaves the
 status to its base CRL in `checkCertificateRevocationAgainstCrl` and
 `checkCertificateRevocation`, instead of failing with `stale_crl`.
 
+## Expect `checkCertificateRevocation` to pool delta CRLs
+
+`checkCertificateRevocation` used to check each CRL evidence entry as its own
+complete CRL and delta CRL pair. It now checks each distinct complete CRL once,
+updated by the newest applicable delta CRL among every `deltaCrl` in
+`evidence`, as `checkChainRevocation` does. Two entries for one complete CRL,
+one with an older delta CRL that holds the certificate and one with a newer
+clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
+yields the new indeterminate code `delta_crl_unusable`, which keeps OCSP or
+other CRL evidence from settling the status as `good`.
+
 ## Set an age policy for CRLs without `nextUpdate`
 
 A received complete CRL without `nextUpdate` now fails with `stale_crl` unless
