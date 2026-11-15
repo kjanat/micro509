@@ -919,9 +919,20 @@ describe('revocation signers and inherited key parameters', () => {
 			thisUpdate: new Date(now.getTime() - 60_000),
 			nextUpdate: new Date(now.getTime() + 60_000),
 		});
+		const rootStand = await createSelfSignedCertificate({
+			subject: { commonName: 'Parameter Root' },
+		});
+		const rootCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Parameter Root' },
+			signerPrivateKey: rootStand.keyPair.privateKey,
+			issuerCertificate: rootStand.certificate.der,
+			thisUpdate: new Date(now.getTime() - 60_000),
+			nextUpdate: new Date(now.getTime() + 60_000),
+		});
 		const result = await checkChainRevocation({
 			chain: [leafDer, caDer, rootDer].map((der) => unwrap(parseCertificateDer(der))),
-			crls: [await resignedCrl(built.der, crlSigner)],
+			crls: [await resignedCrl(built.der, crlSigner), await resignedCrl(rootCrl.der, root)],
 			extraCertificates: [crlSignerDer],
 			at: now,
 			signatureVerifiers: parameterSignatureVerifiers,

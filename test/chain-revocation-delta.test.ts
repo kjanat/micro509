@@ -636,7 +636,16 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 				...fields,
 			});
 		const attackerKeys = await generateKeyPair();
+		const rootCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Budget Root' },
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerCertificate: root.certificate.der,
+			crlNumber: 1,
+			thisUpdate,
+			nextUpdate: new Date(at.getTime() + 24 * HOUR_MS),
+		});
 		const crls = [
+			rootCrl.der,
 			(await indirectCrl({ signerPrivateKey: crlIssuerKeys.privateKey, crlNumber: 5 })).der,
 			...(await Promise.all(
 				[6, 7, 8].map(

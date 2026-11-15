@@ -722,13 +722,21 @@ describe('RFC 5280 §3.3 L708-713 "suitably recent" and PKITS §4.4: how recent 
 			thisUpdate: shift(at, -HOUR_MS),
 			nextUpdate: shift(at, HOUR_MS),
 		});
+		const signerCleanCrl = await createCertificateRevocationList({
+			crlNumber: 2,
+			issuer: { commonName: 'RFC 5280 Signer Intermediate' },
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerCertificate: intermediate.der,
+			thisUpdate: shift(at, -2 * HOUR_MS),
+			nextUpdate: shift(at, HOUR_MS),
+		});
 		const result = await checkChainRevocation({
 			chain: [
 				unwrap(parseCertificatePem(leaf.pem)),
 				unwrap(parseCertificatePem(intermediate.pem)),
 				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
-			crls: [signerRevokedByOldCrl.der, leafCrl.der],
+			crls: [signerRevokedByOldCrl.der, signerCleanCrl.der, leafCrl.der],
 			extraCertificates: [signer.pem],
 			at,
 			policy: { mode: 'soft-fail', crlMaxAgeMs: DAY_MS },

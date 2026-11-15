@@ -786,12 +786,6 @@ async function checkSignerRevocation(
 	issuer: RevocationIssuer,
 	ctx: SignerValidationContext,
 ): Promise<SignerValidationState> {
-	// If the signer's issuer is in the validated chain, the signer is trusted
-	// by virtue of being issued by a trusted CA. We only need to check if
-	// it's explicitly revoked, not prove "good" status.
-	const issuerInChain =
-		issuer.kind === 'trust_anchor' || ctx.chain.some((c) => sameCertificate(c, issuer.certificate));
-
 	// A `good` from one CRL does not end the search: a later CRL may report the
 	// signer revoked, and a revoked verdict from any CRL wins.
 	const coveredReasons = new Set<string>();
@@ -806,7 +800,7 @@ async function checkSignerRevocation(
 	const deltaCrls = crls.filter((crl) => crl.baseCrlNumber !== undefined);
 	for (const crl of crls) {
 		if (crl.baseCrlNumber !== undefined) continue;
-		const outcome = await checkSignerAgainstCrl(signer, issuer, crl, deltaCrls, ctx);
+		const outcome = await checkSignerAgainstCrlAuthorities(signer, issuer, crl, deltaCrls, ctx);
 		if (outcome.kind === 'revoked') {
 			return 'resolved-revoked';
 		}
@@ -821,17 +815,9 @@ async function checkSignerRevocation(
 	if (sawUnsettledEvidence) {
 		return 'resolved-indeterminate';
 	}
-	if (coversAllDistributionPointReasons(coveredReasons)) {
-		return 'resolved-valid';
-	}
-
-	// If the signer's issuer is in the chain and we found no revocation,
-	// trust the signer (issued by trusted CA, no evidence of revocation)
-	if (issuerInChain) {
-		return 'resolved-valid';
-	}
-
-	return 'resolved-indeterminate';
+	return coversAllDistributionPointReasons(coveredReasons)
+		? 'resolved-valid'
+		: 'resolved-indeterminate';
 }
 
 /**
@@ -851,9 +837,42 @@ const SIGNER_CRL_NO_EVIDENCE = {
 } as const satisfies SignerCrlOutcome;
 
 /**
+ * Evaluates one CRL against a signer with each key that may have signed it:
+ * the signer's issuer, then an indirect CRL issuer whose path validates, the
+ * signer itself included. The first key whose check yields evidence settles
+ * the CRL.
+ */
+async function checkSignerAgainstCrlAuthorities(
+	signer: ParsedCertificate,
+	issuer: RevocationIssuer,
+	crl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+	ctx: SignerValidationContext,
+): Promise<SignerCrlOutcome> {
+	for (const authority of collectCrlSignerCandidates(
+		crl,
+		issuer,
+		ctx.extraCertificates,
+		ctx.chain,
+		ctx.trustAnchor,
+	)) {
+		if (
+			!sameIssuer(authority, issuer) &&
+			!(await crlSignerChainsToAnchor(authority, ctx.chain, ctx.extraCertificates, ctx.at, ctx))
+		) {
+			continue;
+		}
+		const outcome = await checkSignerAgainstCrl(signer, authority, crl, deltaCrls, ctx);
+		if (outcome.kind !== 'reasons' || outcome.reasons.length > 0) return outcome;
+	}
+	return SIGNER_CRL_NO_EVIDENCE;
+}
+
+/**
  * Evaluates one CRL against a signer. A CRL that does not parse, does not
  * apply, or is itself signed by a signer that is not known good yields no
- * evidence rather than a verdict.
+ * evidence rather than a verdict. A CRL the signer itself signed vouches for
+ * it, as an indirect CRL may cover its own issuer.
  */
 async function checkSignerAgainstCrl(
 	signer: ParsedCertificate,
@@ -887,8 +906,8 @@ async function checkSignerAgainstCrl(
 	if (result.value.status === 'revoked') {
 		return { kind: 'revoked' };
 	}
-	// The CRL's signer is the issuer just used, and it must itself be good.
-	return (await validateCrlSigner(issuer, ctx)) === 'resolved-valid'
+	const selfSigned = issuer.kind === 'certificate' && sameCertificate(issuer.certificate, signer);
+	return selfSigned || (await validateCrlSigner(issuer, ctx)) === 'resolved-valid'
 		? { kind: 'reasons', reasons: result.value.coveredReasons }
 		: SIGNER_CRL_NO_EVIDENCE;
 }
@@ -1324,9 +1343,10 @@ interface BaseCrlResolution {
  * Runs each candidate signer through the full pipeline for one base CRL:
  * signature/applicability, RFC 5280 §6.3.3(f) path to the anchor, then signer
  * revocation. A candidate that verifies the signature but fails a later step
- * does not shadow a subsequent usable signer, so the search continues. Returns
- * a revoked status when one is found; otherwise records good or diagnostic
- * evidence into `state`.
+ * does not shadow a subsequent usable signer, so the search continues. A
+ * revocation stands from a signer whose own status is indeterminate, while
+ * `good` needs a signer known good. Returns a revoked status when one is
+ * found; otherwise records good or diagnostic evidence into `state`.
  */
 async function resolveBaseCrlAgainstSigners(
 	params: BaseCrlResolution,
@@ -1381,41 +1401,78 @@ async function resolveBaseCrlAgainstSigners(
 			state.sawCrlSignerNotAuthorized = true;
 			continue;
 		}
-		const signerStatus = await validateCrlSigner(candidate, signerCtx);
-		if (signerStatus === 'resolved-revoked') {
-			state.sawCrlSignerRevoked = true;
-			continue;
-		}
-		if (signerStatus === 'resolved-indeterminate') {
-			state.sawCrlSignerIndeterminate = true;
-			continue;
-		}
-		if (resolved.kind === 'reason_code_unrecognized') {
-			state.sawUnrecognizedReasonCode = true;
-			return undefined;
-		}
-		if (resolved.kind === 'delta_unusable') {
-			state.sawDeltaCrlUnusable = true;
-			return undefined;
-		}
-		if (resolved.kind === 'retry_limit') {
-			state.sawDeltaCrlRetryLimit = true;
-			return undefined;
-		}
-		const { checked, crlThisUpdate } = resolved;
-		if (checked.value.status === 'revoked') {
-			return buildCrlRevokedStatus(
-				cert,
-				candidate,
-				crlThisUpdate,
-				checked.value.revocationDate,
-				checked.value.reasonCode,
-			);
-		}
-		recordGoodCrlEvidence(state, candidate, crlThisUpdate, checked.value.coveredReasons);
-		return undefined;
+		const verdict = settleCrlSignerCandidate(
+			cert,
+			candidate,
+			resolved,
+			await validateCrlSigner(candidate, signerCtx),
+			state,
+		);
+		if (verdict.kind === 'done') return verdict.status;
 	}
 	return undefined;
+}
+
+/** Whether a base CRL's search ends with one signer candidate, and the revoked status it found. */
+type CrlSignerCandidateVerdict =
+	| { readonly kind: 'next' }
+	| { readonly kind: 'done'; readonly status: CertificateRevocationStatus | undefined };
+
+const NEXT_CRL_SIGNER_CANDIDATE = { kind: 'next' } as const satisfies CrlSignerCandidateVerdict;
+
+/**
+ * Settles one authorized signer candidate's outcome for a base CRL by the
+ * signer's own status. A revocation stands from a signer whose status is
+ * indeterminate, while `good` needs a signer known good.
+ */
+function settleCrlSignerCandidate(
+	cert: ParsedCertificate,
+	candidate: RevocationIssuer,
+	resolved: Exclude<DeltaCandidateOutcome, { readonly kind: 'unusable_base' }>,
+	signerStatus: SignerValidationState,
+	state: CrlEvidenceState,
+): CrlSignerCandidateVerdict {
+	if (signerStatus === 'resolved-revoked') {
+		state.sawCrlSignerRevoked = true;
+		return NEXT_CRL_SIGNER_CANDIDATE;
+	}
+	const revoked = revokedCrlStatus(cert, candidate, resolved);
+	if (signerStatus === 'resolved-indeterminate') {
+		state.sawCrlSignerIndeterminate = true;
+		return revoked === undefined ? NEXT_CRL_SIGNER_CANDIDATE : { kind: 'done', status: revoked };
+	}
+	if (resolved.kind === 'reason_code_unrecognized') {
+		state.sawUnrecognizedReasonCode = true;
+	} else if (resolved.kind === 'delta_unusable') {
+		state.sawDeltaCrlUnusable = true;
+	} else if (resolved.kind === 'retry_limit') {
+		state.sawDeltaCrlRetryLimit = true;
+	} else if (resolved.checked.value.status === 'good') {
+		recordGoodCrlEvidence(
+			state,
+			candidate,
+			resolved.crlThisUpdate,
+			resolved.checked.value.coveredReasons,
+		);
+	}
+	return { kind: 'done', status: revoked };
+}
+
+/** The revoked status `resolved` reports for `cert`, signed by `signer`. */
+function revokedCrlStatus(
+	cert: ParsedCertificate,
+	signer: RevocationIssuer,
+	resolved: DeltaCandidateOutcome,
+): CertificateRevocationStatus | undefined {
+	return resolved.kind === 'checked' && resolved.checked.value.status === 'revoked'
+		? buildCrlRevokedStatus(
+				cert,
+				signer,
+				resolved.crlThisUpdate,
+				resolved.checked.value.revocationDate,
+				resolved.checked.value.reasonCode,
+			)
+		: undefined;
 }
 
 async function evaluateCrlEvidence(
