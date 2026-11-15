@@ -903,6 +903,124 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 	});
 });
 
+describe('checkChainRevocation delta CRL attempts for each CRL signer certificate', () => {
+	it('gives a second certificate for the same signing key its own attempts', async () => {
+		const at = new Date(Date.now() + 5_000);
+		const window = {
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + 24 * HOUR_MS),
+		};
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Twin Signer Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const caKeys = await generateKeyPair();
+		const ca = await createCertificate({
+			issuer: { commonName: 'Twin Signer Root' },
+			subject: { commonName: 'Twin Signer CA' },
+			publicKey: caKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerCertificate: root.certificate.der,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const point = (name: string) =>
+			({
+				type: 'fullName',
+				fullName: [{ type: 'uri', value: `http://example.test/${name}.crl` }],
+			}) as const;
+		const signerKeys = await generateKeyPair();
+		const twin = () =>
+			createCertificate({
+				issuer: { commonName: 'Twin Signer CA' },
+				subject: { commonName: 'Twin Signer CA' },
+				publicKey: signerKeys.publicKey,
+				signerPrivateKey: caKeys.privateKey,
+				issuerCertificate: ca.der,
+				extensions: {
+					keyUsage: ['cRLSign'],
+					crlDistributionPoints: [{ distributionPoint: point('signers') }],
+				},
+			});
+		const revokedTwin = await twin();
+		const goodTwin = await twin();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Twin Signer CA' },
+			subject: { commonName: 'twin-signer.example' },
+			publicKey: (await generateKeyPair()).publicKey,
+			signerPrivateKey: caKeys.privateKey,
+			issuerCertificate: ca.der,
+			extensions: { crlDistributionPoints: [{ distributionPoint: point('leaf') }] },
+		});
+		const leafScope = { issuingDistributionPoint: { distributionPoint: point('leaf') } };
+		const leafCrl = await createCertificateRevocationList({
+			crlNumber: 5,
+			issuer: { commonName: 'Twin Signer CA' },
+			signerPrivateKey: signerKeys.privateKey,
+			issuerCertificate: goodTwin.der,
+			...leafScope,
+			...window,
+		});
+		const attacker = await generateKeyPair();
+		const forged = await Promise.all(
+			[100, 101, 102, 103].map(
+				async (crlNumber) =>
+					(
+						await createCertificateRevocationList({
+							crlNumber,
+							baseCrlNumber: 5,
+							issuer: { commonName: 'Twin Signer CA' },
+							signerPrivateKey: attacker.privateKey,
+							issuerCertificate: goodTwin.der,
+							...leafScope,
+							...window,
+						})
+					).der,
+			),
+		);
+		const signersCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Twin Signer CA' },
+			signerPrivateKey: caKeys.privateKey,
+			issuerCertificate: ca.der,
+			issuingDistributionPoint: { distributionPoint: point('signers') },
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(unwrap(parseCertificatePem(revokedTwin.pem)).serialNumberHex),
+					reasonCode: 'superseded',
+				},
+			],
+			...window,
+		});
+		const rootCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Twin Signer Root' },
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerCertificate: root.certificate.der,
+			...window,
+		});
+		const result = await checkChainRevocation({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(ca.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
+			crls: [leafCrl.der, ...forged, signersCrl.der, rootCrl.der],
+			extraCertificates: [revokedTwin.pem, goodTwin.pem],
+			at,
+		});
+		expect(result.value.certificates[0]?.status).toBe('good');
+		expect(result.value.certificates[0]?.source?.signerCertificate?.serialNumberHex).toBe(
+			unwrap(parseCertificatePem(goodTwin.pem)).serialNumberHex,
+		);
+	});
+});
+
 describe('checkChainRevocation delta CRL attempt limits for a CRL signer', () => {
 	it.each([
 		{ signerBases: 8, copies: 1, expected: 'good' },

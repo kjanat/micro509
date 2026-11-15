@@ -904,7 +904,6 @@ async function checkSignerAgainstCrlAuthorities(
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	ctx: SignerValidationContext,
 ): Promise<SignerCrlOutcome> {
-	const baseBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE };
 	for (const authority of collectCrlSignerCandidates(
 		crl,
 		issuer,
@@ -919,7 +918,6 @@ async function checkSignerAgainstCrlAuthorities(
 			continue;
 		}
 		const outcome = await checkSignerAgainstCrl(signer, authority, crl, deltaCrls, ctx, [
-			baseBudget,
 			ctx.deltaBudget,
 		]);
 		if (outcome.kind !== 'reasons' || outcome.reasons.length > 0) return outcome;
@@ -1446,7 +1444,6 @@ async function resolveBaseCrlAgainstSigners(
 		deltaBudget,
 		state,
 	} = params;
-	const baseBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE };
 	for (const candidate of collectCrlSignerCandidates(
 		baseCrl,
 		issuer,
@@ -1477,7 +1474,7 @@ async function resolveBaseCrlAgainstSigners(
 			crlMaxAgeMs,
 			clockSkewMs,
 			unrecognizedReasonCode,
-			budgets: [baseBudget, deltaBudget],
+			budgets: [{ remaining: DELTA_CRL_ATTEMPTS_PER_BASE }, deltaBudget],
 			state,
 			verification,
 		});
