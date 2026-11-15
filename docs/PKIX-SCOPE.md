@@ -533,8 +533,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       with its base CRL list every revocation an earlier one did. After a
       delta CRL settles the status as good, the older candidates are still
       read within the same limits for such an entry it omits, until one past
-      its `nextUpdate` records none; an omitted entry makes the certificate
-      revoked. Running out of attempts there leaves the good verdict; withholding
+      its `nextUpdate` records none. An omitted entry makes the certificate
+      revoked, and an older entry `unrecognizedReasonCode: 'reject'` refuses,
+      or one that cannot settle the status, keeps the good verdict from
+      standing. Running out of attempts there leaves the good verdict; withholding
       the older delta CRL has the same effect. `checkCertificateRevocationAgainstCrl` applies it to
       its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,

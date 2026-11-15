@@ -16,7 +16,12 @@ import {
 } from '#micro509';
 import { callerVerification } from '#micro509/internal/crypto/sig-verify';
 import { checkCertificateRevocationAgainstCrlsBy } from '#micro509/revocation/crl';
-import { addRevokedEntryCertificateIssuers, hexToBytes, withCrlIssuer } from '#test/helpers';
+import {
+	addRevokedEntryCertificateIssuers,
+	hexToBytes,
+	withCrlIssuer,
+	withRevokedEntryReasonCode,
+} from '#test/helpers';
 
 const CA_NAME = 'Delta Shadow CA';
 const HOUR_MS = 60 * 60 * 1000;
@@ -244,6 +249,27 @@ async function scenario() {
 						).der,
 				),
 			),
+		newestCleanDelta: () =>
+			crl({
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber: 20,
+				baseCrlNumber: 5,
+				thisUpdate: new Date(at.getTime() - HOUR_MS / 2),
+			}),
+		unrecognizedReasonDelta: async () =>
+			withRevokedEntryReasonCode(
+				(
+					await crl({
+						signerPrivateKey: ca.keyPair.privateKey,
+						crlNumber: 6,
+						baseCrlNumber: 5,
+						thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+						revokedCertificates: revocation,
+					})
+				).der,
+				ca.keyPair.privateKey,
+				11,
+			),
 		newerCleanDelta: () =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -317,6 +343,14 @@ const HELPER_DELTAS = {
 	'expired revoking': async (s: Scenario) => [(await s.expiredDelta('keyCompromise')).der],
 	'expired holding': async (s: Scenario) => [(await s.expiredDelta('certificateHold')).der],
 	'six expired clean': (s: Scenario) => s.expiredCleanDeltas(6),
+	'newest clean and older unresolvable': async (s: Scenario) => [
+		(await s.unresolvableDelta()).der,
+		(await s.newestCleanDelta()).der,
+	],
+	'newest clean and older unrecognized reason': async (s: Scenario) => [
+		await s.unrecognizedReasonDelta(),
+		(await s.newestCleanDelta()).der,
+	],
 	'newer current clean and older expired revoking': async (s: Scenario) => [
 		(await s.expiredDelta('keyCompromise')).der,
 		(await s.newerCleanDelta()).der,
@@ -370,6 +404,69 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 						? result.result.value.status
 						: result.result.code,
 			).toBe(expected);
+		},
+	);
+});
+
+describe('checkCertificateRevocationAgainstCrlsBy with an older delta CRL that a newer clean one contradicts', () => {
+	it.each([
+		{ deltas: 'newest clean and older unresolvable', policy: 'revoked', expected: 'unsettled' },
+		{
+			deltas: 'newest clean and older unrecognized reason',
+			policy: 'revoked',
+			expected: 'revoked',
+		},
+		{
+			deltas: 'newest clean and older unrecognized reason',
+			policy: 'reject',
+			expected: 'reason_code_unrecognized',
+		},
+	] as const)(
+		'reads $deltas under unrecognizedReasonCode $policy as $expected',
+		async ({ deltas, policy, expected }) => {
+			const s = await scenario();
+			const parse = (der: Uint8Array) => unwrap(parseCertificateRevocationListDer(der));
+			const result = await checkCertificateRevocationAgainstCrlsBy(
+				unwrap(parseCertificatePem(s.leafPem)),
+				parse((await s.baseNumbered(5)).der),
+				(await HELPER_DELTAS[deltas](s)).map(parse),
+				{ kind: 'certificate', certificate: s.caPem },
+				{ at: s.at, unrecognizedReasonCode: policy },
+				callerVerification(undefined),
+			);
+			expect(
+				result.kind === 'unsettled'
+					? 'unsettled'
+					: result.result.ok
+						? result.result.value.status
+						: result.result.code,
+			).toBe(expected);
+		},
+	);
+
+	it.each([
+		{
+			deltas: 'newest clean and older unresolvable',
+			policy: 'revoked',
+			reasons: ['no_applicable_ocsp', 'delta_crl_unusable'],
+		},
+		{
+			deltas: 'newest clean and older unrecognized reason',
+			policy: 'reject',
+			reasons: ['no_applicable_ocsp', 'crl_reason_code_unrecognized'],
+		},
+	] as const)(
+		'keeps chain revocation from good over $deltas under unrecognizedReasonCode $policy',
+		async ({ deltas, policy, reasons }) => {
+			const s = await scenario();
+			const result = await checkChainRevocation({
+				chain: s.chain,
+				crls: [(await s.baseNumbered(5)).der, ...(await HELPER_DELTAS[deltas](s))],
+				at: s.at,
+				policy: { unrecognizedReasonCode: policy },
+			});
+			expect(result.value.decision).toBe('deny');
+			expect(result.value.certificates[0]?.indeterminateReasons).toEqual(reasons);
 		},
 	);
 });

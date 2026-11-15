@@ -1845,11 +1845,9 @@ async function retryLimitOutcome(
 }
 
 /**
- * A revocation that an older delta CRL in `older` records after a newer one
- * settled the status as good, read while the budgets last and until one past
- * its `nextUpdate` records none. Only a revocation no later CRL may drop
- * counts (RFC 5280 §5.3.1, §3.3), so the newer delta CRL contradicts its
- * issuer.
+ * What the older delta CRLs in `older` change after a newer one settled the
+ * status as good, read while the budgets last and until one past its
+ * `nextUpdate` records nothing that stands (RFC 5280 §5.3.1, §3.3).
  */
 async function olderDeltaCrlRevocation(
 	params: DeltaCandidateCheck,
@@ -1868,16 +1866,44 @@ async function olderDeltaCrlRevocation(
 			verification,
 		);
 		if (outcome.kind === 'delta_stale') return undefined;
-		if (outcome.kind !== 'checked') continue;
-		const revoked = irremovableRevocation(
+		const changed = olderDeltaCrlOutcome(
 			cert,
-			outcome.result,
+			outcome,
 			at,
 			laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
 		);
-		if (revoked !== undefined) return revoked;
+		if (changed !== undefined) return changed;
 	}
 	return undefined;
+}
+
+/**
+ * What one older delta CRL changes after a newer one settled the status as
+ * good: a revocation no later CRL may drop, an entry
+ * `unrecognizedReasonCode: 'reject'` refuses, or entries that cannot settle
+ * the status.
+ */
+function olderDeltaCrlOutcome(
+	cert: ParsedCertificate,
+	outcome: AuthenticatedCrlCheckOutcome,
+	at: Date,
+	crlThisUpdate: Date,
+): DeltaCandidateOutcome | undefined {
+	if (outcome.kind === 'delta_unresolved') {
+		return (
+			irremovableRevocation(cert, outcome.complete, at, crlThisUpdate) ?? {
+				kind: 'delta_unusable',
+				complete: outcome.complete,
+			}
+		);
+	}
+	if (outcome.kind !== 'checked') return undefined;
+	if (!outcome.result.ok) {
+		return outcome.result.code === 'reason_code_unrecognized'
+			? { kind: 'reason_code_unrecognized' }
+			: undefined;
+	}
+	return irremovableRevocation(cert, outcome.result, at, crlThisUpdate);
 }
 
 /** The base CRL's revocation of `cert` in `complete` when no delta CRL could remove it at `at`. */

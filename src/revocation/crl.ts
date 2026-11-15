@@ -1654,19 +1654,25 @@ function isGoodResult(result: CheckCertificateRevocationAgainstCrlResult): boole
 }
 
 /**
- * A revocation that an older delta CRL records after a newer one settled the
- * status as good. Only a revocation no later CRL may drop counts (RFC 5280
- * §5.3.1, §3.3), so a newer delta CRL that omits it contradicts its issuer.
+ * What an older delta CRL changes after a newer one settled the status as
+ * good: a revocation no later CRL may drop (RFC 5280 §5.3.1, §3.3), an entry
+ * `unrecognizedReasonCode: 'reject'` refuses, or entries that cannot settle
+ * the status. A newer delta CRL that omits such an entry contradicts its
+ * issuer.
  */
 function olderDeltaRevocation(
 	certificate: ParsedCertificate,
 	outcome: AuthenticatedCrlCheckOutcome,
 	at: Date,
 ): CrlsCheckOutcome | undefined {
-	const revoked =
-		outcome.kind === 'checked'
-			? irremovableCrlRevocation(certificate, outcome.result, at)
-			: undefined;
+	if (outcome.kind === 'delta_unresolved') {
+		return settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
+	}
+	if (outcome.kind !== 'checked') return undefined;
+	if (!outcome.result.ok) {
+		return outcome.result.code === 'reason_code_unrecognized' ? outcome : undefined;
+	}
+	const revoked = irremovableCrlRevocation(certificate, outcome.result, at);
 	return revoked === undefined ? undefined : { kind: 'checked', result: revoked };
 }
 
