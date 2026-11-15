@@ -818,6 +818,79 @@ describe('revocation signers and inherited key parameters', () => {
 		},
 	);
 
+	it.each([
+		{ delta: 'none', expected: { ok: true } },
+		{ delta: 'revoking', expected: { ok: false, code: 'responder_revoked' } },
+	] as const)(
+		'applies a $delta delta CRL from a responder issuer that inherits its parameters',
+		async ({ delta, expected }) => {
+			const issuer = parameterKey('P1', true);
+			const intermediate = parameterKey('P1', false);
+			const responder = parameterKey('P1', false);
+			const leaf = parameterKey('P1', false);
+			const issuerDer = await parameterCertificate(
+				'Parameter Issuer',
+				issuer,
+				'self',
+				CA_EXTENSIONS,
+			);
+			const underIssuer = { commonName: 'Parameter Issuer', key: issuer };
+			const intermediateDer = await parameterCertificate(
+				'Parameter Responder CA',
+				intermediate,
+				underIssuer,
+				CA_EXTENSIONS,
+			);
+			const responderDer = await parameterCertificate(
+				'Parameter Chained Responder',
+				responder,
+				{ commonName: 'Parameter Responder CA', key: intermediate },
+				{ extendedKeyUsage: ['ocspSigning'] },
+			);
+			const leafDer = await parameterCertificate(
+				'parameter-delta.example',
+				leaf,
+				underIssuer,
+				undefined,
+			);
+			const now = new Date(Date.now() + 5_000);
+			const stand = await createSelfSignedCertificate({
+				subject: { commonName: 'Parameter Responder CA' },
+			});
+			const responderSerial = hexToBytes(unwrap(parseCertificateDer(responderDer)).serialNumberHex);
+			const crl = (crlNumber: number, baseCrlNumber?: number) =>
+				createCertificateRevocationList({
+					crlNumber,
+					...(baseCrlNumber === undefined
+						? {}
+						: { baseCrlNumber, revokedCertificates: [{ serialNumber: responderSerial }] }),
+					issuer: { commonName: 'Parameter Responder CA' },
+					signerPrivateKey: stand.keyPair.privateKey,
+					issuerCertificate: stand.certificate.der,
+					thisUpdate: new Date(now.getTime() - 60_000),
+					nextUpdate: new Date(now.getTime() + 60_000),
+				});
+			const crls = [await resignedCrl((await crl(1)).der, intermediate)];
+			if (delta === 'revoking') crls.push(await resignedCrl((await crl(2, 1)).der, intermediate));
+			expect(
+				await validateOcspResponse({
+					response: await delegatedOcspResponse(
+						leafDer,
+						issuerDer,
+						responder,
+						[responderDer, intermediateDer],
+						now,
+					),
+					issuerCertificate: issuerDer,
+					allowChainedResponderCertificate: true,
+					responderRevocationCrls: crls,
+					at: now,
+					signatureVerifiers: parameterSignatureVerifiers,
+				}),
+			).toMatchObject(expected);
+		},
+	);
+
 	it('authenticates a CRL from a separate signer with the parameters its path gives it', async () => {
 		const root = parameterKey('P', true);
 		const ca = parameterKey('P', false);

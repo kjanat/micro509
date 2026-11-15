@@ -9,6 +9,7 @@ import {
 	generateKeyPair,
 	hasOcspNoCheckExtension,
 	parseCertificatePem,
+	parseCertificateRevocationListDer,
 	parseOcspRequestPemOrThrow,
 	parseOcspResponseDerOrThrow,
 	pemEncode,
@@ -781,6 +782,116 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			expect(result).toMatchObject(
 				accepted ? { ok: true } : { ok: false, code: 'responder_revocation_unknown' },
 			);
+		},
+	);
+
+	it.each([
+		{ policy: 'honor-nocheck', forgedDeltas: 4, accepted: true },
+		{ policy: 'honor-nocheck', forgedDeltas: 5, accepted: false },
+		{ policy: 'nocheck-or-evidence', forgedDeltas: 4, accepted: true },
+		{ policy: 'nocheck-or-evidence', forgedDeltas: 5, accepted: false },
+	] as const)(
+		'rejects a responder under $policy when $forgedDeltas forged delta CRLs exhaust the attempt limit',
+		async ({ policy, forgedDeltas, accepted }) => {
+			const authority = await issueAuthority('Delta Limit CA');
+			const responder = await issueDelegatedResponder(authority);
+			const response = await goodResponse(
+				authority,
+				responder.keys.privateKey,
+				responder.certificate.pem,
+				true,
+			);
+			const thisUpdate = new Date(Date.now() - HOUR_MS);
+			const crl = (signerPrivateKey: CryptoKey, crlNumber: number, baseCrlNumber?: number) =>
+				createCertificateRevocationList({
+					crlNumber,
+					...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+					issuer: { commonName: authority.commonName },
+					signerPrivateKey,
+					issuerCertificate: authority.ca.certificate.der,
+					thisUpdate,
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+				});
+			const attacker = await generateKeyPair();
+			const forged = await Promise.all(
+				Array.from({ length: forgedDeltas }, (_, index) =>
+					crl(attacker.privateKey, 100 + index, 5),
+				),
+			);
+			const result = await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				responderRevocationPolicy: policy,
+				responderRevocationCrls: [
+					(await crl(authority.ca.keyPair.privateKey, 5)).der,
+					...forged.map((delta) => delta.der),
+				],
+			});
+			expect(result).toMatchObject(
+				accepted ? { ok: true } : { ok: false, code: 'responder_revocation_unknown' },
+			);
+		},
+	);
+
+	it.each([
+		{ form: 'DER', expected: { ok: false, code: 'responder_revoked' } },
+		{ form: 'parsed', expected: { ok: false, code: 'responder_revoked' } },
+		{
+			form: 'parsed without its decoded base number',
+			expected: { ok: false, code: 'responder_revoked' },
+		},
+	] as const)(
+		'reads a revoking delta CRL passed as $form from its signed DER',
+		async ({ form, expected }) => {
+			const authority = await issueAuthority('Delta Form CA');
+			const responder = await issueDelegatedResponder(authority);
+			const response = await goodResponse(
+				authority,
+				responder.keys.privateKey,
+				responder.certificate.pem,
+				true,
+			);
+			const thisUpdate = new Date(Date.now() - HOUR_MS);
+			const crl = (crlNumber: number, baseCrlNumber?: number) =>
+				createCertificateRevocationList({
+					crlNumber,
+					...(baseCrlNumber === undefined
+						? {}
+						: {
+								baseCrlNumber,
+								revokedCertificates: [
+									{
+										serialNumber: hexToBytes(
+											unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex,
+										),
+										reasonCode: 'keyCompromise' as const,
+									},
+								],
+							}),
+					issuer: { commonName: authority.commonName },
+					signerPrivateKey: authority.ca.keyPair.privateKey,
+					issuerCertificate: authority.ca.certificate.der,
+					thisUpdate,
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+				});
+			const deltaDer = (await crl(2, 1)).der;
+			const { baseCrlNumber, ...withoutBaseNumber } = unwrap(
+				parseCertificateRevocationListDer(deltaDer),
+			);
+			expect(baseCrlNumber).toBe(1n);
+			const delta =
+				form === 'DER'
+					? deltaDer
+					: form === 'parsed'
+						? unwrap(parseCertificateRevocationListDer(deltaDer))
+						: withoutBaseNumber;
+			expect(
+				await validateOcspResponse({
+					response: response.der,
+					issuerCertificate: authority.ca.certificate.pem,
+					responderRevocationCrls: [(await crl(1)).der, delta],
+				}),
+			).toMatchObject(expected);
 		},
 	);
 

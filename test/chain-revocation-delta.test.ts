@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { CrlSource } from '#micro509';
 import {
+	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
 	checkChainRevocation,
 	createCertificate,
@@ -15,7 +16,7 @@ import {
 } from '#micro509';
 import { callerVerification } from '#micro509/internal/crypto/sig-verify';
 import { checkCertificateRevocationAgainstCrlsBy } from '#micro509/revocation/crl';
-import { addRevokedEntryCertificateIssuers, hexToBytes } from '#test/helpers';
+import { addRevokedEntryCertificateIssuers, hexToBytes, withCrlIssuer } from '#test/helpers';
 
 const CA_NAME = 'Delta Shadow CA';
 const HOUR_MS = 60 * 60 * 1000;
@@ -175,6 +176,38 @@ async function scenario() {
 				crlNumber: 5,
 				thisUpdate: baseThisUpdate,
 			}),
+		printableIssuerRevokingDelta: async () => {
+			const delta = await crl({
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber: 6,
+				baseCrlNumber: 5,
+				thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+				revokedCertificates: revocation,
+			});
+			const utf8Name = unwrap(parseCertificatePem(ca.certificate.pem)).subject.derHex;
+			const printableName = utf8Name.replace(
+				`0c0f${Buffer.from(CA_NAME).toString('hex')}`,
+				`130f${Buffer.from(CA_NAME).toString('hex')}`,
+			);
+			if (printableName === utf8Name) throw new Error('expected a UTF8String common name');
+			return withCrlIssuer(delta.der, ca.keyPair.privateKey, hexToBytes(printableName));
+		},
+		otherScopeDeltas: (count: number) =>
+			Promise.all(
+				Array.from(
+					{ length: count },
+					async (_, index) =>
+						(
+							await crl({
+								signerPrivateKey: ca.keyPair.privateKey,
+								crlNumber: 100 + index,
+								baseCrlNumber: 5,
+								thisUpdate: new Date(at.getTime() - HOUR_MS),
+								issuingDistributionPoint: { onlyContainsCACerts: true },
+							})
+						).der,
+				),
+			),
 		olderGoodDelta: () =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -241,6 +274,10 @@ const HELPER_DELTAS = {
 	'four forged': (s: Scenario) => s.forgedDeltas(4),
 	'five forged': (s: Scenario) => s.forgedDeltas(5),
 	unresolvable: async (s: Scenario) => [(await s.unresolvableDelta()).der],
+	'PrintableString-issuer revoking': async (s: Scenario) => [
+		await s.printableIssuerRevokingDelta(),
+	],
+	'five other-scope': (s: Scenario) => s.otherScopeDeltas(5),
 } satisfies Record<string, (s: Scenario) => Promise<readonly Uint8Array[]>>;
 
 describe('checkCertificateRevocationAgainstCrlsBy', () => {
@@ -255,6 +292,8 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 		{ base: 'clean', deltas: 'unresolvable', expected: 'unsettled' },
 		{ base: 'keyCompromise', deltas: 'unresolvable', expected: 'revoked' },
 		{ base: 'forged', deltas: 'revoking', expected: 'signature_invalid' },
+		{ base: 'clean', deltas: 'PrintableString-issuer revoking', expected: 'revoked' },
+		{ base: 'clean', deltas: 'five other-scope', expected: 'good' },
 	] as const)(
 		'checks a $base base CRL with $deltas delta CRLs as $expected',
 		async ({ base, deltas, expected }) => {
@@ -268,9 +307,51 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 				{ at: s.at },
 				callerVerification(undefined),
 			);
-			const outcome =
-				result === undefined ? 'unsettled' : result.ok ? result.value.status : result.code;
-			expect(outcome).toBe(expected);
+			expect(
+				result.kind === 'unsettled'
+					? 'unsettled'
+					: result.result.ok
+						? result.result.value.status
+						: result.result.code,
+			).toBe(expected);
+		},
+	);
+});
+
+describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation with a delta CRL that fails', () => {
+	it.each([
+		{ base: 'keyCompromise', delta: 'forged', crl: 'revoked', evidence: 'revoked' },
+		{ base: 'keyCompromise', delta: 'unresolvable', crl: 'revoked', evidence: 'revoked' },
+		{ base: 'certificateHold', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
+		{ base: 'clean', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
+		{ base: 'clean', delta: 'unresolvable', crl: 'signature_invalid', evidence: 'good' },
+	] as const)(
+		'keeps a $base base CRL entry beside a $delta delta CRL as $crl',
+		async ({ base, delta, crl, evidence }) => {
+			const s = await scenario();
+			const baseDer = (await HELPER_BASES[base](s)).der;
+			const deltaDer =
+				delta === 'forged'
+					? ((await s.forgedDeltas(1))[0] ?? s.forgedNewerDelta)
+					: (await s.unresolvableDelta()).der;
+			const direct = await checkCertificateRevocationAgainstCrl({
+				certificate: s.leafPem,
+				issuerCertificate: s.caPem,
+				crl: baseDer,
+				deltaCrl: deltaDer,
+				at: s.at,
+			});
+			expect(direct.ok ? direct.value.status : direct.code).toBe(crl);
+			const combined = await checkCertificateRevocation({
+				certificate: s.leafPem,
+				issuerCertificate: s.caPem,
+				evidence: [
+					{ kind: 'crl', crl: baseDer, deltaCrl: deltaDer },
+					{ kind: 'ocsp', response: s.ocspGood },
+				],
+				at: s.at,
+			});
+			expect(combined).toMatchObject({ ok: true, value: { status: evidence } });
 		},
 	);
 });

@@ -831,7 +831,7 @@ async function checkSignerRevocation(
 	// A `good` from one CRL does not end the search: a later CRL may report the
 	// signer revoked, and a revoked verdict from any CRL wins.
 	const coveredReasons = new Set<string>();
-	let sawUnrecognizedReason = false;
+	let sawUnsettledEvidence = false;
 	const crls = ctx.crls.flatMap((source) => {
 		try {
 			return [normalizeCrl(source)];
@@ -846,15 +846,15 @@ async function checkSignerRevocation(
 		if (outcome.kind === 'revoked') {
 			return 'resolved-revoked';
 		}
-		if (outcome.kind === 'unrecognized_reason') {
-			sawUnrecognizedReason = true;
+		if (outcome.kind === 'unrecognized_reason' || outcome.kind === 'unsettled_delta') {
+			sawUnsettledEvidence = true;
 			continue;
 		}
 		for (const reason of outcome.reasons) {
 			coveredReasons.add(reason);
 		}
 	}
-	if (sawUnrecognizedReason) {
+	if (sawUnsettledEvidence) {
 		return 'resolved-indeterminate';
 	}
 	if (coversAllDistributionPointReasons(coveredReasons)) {
@@ -870,10 +870,15 @@ async function checkSignerRevocation(
 	return 'resolved-indeterminate';
 }
 
-/** What one CRL settles about a signer: a revoked verdict, an entry `unrecognizedReasonCode: 'reject'` refuses, or the reasons it covers. */
+/**
+ * What one CRL settles about a signer: a revoked verdict, an entry
+ * `unrecognizedReasonCode: 'reject'` refuses, a delta CRL that cannot settle
+ * the status, or the reasons it covers.
+ */
 type SignerCrlOutcome =
 	| { readonly kind: 'revoked' }
 	| { readonly kind: 'unrecognized_reason' }
+	| { readonly kind: 'unsettled_delta' }
 	| { readonly kind: 'reasons'; readonly reasons: readonly DistributionPointReason[] };
 
 const SIGNER_CRL_NO_EVIDENCE = {
@@ -893,7 +898,7 @@ async function checkSignerAgainstCrl(
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	ctx: SignerValidationContext,
 ): Promise<SignerCrlOutcome> {
-	const result = await checkCertificateRevocationAgainstCrlsBy(
+	const outcome = await checkCertificateRevocationAgainstCrlsBy(
 		signer,
 		crl,
 		deltaCrls,
@@ -906,9 +911,10 @@ async function checkSignerAgainstCrl(
 		},
 		signerVerification(ctx, issuer),
 	);
-	if (result === undefined) {
-		return SIGNER_CRL_NO_EVIDENCE;
+	if (outcome.kind === 'unsettled') {
+		return { kind: 'unsettled_delta' };
 	}
+	const result = outcome.result;
 	if (!result.ok) {
 		return result.code === 'reason_code_unrecognized'
 			? { kind: 'unrecognized_reason' }

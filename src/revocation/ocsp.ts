@@ -96,8 +96,7 @@ import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
-	parseCertificateRevocationListDerOrThrow,
-	parseCertificateRevocationListPemOrThrow,
+	normalizeCrl,
 } from '#micro509/revocation/crl';
 import type { TrustAnchor } from '#micro509/verify/verify';
 import { trustAnchorFromCertificate, verifyCertificateChain } from '#micro509/verify/verify';
@@ -431,10 +430,11 @@ export type VerifyOcspResponseSignatureResult =
  *   CRL evidence must show it is not revoked, as RFC 9608 §4 runs the RFC 5280
  *   §6.1.3 (a)(3) check.
  * - `'honor-nocheck'`: as `'nocheck-or-evidence'`, but missing or unusable
- *   evidence is tolerated. A revoked verdict rejects, and so does an entry
+ *   evidence is tolerated. A revoked verdict rejects, and so do an entry
  *   whose reason code `responderRevocationUnrecognizedReasonCode: 'reject'`
- *   refuses. A responder with a critical cRLDistributionPoints extension
- *   still needs evidence (X.509 (2019) §9.6.2.1).
+ *   refuses and an applicable delta CRL that cannot settle the status. A
+ *   responder with a critical cRLDistributionPoints extension still needs
+ *   evidence (X.509 (2019) §9.6.2.1).
  * - `'require-evidence'`: `id-pkix-ocsp-nocheck` is ignored and CRL evidence
  *   must show the responder is not revoked (RFC 5280 §6.1 lets an application
  *   further limit the valid paths). A responder carrying noRevAvail is
@@ -1831,17 +1831,6 @@ export function carriesOcspNoCheck(certificate: ParsedCertificate): boolean {
 	);
 }
 
-/** Parses a CRL from PEM string, DER bytes, or an already-parsed CRL. */
-function parseResponderCrlFromSource(source: CrlSource): ParsedCertificateRevocationList {
-	if (typeof source === 'object' && 'issuer' in source) {
-		return source;
-	}
-	if (typeof source === 'string') {
-		return parseCertificateRevocationListPemOrThrow(source);
-	}
-	return parseCertificateRevocationListDerOrThrow(source);
-}
-
 /** The CRLs among `sources` that parse, split into complete and delta CRLs. */
 function partitionResponderCrls(sources: readonly CrlSource[]): {
 	readonly complete: readonly ParsedCertificateRevocationList[];
@@ -1852,7 +1841,7 @@ function partitionResponderCrls(sources: readonly CrlSource[]): {
 	for (const source of sources) {
 		let crl: ParsedCertificateRevocationList;
 		try {
-			crl = parseResponderCrlFromSource(source);
+			crl = normalizeCrl(source);
 		} catch {
 			continue; // Unusable evidence — try remaining CRLs
 		}
@@ -1917,8 +1906,9 @@ async function checkDelegatedResponderRevocation(
 	const crls = partitionResponderCrls(input.responderRevocationCrls ?? []);
 	const coveredReasons = new Set<string>();
 	let sawUnrecognizedReason = false;
+	let sawUnsettledDelta = false;
 	for (const crl of crls.complete) {
-		const result = await checkCertificateRevocationAgainstCrlsBy(
+		const outcome = await checkCertificateRevocationAgainstCrlsBy(
 			signer,
 			crl,
 			crls.delta,
@@ -1926,9 +1916,11 @@ async function checkDelegatedResponderRevocation(
 			crlCheck,
 			verification,
 		);
-		if (result === undefined) {
-			continue; // An applicable delta CRL left the status unsettled
+		if (outcome.kind === 'unsettled') {
+			sawUnsettledDelta = true;
+			continue;
 		}
+		const result = outcome.result;
 		if (!result.ok) {
 			sawUnrecognizedReason ||= result.code === 'reason_code_unrecognized';
 			continue; // CRL does not apply to the responder certificate
@@ -1947,6 +1939,12 @@ async function checkDelegatedResponderRevocation(
 		return validateOcspResponseFailureResult(
 			'responder_revocation_unknown',
 			'Delegated OCSP responder carries an unrecognized CRL reason code',
+		);
+	}
+	if (sawUnsettledDelta) {
+		return validateOcspResponseFailureResult(
+			'responder_revocation_unknown',
+			'A delta CRL for the delegated OCSP responder could not settle its status',
 		);
 	}
 	// A definitive good requires every revocation reason to be covered; a single

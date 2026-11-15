@@ -175,8 +175,9 @@ certificates with `id-pkix-ocsp-nocheck`.
 can list it.
 
 `'honor-nocheck'` keeps the tolerant behaviour: a revoked verdict rejects,
-and so does a CRL entry for the responder whose reason code
-`unrecognizedReasonCode: 'reject'` refuses. A responder with a critical
+and so do a CRL entry for the responder whose reason code
+`unrecognizedReasonCode: 'reject'` refuses and an applicable delta CRL that
+cannot settle the responder's status. A responder with a critical
 cRLDistributionPoints extension still needs evidence under it. For chain revocation, set
 `policy.ocspResponderRevocation`. For `checkCertificateRevocation`, set
 `ocspResponderRevocation`; the CRLs in its `evidence`, delta CRLs included,

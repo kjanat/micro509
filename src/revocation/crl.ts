@@ -1256,7 +1256,48 @@ export async function checkCertificateRevocationAgainstCrlBy(
 		options,
 		verification,
 	);
-	return outcome.kind === 'checked' ? outcome.result : outcome.failure;
+	if (outcome.kind === 'checked') return outcome.result;
+	const complete =
+		outcome.kind === 'delta_unresolved'
+			? outcome.complete
+			: await checkCompleteCrlAlone(
+					certificate,
+					authenticated.value,
+					authority,
+					options,
+					verification,
+				);
+	return (
+		irremovableCrlRevocation(certificate, complete, options.at ?? new Date()) ?? outcome.failure
+	);
+}
+
+/** {@linkcode checkRevocationAgainstAuthenticatedCrl} on `completeCrl` without its delta CRL. */
+async function checkCompleteCrlAlone(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	authority: CrlAuthority,
+	options: CrlCheckOptions,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	const alone = await checkRevocationAgainstAuthenticatedCrl(
+		certificate,
+		completeCrl,
+		authority,
+		{
+			...(options.at === undefined ? {} : { at: options.at }),
+			...(options.clockSkewMs === undefined ? {} : { clockSkewMs: options.clockSkewMs }),
+			...(options.maxAgeMs === undefined ? {} : { maxAgeMs: options.maxAgeMs }),
+			...(options.unrecognizedReasonCode === undefined
+				? {}
+				: { unrecognizedReasonCode: options.unrecognizedReasonCode }),
+			...(options.signatureVerifiers === undefined
+				? {}
+				: { signatureVerifiers: options.signatureVerifiers }),
+		},
+		verification,
+	);
+	return alone.kind === 'checked' ? alone.result : alone.failure;
 }
 
 /**
@@ -1374,24 +1415,28 @@ export function rankApplicableDeltaCrls(
 	clockSkewMs: number,
 	crlMaxAgeMs: number | undefined,
 ): readonly ParsedCertificateRevocationList[] {
-	const baseCrlNumber = baseCrl.crlNumber;
-	if (baseCrlNumber === undefined) {
-		return [];
-	}
 	return deltaCrls
 		.filter(
 			(deltaCrl) =>
-				deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
-				deltaCrl.baseCrlNumber !== undefined &&
-				deltaCrl.baseCrlNumber <= baseCrlNumber &&
-				deltaCrl.crlNumber !== undefined &&
-				deltaCrl.crlNumber > baseCrlNumber &&
-				deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
+				isCompatibleDeltaCrl(baseCrl, deltaCrl) &&
 				isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs),
 		)
 		.sort((left, right) =>
 			isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0,
 		);
+}
+
+/** Whether {@linkcode checkDeltaCrlCompatibility} accepts `deltaCrl` for `completeCrl`. */
+function isCompatibleDeltaCrl(
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList,
+): boolean {
+	try {
+		return checkDeltaCrlCompatibility(completeCrl, deltaCrl) === undefined;
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return false;
+	}
 }
 
 function isNewerDeltaCrl(
@@ -1405,11 +1450,22 @@ function isNewerDeltaCrl(
 }
 
 /**
+ * Result of {@linkcode checkCertificateRevocationAgainstCrlsBy}. `unsettled`
+ * means an applicable delta CRL could not settle the status, or the
+ * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit ran out first. A delta CRL
+ * may then revoke the certificate, so the complete CRL's good is no evidence.
+ *
+ * @internal
+ */
+export type CrlsCheckOutcome =
+	| { readonly kind: 'checked'; readonly result: CheckCertificateRevocationAgainstCrlResult }
+	| { readonly kind: 'unsettled' };
+
+/**
  * Checks `certificate` against `completeCrl`, which `authority` signs,
- * updated by the newest delta CRL in `deltaCrls` that applies to it. Returns
- * `undefined` when an applicable delta CRL cannot settle the status, or when
- * the {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit runs out, unless the
- * complete CRL holds a revocation no delta CRL could remove.
+ * updated by the newest delta CRL in `deltaCrls` that applies to it. A
+ * revocation in the complete CRL that no delta CRL could remove settles the
+ * status even when the delta CRLs do not.
  *
  * @internal
  */
@@ -1420,13 +1476,16 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 	authority: CrlAuthority,
 	options: CrlCheckOptions,
 	verification: CallerVerification,
-): Promise<CheckCertificateRevocationAgainstCrlResult | undefined> {
+): Promise<CrlsCheckOutcome> {
 	const authenticated = await authenticateCrl(completeCrl, authority, verification);
 	if (!authenticated.ok) {
-		return checkCertificateRevocationAgainstCrlFailureResult(
-			authenticated.code,
-			authenticated.message,
-		);
+		return {
+			kind: 'checked',
+			result: checkCertificateRevocationAgainstCrlFailureResult(
+				authenticated.code,
+				authenticated.message,
+			),
+		};
 	}
 	const at = options.at ?? new Date();
 	const candidates = rankApplicableDeltaCrls(
@@ -1444,9 +1503,9 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 			{ ...options, deltaCrl },
 			verification,
 		);
-		if (outcome.kind === 'checked') return outcome.result;
+		if (outcome.kind === 'checked') return outcome;
 		if (outcome.kind === 'delta_unresolved') {
-			return irremovableCrlRevocation(certificate, outcome.complete, at);
+			return settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
 		}
 	}
 	const alone = await checkRevocationAgainstAuthenticatedCrl(
@@ -1456,10 +1515,16 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		options,
 		verification,
 	);
-	if (alone.kind !== 'checked') return undefined;
+	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
 	return candidates.length > DELTA_CRL_ATTEMPTS_PER_BASE
-		? irremovableCrlRevocation(certificate, alone.result, at)
-		: alone.result;
+		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at))
+		: { kind: 'checked', result: aloneResult };
+}
+
+function settledOrUnsettled(
+	result: CheckCertificateRevocationAgainstCrlResult | undefined,
+): CrlsCheckOutcome {
+	return result === undefined ? { kind: 'unsettled' } : { kind: 'checked', result };
 }
 
 /**
