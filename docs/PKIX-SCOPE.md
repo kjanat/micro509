@@ -552,8 +552,11 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `delta_crl_unusable`. At most four candidates are checked per base CRL
       and signing certificate, and 32 per `checkChainRevocation` call, the
       checks for CRL signers and delegated OCSP responders included.
-      `checkCertificateRevocation` pools the `deltaCrl` of every CRL evidence
-      entry under the same limits and reports `delta_crl_unusable` or
+      `validateOcspResponse` applies the same limits to the CRLs of a
+      delegated responder. `checkCertificateRevocation` treats each CRL in
+      its evidence as a delta CRL when it carries the delta CRL indicator,
+      whichever field holds it, and pools those under the same limits, which
+      the CRL checks of its delegated OCSP responders share. It reports `delta_crl_unusable` or
       `delta_crl_retry_limit_exceeded` as evidence that keeps other evidence
       from settling the status as `good`. A base CRL that does not cover
       the certificate spends none, and repeated copies of one base or delta

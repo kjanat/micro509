@@ -97,6 +97,7 @@ import {
 	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
+	DELTA_CRL_ATTEMPTS_PER_CALL,
 	distinctSignedCrls,
 	normalizeCrl,
 } from '#micro509/revocation/crl';
@@ -554,13 +555,17 @@ export interface OcspCallerVerification {
 	readonly issuerWorkingKey?: WorkingPublicKey;
 	/** SHA-256 SPKI hashes that a delegated responder's certification path must not carry. */
 	readonly distrustedSpkiSha256?: readonly string[];
-	/** Delta CRL checks left for the revocation check this validation serves. */
+	/**
+	 * Delta CRL checks left for the revocation check this validation serves.
+	 * Defaults to {@linkcode DELTA_CRL_ATTEMPTS_PER_CALL} for this validation.
+	 */
 	readonly deltaBudget?: DeltaCrlBudget;
 }
 
 /** {@linkcode OcspCallerVerification} with the issuer's working key resolved. */
 type ResolvedOcspCallerVerification = OcspCallerVerification & {
 	readonly issuerWorkingKey: WorkingPublicKey;
+	readonly deltaBudget: DeltaCrlBudget;
 };
 
 /** Failure codes produced by {@linkcode validateOcspResponse}. */
@@ -1301,7 +1306,11 @@ export async function validateOcspResponseBy(
 		(issuer.kind === 'certificate'
 			? certificateWorkingKey(issuer.certificate)
 			: anchorWorkingKey(issuer.trustAnchor));
-	const resolvedContext = { ...context, issuerWorkingKey };
+	const resolvedContext = {
+		...context,
+		issuerWorkingKey,
+		deltaBudget: context.deltaBudget ?? { remaining: DELTA_CRL_ATTEMPTS_PER_CALL },
+	};
 	const responder = await classifyOcspResponder(
 		input,
 		parsedResponse,
@@ -1980,7 +1989,7 @@ async function checkDelegatedResponderRevocation(
 			issuer,
 			crlCheck,
 			verification,
-			context.deltaBudget === undefined ? [] : [context.deltaBudget],
+			[context.deltaBudget],
 		);
 		if (outcome.kind === 'unsettled') {
 			sawUnsettledDelta = true;

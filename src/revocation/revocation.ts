@@ -40,7 +40,7 @@ import type {
 	RevocationSkipReason,
 	ValidateOcspResponseInput,
 } from '#micro509/revocation/ocsp';
-import { validateOcspResponse } from '#micro509/revocation/ocsp';
+import { validateOcspResponseWith } from '#micro509/revocation/ocsp';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
@@ -358,11 +358,16 @@ export function resolveOcspResponderCandidates(
 
 /**
  * Evaluates all provided CRL and OCSP evidence to determine the certificate's
- * revocation status. Returns the first `revoked` if any, else the first `good`,
- * else `indeterminate` with diagnostic details about each indeterminate evidence.
- * Each distinct complete CRL is checked once, updated by the newest delta CRL
- * among every `deltaCrl` in `evidence` that applies to it, as
- * `checkChainRevocation` does, within the same attempt limits. A delta CRL
+ * revocation status. Returns the first `revoked` if any. Otherwise an OCSP
+ * `good` settles the status, then a CRL `good` once the CRLs together cover
+ * every revocation reason, else `indeterminate` with diagnostic details about
+ * each indeterminate evidence.
+ * Each CRL in `evidence` counts as a delta CRL when it carries the delta CRL
+ * indicator and as a complete CRL otherwise, whichever field holds it. Each
+ * distinct complete CRL is checked once, updated by the newest delta CRL
+ * among them that applies to it, as `checkChainRevocation` does, within the
+ * same attempt limits, which the CRL checks of delegated OCSP responders
+ * share. A delta CRL
  * that cannot settle the status yields `delta_crl_unusable`, and a candidate
  * the limits leave unread that no delta CRL read supersedes
  * `delta_crl_retry_limit_exceeded`; either keeps other
@@ -516,38 +521,57 @@ async function checkRevocationEvidence(
 		entry.kind === 'crl' ? parseCrlEvidence(entry) : undefined,
 	);
 	const deltaCrls = distinctSignedCrls(
-		parsed.flatMap((entry) => (entry?.deltaCrl?.kind === 'parsed' ? [entry.deltaCrl.crl] : [])),
+		parsed.flatMap((entry) =>
+			[entry?.crl, entry?.deltaCrl].flatMap((crl) =>
+				crl?.kind === 'parsed' && crl.crl.baseCrlNumber !== undefined ? [crl.crl] : [],
+			),
+		),
 	);
 	const budget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CALL };
 	const checkedCompleteCrls = new Set<string>();
 	const checks: RevocationEvidenceCheck[] = [];
 	for (const [index, entry] of evidence.entries()) {
-		const crlEntry = parsed[index];
 		if (entry.kind === 'ocsp') {
 			checks.push(
 				await guardedEvidenceCheck('ocsp', () =>
-					checkCertificateRevocationWithOcsp(input, entry, certificate),
+					checkCertificateRevocationWithOcsp(input, entry, certificate, budget),
 				),
 			);
 			continue;
 		}
+		const crlEntry = parsed[index];
 		if (crlEntry === undefined) continue;
-		if (crlEntry.deltaCrl?.kind === 'indeterminate') checks.push(crlEntry.deltaCrl.check);
-		if (crlEntry.crl.kind === 'indeterminate') {
-			checks.push(crlEntry.crl.check);
-			continue;
+		for (const crl of [crlEntry.deltaCrl, crlEntry.crl]) {
+			if (crl?.kind === 'indeterminate') checks.push(crl.check);
 		}
-		const completeCrl = crlEntry.crl.crl;
-		const key = signedCrlKey(completeCrl);
-		if (checkedCompleteCrls.has(key)) continue;
-		checkedCompleteCrls.add(key);
-		checks.push(
-			await guardedEvidenceCheck('crl', () =>
-				checkCertificateRevocationWithCrl(input, completeCrl, deltaCrls, certificate, budget),
-			),
-		);
+		for (const completeCrl of completeCrlsOf(crlEntry)) {
+			const key = signedCrlKey(completeCrl);
+			if (checkedCompleteCrls.has(key)) continue;
+			checkedCompleteCrls.add(key);
+			checks.push(
+				await guardedEvidenceCheck('crl', () =>
+					checkCertificateRevocationWithCrl(input, completeCrl, deltaCrls, certificate, budget),
+				),
+			);
+		}
 	}
 	return checks;
+}
+
+/**
+ * The CRLs of one evidence entry to check as complete CRLs: its `crl`, and
+ * its `deltaCrl` when that carries no delta CRL indicator. A delta CRL in
+ * `crl` is still checked, which reports it as no complete CRL.
+ */
+function completeCrlsOf(
+	entry: ReturnType<typeof parseCrlEvidence>,
+): readonly ParsedCertificateRevocationList[] {
+	return [
+		...(entry.crl.kind === 'parsed' ? [entry.crl.crl] : []),
+		...(entry.deltaCrl?.kind === 'parsed' && entry.deltaCrl.crl.baseCrlNumber === undefined
+			? [entry.deltaCrl.crl]
+			: []),
+	];
 }
 
 /** One evidence check, with an undecodable input reported as indeterminate evidence. */
@@ -689,7 +713,7 @@ function crlEvidenceCheck(
 	};
 }
 
-/** The {@linkcode validateOcspResponse} input for one OCSP evidence entry. */
+/** The {@linkcode validateOcspResponseWith} input for one OCSP evidence entry. */
 function ocspEvidenceValidationInput(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationOcspEvidenceInput,
@@ -726,13 +750,20 @@ function ocspEvidenceValidationInput(
 	};
 }
 
-/** Evaluates a single OCSP evidence entry via {@linkcode validateOcspResponse}. */
+/**
+ * Evaluates a single OCSP evidence entry via {@linkcode validateOcspResponseWith},
+ * spending delta CRL checks of a delegated responder from `budget`.
+ */
 async function checkCertificateRevocationWithOcsp(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationOcspEvidenceInput,
 	certificate: ParsedCertificate,
+	budget: DeltaCrlBudget,
 ): Promise<RevocationEvidenceCheck> {
-	const response = await validateOcspResponse(ocspEvidenceValidationInput(input, evidence));
+	const response = await validateOcspResponseWith(ocspEvidenceValidationInput(input, evidence), {
+		verifiers: resolveSignatureVerifiers(input.signatureVerifiers),
+		deltaBudget: budget,
+	});
 	if (!response.ok) {
 		return {
 			status: 'indeterminate',

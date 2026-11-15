@@ -13,6 +13,7 @@ import {
 	parseCertificateRevocationListDer,
 	unwrap,
 	validateCertificateRevocationList,
+	validateOcspResponse,
 } from '#micro509';
 import { callerVerification } from '#micro509/internal/crypto/sig-verify';
 import { checkCertificateRevocationAgainstCrlsBy } from '#micro509/revocation/crl';
@@ -316,6 +317,33 @@ async function scenario() {
 							})),
 						}),
 			}),
+		delegatedOcspGood: async () => {
+			const responderKeys = await generateKeyPair();
+			const responder = await createCertificate({
+				issuer: { commonName: CA_NAME },
+				subject: { commonName: 'Delta Shadow Responder' },
+				publicKey: responderKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerCertificate: ca.certificate.der,
+				extensions: { extendedKeyUsage: ['ocspSigning'] },
+			});
+			return (
+				await createOcspResponse({
+					signerPrivateKey: responderKeys.privateKey,
+					signerCertificate: responder.der,
+					includedCertificates: [responder.der],
+					responses: [
+						{
+							certificate: leaf.pem,
+							issuerCertificate: ca.certificate.pem,
+							certStatus: 'good',
+							thisUpdate: baseThisUpdate,
+							nextUpdate,
+						},
+					],
+				})
+			).der;
+		},
 		revokingDelta: (baseCrlNumber = 5, crlNumber = 6) =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -804,6 +832,79 @@ describe('checkChainRevocation and checkCertificateRevocation read delta CRLs ne
 			});
 		},
 	);
+});
+
+describe('validateOcspResponse and checkCertificateRevocation delta CRL limits for a delegated responder', () => {
+	const completeCrls = (s: Scenario, count: number) =>
+		Promise.all(
+			Array.from({ length: count }, async (_, index) => (await s.baseNumbered(index + 1)).der),
+		);
+
+	it.each([
+		{ bases: 8, expected: 'accepted' },
+		{ bases: 9, expected: 'responder_revocation_unknown' },
+	] as const)(
+		'validateOcspResponse spends at most 32 delta CRL checks on the responder ($bases base CRLs)',
+		async ({ bases, expected }) => {
+			const s = await scenario();
+			const result = await validateOcspResponse({
+				response: await s.delegatedOcspGood(),
+				issuerCertificate: s.caPem,
+				at: s.at,
+				responderRevocationCrls: [
+					...(await completeCrls(s, bases)),
+					...(await s.forgedDeltas(4, 1)),
+				],
+			});
+			expect(result.ok ? 'accepted' : result.code).toBe(expected);
+		},
+	);
+
+	it('checkCertificateRevocation shares its 32 delta CRL checks with the responder', async () => {
+		const s = await scenario();
+		const deltas = await s.forgedDeltas(4, 1);
+		const result = await checkCertificateRevocation({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			evidence: [
+				{ kind: 'ocsp', response: await s.delegatedOcspGood() },
+				...(await completeCrls(s, 8)).map((crl, index) => {
+					const deltaCrl = deltas[index];
+					return deltaCrl === undefined
+						? { kind: 'crl' as const, crl }
+						: { kind: 'crl' as const, crl, deltaCrl };
+				}),
+			],
+			at: s.at,
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			value: {
+				status: 'indeterminate',
+				details: {
+					indeterminateEvidence: Array.from({ length: 8 }, () => ({
+						kind: 'crl',
+						code: 'delta_crl_retry_limit_exceeded',
+					})),
+				},
+			},
+		});
+	});
+});
+
+describe('checkCertificateRevocation classifies each CRL by its delta CRL indicator', () => {
+	it('pools a delta CRL in crl and checks a complete CRL in deltaCrl', async () => {
+		const s = await scenario();
+		const result = await checkCertificateRevocation({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			evidence: [
+				{ kind: 'crl', crl: (await s.revokingDelta()).der, deltaCrl: (await s.base(false)).der },
+			],
+			at: s.at,
+		});
+		expect(result).toMatchObject({ ok: true, value: { status: 'revoked' } });
+	});
 });
 
 describe('checkCertificateRevocationAgainstCrlsBy with a complete CRL that does not cover the certificate', () => {

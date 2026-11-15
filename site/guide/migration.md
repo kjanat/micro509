@@ -237,6 +237,11 @@ keeps OCSP or other CRL evidence from settling the status as `good`. An
 undecodable `deltaCrl` no longer hides its complete CRL, and evidence that
 does not decode reports `malformed`.
 
+Each CRL in `evidence` now counts as a delta CRL when it carries the delta CRL
+indicator and as a complete CRL otherwise, whichever of `crl` and `deltaCrl`
+holds it. The delta CRL checks of delegated OCSP responders now share the 32
+checks per call, and `validateOcspResponse` spends at most 32 on its own.
+
 ## Expect delta CRLs to be read newest first
 
 Delta CRLs are now read newest first whether or not they are current, so a
