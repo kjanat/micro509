@@ -1273,6 +1273,7 @@ export async function checkCertificateRevocationAgainstCrlBy(
 					options,
 					verification,
 				);
+	if (outcome.kind === 'delta_stale') return complete;
 	return (
 		irremovableCrlRevocation(certificate, complete, options.at ?? new Date()) ?? outcome.failure
 	);

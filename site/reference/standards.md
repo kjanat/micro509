@@ -74,11 +74,12 @@ outline: [2, 3]
 - Delta CRL merge using only a current delta whose CRL number exceeds its
   base's and preferring the latest `thisUpdate` ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), with a
   `thisUpdate` no earlier than the base's (X.509 Annex E.5.2). A complete or
-  delta CRL past its `nextUpdate` still settles a revocation other than
-  `certificateHold` or `removeFromCRL` of an unexpired certificate ([RFC 5280
-  §5.3.1][rfc5280-section-5.3.1])
-- A delegated CRL signer outside the chain needs CRL evidence from its own
-  issuer unless it carries `noRevAvail` or `id-pkix-ocsp-nocheck`. A CRL the
+  delta CRL past its `nextUpdate` still revokes an unexpired certificate it
+  lists, unless the reason is `certificateHold`, or `removeFromCRL` in a delta
+  CRL ([RFC 5280 §5.3.1][rfc5280-section-5.3.1])
+- A delegated CRL signer outside the chain, and every CA on its path outside
+  the chain, needs CRL evidence unless it carries `noRevAvail` or
+  `id-pkix-ocsp-nocheck`. A CRL the
   signer signed counts as that evidence as `crlSignerSelfEvidence` allows
 - `checkChainRevocation` applies `distrustedSpkiSha256` to the paths of CRL
   signers and delegated OCSP responders

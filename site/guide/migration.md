@@ -211,13 +211,17 @@ evidence.
 ## Expect revocations from CRLs past `nextUpdate`
 
 A CRL past its `nextUpdate`, older than the age bound, or without
-`nextUpdate` and an age bound still revokes an unexpired certificate it lists
-with a reason other than `certificateHold` or `removeFromCRL` ([RFC 5280
-§5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)). This
-holds for complete and delta CRLs. Such a CRL now yields `revoked` instead of
-`stale_crl` in chain revocation, `checkCertificateRevocation`,
-`checkCertificateRevocationAgainstCrl` and delegated responder checks. A clean
-current base CRL beside such a delta CRL also yields `revoked`.
+`nextUpdate` and an age bound still revokes an unexpired certificate it lists,
+unless the reason is `certificateHold`, or `removeFromCRL` in a delta CRL
+([RFC 5280 §5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)).
+Such a CRL now yields `revoked` instead of `stale_crl` in chain revocation,
+`checkCertificateRevocation`, `checkCertificateRevocationAgainstCrl` and
+delegated responder checks. A clean current base CRL beside such a delta CRL
+also yields `revoked`, and so does a newer clean delta CRL beside it.
+
+A delta CRL past its `nextUpdate` that lists no such entry now leaves the
+status to its base CRL in `checkCertificateRevocationAgainstCrl` and
+`checkCertificateRevocation`, instead of failing with `stale_crl`.
 
 ## Set an age policy for CRLs without `nextUpdate`
 

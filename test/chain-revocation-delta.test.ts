@@ -452,7 +452,7 @@ describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation wi
 		{ base: 'clean', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
 		{ base: 'clean', delta: 'unresolvable', crl: 'signature_invalid', evidence: 'good' },
 		{ base: 'clean', delta: 'expired revoking', crl: 'revoked', evidence: 'revoked' },
-		{ base: 'clean', delta: 'expired holding', crl: 'stale_crl', evidence: 'good' },
+		{ base: 'clean', delta: 'expired holding', crl: 'good', evidence: 'good' },
 	] as const)(
 		'keeps a $base base CRL entry beside a $delta delta CRL as $crl',
 		async ({ base, delta, crl, evidence }) => {

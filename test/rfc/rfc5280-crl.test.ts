@@ -903,7 +903,7 @@ describe('RFC 5280 §5.2.4 L3572-3582: only a current delta CRL applies, and the
 	});
 
 	it.each([
-		{ revokesLeaf: false, direct: 'stale_crl', chain: 'good' },
+		{ revokesLeaf: false, direct: 'good', chain: 'good' },
 		{ revokesLeaf: true, direct: 'revoked', chain: 'revoked' },
 	] as const)(
 		'never treats a delta CRL without nextUpdate as current (revokes leaf $revokesLeaf)',
@@ -1140,7 +1140,7 @@ describe('RFC 5280 §5.3.1 L3847-3851: only removeFromCRL takes a certificate of
 
 	it.each([
 		{ reasonCode: 'keyCompromise', direct: 'revoked', chain: 'revoked' },
-		{ reasonCode: 'certificateHold', direct: 'stale_crl', chain: 'good' },
+		{ reasonCode: 'certificateHold', direct: 'good', chain: 'good' },
 	] as const)(
 		'keeps a $reasonCode entry of a delta CRL past its nextUpdate beside a current clean base CRL as $chain',
 		async ({ reasonCode, direct, chain: chainStatus }) => {

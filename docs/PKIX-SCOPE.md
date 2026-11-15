@@ -487,9 +487,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       governs it. [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify client behaviour for
       such a CRL, and [§3.3][rfc5280-section-3.3] leaves the required recency of revocation data to
       local policy. A CRL that is not current but was issued by the
-      evaluation time still settles a revocation with a reason other than
-      `certificateHold` or `removeFromCRL` of a certificate that has not
-      expired, which every later CRL must keep listing ([RFC 5280 §5.3.1][rfc5280-section-5.3.1],
+      evaluation time still settles an entry for a certificate that has not
+      expired whose reason is not `certificateHold`, and in a delta CRL not
+      `removeFromCRL`. Every later CRL must keep listing it ([RFC 5280 §5.3.1][rfc5280-section-5.3.1],
       [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is micro509
       policy.
 - [x] Always encode `nextUpdate` in generated CRLs ([RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5]).
