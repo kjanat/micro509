@@ -237,6 +237,18 @@ keeps OCSP or other CRL evidence from settling the status as `good`. An
 undecodable `deltaCrl` no longer hides its complete CRL, and evidence that
 does not decode reports `malformed`.
 
+## Expect delta CRLs to be read newest first
+
+Delta CRLs are now read newest first whether or not they are current, so a
+newer delta CRL past its `nextUpdate` that revokes an unexpired certificate
+for a reason other than `certificateHold` yields `revoked` beside older
+current clean ones. A delta CRL past its `nextUpdate` without such an entry no
+longer ends the search. When the attempt limits leave a delta CRL unread that
+no delta CRL read supersedes, the result is indeterminate with
+`delta_crl_retry_limit_exceeded` instead of `good`. Two delta CRLs whose
+`thisUpdate` and CRL number order them differently rank alike, and the
+stricter of their results stands.
+
 ## Set an age policy for CRLs without `nextUpdate`
 
 A received complete CRL without `nextUpdate` now fails with `stale_crl` unless

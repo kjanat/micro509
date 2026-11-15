@@ -363,8 +363,9 @@ export function resolveOcspResponderCandidates(
  * Each distinct complete CRL is checked once, updated by the newest delta CRL
  * among every `deltaCrl` in `evidence` that applies to it, as
  * `checkChainRevocation` does, within the same attempt limits. A delta CRL
- * that cannot settle the status yields `delta_crl_unusable`, and candidates
- * left after the limits `delta_crl_retry_limit_exceeded`; either keeps other
+ * that cannot settle the status yields `delta_crl_unusable`, and a candidate
+ * the limits leave unread that no delta CRL read supersedes
+ * `delta_crl_retry_limit_exceeded`; either keeps other
  * evidence from settling it as `good`.
  * A certificate carrying noRevAvail is `skipped` without consulting evidence
  * (RFC 9608 §4). One carrying id-pkix-ocsp-nocheck is still checked against
@@ -637,7 +638,8 @@ async function checkCertificateRevocationWithCrl(
 				? {
 						kind: 'crl',
 						code: 'delta_crl_retry_limit_exceeded',
-						message: 'Delta CRL candidates remained after the attempt limit',
+						message:
+							'A delta CRL candidate that may supersede the ones read remained after the attempt limit',
 					}
 				: {
 						kind: 'crl',

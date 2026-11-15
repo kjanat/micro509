@@ -288,6 +288,34 @@ async function scenario() {
 				baseCrlNumber: 5,
 				thisUpdate: new Date(at.getTime() - HOUR_MS),
 			}),
+		deltaAt: (
+			crlNumber: number,
+			thisUpdateHours: number,
+			options: {
+				readonly nextUpdateHours?: number;
+				readonly reasonCode?: 'keyCompromise' | 'certificateHold';
+			} = {},
+		) =>
+			createCertificateRevocationList({
+				issuer: { commonName: CA_NAME },
+				issuerCertificate: ca.certificate.der,
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber,
+				baseCrlNumber: 5,
+				thisUpdate: new Date(at.getTime() + thisUpdateHours * HOUR_MS),
+				nextUpdate:
+					options.nextUpdateHours === undefined
+						? nextUpdate
+						: new Date(at.getTime() + options.nextUpdateHours * HOUR_MS),
+				...(options.reasonCode === undefined
+					? {}
+					: {
+							revokedCertificates: revocation.map((entry) => ({
+								...entry,
+								reasonCode: options.reasonCode,
+							})),
+						}),
+			}),
 		revokingDelta: (baseCrlNumber = 5, crlNumber = 6) =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -333,6 +361,22 @@ async function leafStatus(
 	};
 }
 
+async function ders(
+	crls: readonly ReturnType<typeof createCertificateRevocationList>[],
+): Promise<readonly Uint8Array[]> {
+	return (await Promise.all(crls)).map((crl) => crl.der);
+}
+
+function olderCleanAndNewerExpiredRevoking(
+	s: Scenario,
+	clean: number,
+): Promise<readonly Uint8Array[]> {
+	return ders([
+		...Array.from({ length: clean }, (_, index) => s.deltaAt(6 + index, -2.5 + index / 4)),
+		s.deltaAt(10, -1, { nextUpdateHours: -0.5, reasonCode: 'keyCompromise' }),
+	]);
+}
+
 const HELPER_BASES = {
 	clean: (s: Scenario) => s.baseNumbered(5),
 	keyCompromise: (s: Scenario) => s.baseNumbered(5, 'keyCompromise'),
@@ -370,7 +414,49 @@ const HELPER_DELTAS = {
 		...(await s.forgedDeltas(1)),
 		(await s.expiredDelta('keyCompromise')).der,
 	],
+	'four older current clean and newer expired revoking': (s: Scenario) =>
+		olderCleanAndNewerExpiredRevoking(s, 4),
+	'three older current clean and newer expired revoking': (s: Scenario) =>
+		olderCleanAndNewerExpiredRevoking(s, 3),
+	'newer expired clean and older current revoking': async (s: Scenario) =>
+		ders([
+			s.deltaAt(6, -2, { reasonCode: 'keyCompromise' }),
+			s.deltaAt(7, -1, { nextUpdateHours: -0.5 }),
+		]),
+	'newer expired clean and older current holding': async (s: Scenario) =>
+		ders([
+			s.deltaAt(6, -2, { reasonCode: 'certificateHold' }),
+			s.deltaAt(7, -1, { nextUpdateHours: -0.5 }),
+		]),
+	'newest current clean, expired clean and older expired revoking': async (s: Scenario) =>
+		ders([
+			s.deltaAt(7, -2, { nextUpdateHours: -1.25, reasonCode: 'keyCompromise' }),
+			s.deltaAt(8, -1.5, { nextUpdateHours: -1 }),
+			s.deltaAt(9, -0.5),
+		]),
+	'newer current clean with a lower CRL number and older current holding': async (s: Scenario) =>
+		ders([s.deltaAt(9, -2, { reasonCode: 'certificateHold' }), s.deltaAt(7, -1)]),
+	'four forged and older current clean': async (s: Scenario) => [
+		...(await s.forgedDeltas(4)),
+		...(await ders([s.deltaAt(6, -2)])),
+	],
 } satisfies Record<string, (s: Scenario) => Promise<readonly Uint8Array[]>>;
+
+const NEWEST_FIRST_CASES = [
+	{ deltas: 'four older current clean and newer expired revoking', expected: 'revoked' },
+	{ deltas: 'three older current clean and newer expired revoking', expected: 'revoked' },
+	{ deltas: 'newer expired clean and older current revoking', expected: 'revoked' },
+	{ deltas: 'newer expired clean and older current holding', expected: 'revoked' },
+	{
+		deltas: 'newest current clean, expired clean and older expired revoking',
+		expected: 'revoked',
+	},
+	{
+		deltas: 'newer current clean with a lower CRL number and older current holding',
+		expected: 'revoked',
+	},
+	{ deltas: 'four forged and older current clean', expected: 'unsettled' },
+] as const;
 
 describe('checkCertificateRevocationAgainstCrlsBy', () => {
 	it.each([
@@ -395,6 +481,11 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 			deltas: 'newer current clean and older expired revoking',
 			expected: 'revoked',
 		},
+		...NEWEST_FIRST_CASES.map(({ deltas, expected }) => ({
+			base: 'clean' as const,
+			deltas,
+			expected,
+		})),
 	] as const)(
 		'checks a $base base CRL with $deltas delta CRLs as $expected',
 		async ({ base, deltas, expected }) => {
@@ -630,6 +721,87 @@ describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget
 						: result.result.code,
 			).toBe(expected);
 			expect(budget.remaining).toBe(0);
+		},
+	);
+});
+
+describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget and genuine delta CRLs', () => {
+	it.each([
+		{
+			deltas: 'four older current clean and newer expired revoking',
+			remaining: 1,
+			expected: 'revoked',
+		},
+		{ deltas: 'forged and expired revoking', remaining: 1, expected: 'unsettled' },
+		{
+			deltas: 'newest current clean, expired clean and older expired revoking',
+			remaining: 1,
+			expected: 'good',
+		},
+		{
+			deltas: 'newest current clean, expired clean and older expired revoking',
+			remaining: 3,
+			expected: 'revoked',
+		},
+		{
+			deltas: 'newer current clean with a lower CRL number and older current holding',
+			remaining: 1,
+			expected: 'unsettled',
+		},
+	] as const)(
+		'checks $deltas delta CRLs with $remaining attempts left as $expected',
+		async ({ deltas, remaining, expected }) => {
+			const s = await scenario();
+			const parse = (der: Uint8Array) => unwrap(parseCertificateRevocationListDer(der));
+			const result = await checkCertificateRevocationAgainstCrlsBy(
+				unwrap(parseCertificatePem(s.leafPem)),
+				parse((await s.baseNumbered(5)).der),
+				(await HELPER_DELTAS[deltas](s)).map(parse),
+				{ kind: 'certificate', certificate: s.caPem },
+				{ at: s.at },
+				callerVerification(undefined),
+				[{ remaining }],
+			);
+			expect(
+				result.kind === 'unsettled'
+					? 'unsettled'
+					: result.result.ok
+						? result.result.value.status
+						: result.result.code,
+			).toBe(expected);
+		},
+	);
+});
+
+describe('checkChainRevocation and checkCertificateRevocation read delta CRLs newest first', () => {
+	it.each(NEWEST_FIRST_CASES)(
+		'give $expected for $deltas delta CRLs',
+		async ({ deltas, expected }) => {
+			const s = await scenario();
+			const base = (await s.baseNumbered(5)).der;
+			const deltaDers = await HELPER_DELTAS[deltas](s);
+			const chain = await leafStatus(s, [base, ...deltaDers], []);
+			expect(chain.decision).toBe('deny');
+			expect(chain.status).toBe(expected === 'unsettled' ? 'indeterminate' : expected);
+			if (expected === 'unsettled') {
+				expect(chain.indeterminateReasons).toContain('delta_crl_retry_limit_exceeded');
+			}
+			const single = await checkCertificateRevocation({
+				certificate: s.leafPem,
+				issuerCertificate: s.caPem,
+				evidence: deltaDers.map((deltaCrl) => ({ kind: 'crl' as const, crl: base, deltaCrl })),
+				at: s.at,
+			});
+			expect(single).toMatchObject({
+				ok: true,
+				value:
+					expected === 'unsettled'
+						? {
+								status: 'indeterminate',
+								details: { indeterminateEvidence: [{ code: 'delta_crl_retry_limit_exceeded' }] },
+							}
+						: { status: expected },
+			});
 		},
 	);
 });

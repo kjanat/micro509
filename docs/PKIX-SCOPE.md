@@ -521,23 +521,29 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
       Chain evaluation updates a base CRL with a current delta CRL whose CRL
-      number exceeds the base CRL's ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), and it tries candidates
-      from the latest `thisUpdate` down ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). After the current
-      candidates it reads delta CRLs issued by the evaluation time that are no
-      longer current or carry no `nextUpdate`. Such a delta CRL settles only
-      an entry for a certificate that has not expired whose reason is neither
+      number exceeds the base CRL's ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). It reads the candidates
+      issued by the evaluation time newest first, by `thisUpdate` and then by
+      CRL number ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), and the first current one that
+      authenticates and applies settles the status. A candidate that is no
+      longer current or carries no `nextUpdate` settles only an entry for a
+      certificate that has not expired whose reason is neither
       `certificateHold` nor `removeFromCRL`. Every later CRL must keep listing it ([RFC 5280
       §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is
-      micro509 policy. The newest such delta CRL that authenticates and
-      applies ends the search. [RFC 5280 §5.2.4][rfc5280-section-5.2.4] makes a later delta CRL
-      with its base CRL list every revocation an earlier one did. After a
-      delta CRL settles the status as good, the older candidates are still
-      read within the same limits for such an entry it omits, until one past
-      its `nextUpdate` records none. An omitted entry makes the certificate
-      revoked, and an older entry `unrecognizedReasonCode: 'reject'` refuses,
-      or one that cannot settle the status, keeps the good verdict from
-      standing. Running out of attempts there leaves the good verdict; withholding
-      the older delta CRL has the same effect. `checkCertificateRevocationAgainstCrl` applies it to
+      micro509 policy. Without such an entry it settles nothing, and the
+      next candidate is read. A delta CRL supersedes another when both its
+      `thisUpdate` and its CRL number are later ([RFC 5280 §5.2.3][rfc5280-section-5.2.3], [§5.1.2.4][rfc5280-section-5.1.2.4]).
+      [RFC 5280][rfc5280] leaves a pair whose two keys disagree unspecified, and
+      micro509 ranks such a pair alike, so the stricter of their results
+      stands. After a delta CRL settles the status as good, the candidates it
+      supersedes are still read within the same limits for such an entry it
+      omits. An omitted entry makes the certificate revoked, and an older
+      entry `unrecognizedReasonCode: 'reject'` refuses, or one that cannot
+      settle the status, keeps the good verdict from standing. When the
+      limits end the search, the delta CRLs read so far decide only if one
+      of them supersedes every unread candidate; withholding a superseded
+      delta CRL has the same effect. If those delta CRLs are all past their
+      `nextUpdate` without such an entry, the base CRL alone decides.
+      `checkCertificateRevocationAgainstCrl` applies these rules to
       its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
       and the base CRL is evaluated alone once every candidate is skipped. A
@@ -552,7 +558,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       from settling the status as `good`. A base CRL that does not cover
       the certificate spends none, and repeated copies of one base or delta
       CRL count once. Pre-parsed CRLs are read from their `der`. A candidate
-      left unchecked makes the result indeterminate with
+      left unchecked that no delta CRL read supersedes makes the result indeterminate with
       `delta_crl_retry_limit_exceeded`. Both reasons outrank a `good` verdict from other evidence. Neither
       replaces a base CRL revocation that no delta can remove: one with a
       reason other than `certificateHold`, for a certificate that has not
@@ -771,6 +777,7 @@ makes no SSH transport, agent, certificate or `authorized_keys` option claim.
 [rfc5280-section-4.2.1.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.2
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
+[rfc5280-section-5.1.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.4
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
 [rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
 [rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
