@@ -215,6 +215,17 @@ async function scenario() {
 				baseCrlNumber: 5,
 				thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
 			}),
+		expiredDelta: (reasonCode: 'keyCompromise' | 'certificateHold') =>
+			createCertificateRevocationList({
+				issuer: { commonName: CA_NAME },
+				issuerCertificate: ca.certificate.der,
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber: 6,
+				baseCrlNumber: 5,
+				thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+				nextUpdate: new Date(at.getTime() - HOUR_MS),
+				revokedCertificates: revocation.map((entry) => ({ ...entry, reasonCode })),
+			}),
 		revokingDelta: (baseCrlNumber = 5, crlNumber = 6) =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -278,6 +289,12 @@ const HELPER_DELTAS = {
 		await s.printableIssuerRevokingDelta(),
 	],
 	'five other-scope': (s: Scenario) => s.otherScopeDeltas(5),
+	'expired revoking': async (s: Scenario) => [(await s.expiredDelta('keyCompromise')).der],
+	'expired holding': async (s: Scenario) => [(await s.expiredDelta('certificateHold')).der],
+	'forged and expired revoking': async (s: Scenario) => [
+		...(await s.forgedDeltas(1)),
+		(await s.expiredDelta('keyCompromise')).der,
+	],
 } satisfies Record<string, (s: Scenario) => Promise<readonly Uint8Array[]>>;
 
 describe('checkCertificateRevocationAgainstCrlsBy', () => {
@@ -294,6 +311,9 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 		{ base: 'forged', deltas: 'revoking', expected: 'signature_invalid' },
 		{ base: 'clean', deltas: 'PrintableString-issuer revoking', expected: 'revoked' },
 		{ base: 'clean', deltas: 'five other-scope', expected: 'good' },
+		{ base: 'clean', deltas: 'expired revoking', expected: 'revoked' },
+		{ base: 'clean', deltas: 'forged and expired revoking', expected: 'revoked' },
+		{ base: 'clean', deltas: 'expired holding', expected: 'good' },
 	] as const)(
 		'checks a $base base CRL with $deltas delta CRLs as $expected',
 		async ({ base, deltas, expected }) => {
@@ -325,6 +345,8 @@ describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation wi
 		{ base: 'certificateHold', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
 		{ base: 'clean', delta: 'forged', crl: 'signature_invalid', evidence: 'good' },
 		{ base: 'clean', delta: 'unresolvable', crl: 'signature_invalid', evidence: 'good' },
+		{ base: 'clean', delta: 'expired revoking', crl: 'revoked', evidence: 'revoked' },
+		{ base: 'clean', delta: 'expired holding', crl: 'stale_crl', evidence: 'good' },
 	] as const)(
 		'keeps a $base base CRL entry beside a $delta delta CRL as $crl',
 		async ({ base, delta, crl, evidence }) => {
@@ -333,7 +355,13 @@ describe('checkCertificateRevocationAgainstCrl and checkCertificateRevocation wi
 			const deltaDer =
 				delta === 'forged'
 					? ((await s.forgedDeltas(1))[0] ?? s.forgedNewerDelta)
-					: (await s.unresolvableDelta()).der;
+					: delta === 'unresolvable'
+						? (await s.unresolvableDelta()).der
+						: (
+								await s.expiredDelta(
+									delta === 'expired revoking' ? 'keyCompromise' : 'certificateHold',
+								)
+							).der;
 			const direct = await checkCertificateRevocationAgainstCrl({
 				certificate: s.leafPem,
 				issuerCertificate: s.caPem,
@@ -477,6 +505,25 @@ describe('checkChainRevocation with an authenticated delta CRL that cannot settl
 			source: 'ocsp',
 		});
 	});
+});
+
+describe('checkChainRevocation with a delta CRL past its nextUpdate', () => {
+	it.each([
+		{ reason: 'keyCompromise', mode: 'hard-fail', decision: 'deny', status: 'revoked' },
+		{ reason: 'keyCompromise', mode: 'soft-fail', decision: 'deny', status: 'revoked' },
+		{ reason: 'certificateHold', mode: 'hard-fail', decision: 'allow', status: 'good' },
+	] as const)(
+		'reads a $reason entry beside a current clean base CRL under $mode as $status',
+		async ({ reason, mode, decision, status }) => {
+			const s = await scenario();
+			const crls = [(await s.base(false)).der, (await s.expiredDelta(reason)).der];
+			expect(await leafStatus(s, crls, [s.ocspGood], mode)).toEqual({
+				decision,
+				status,
+				indeterminateReasons: undefined,
+			});
+		},
+	);
 });
 
 describe('checkChainRevocation delta CRL attempt limits', () => {

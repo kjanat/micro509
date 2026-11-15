@@ -1154,16 +1154,24 @@ function crlFreshnessFailure(
 	return undefined;
 }
 
-export function isCurrentDeltaCrl(
+function deltaCrlFreshnessFailure(
 	deltaCrl: ParsedCertificateRevocationList,
 	at: Date,
 	skew: number,
 	maxAgeMs: number | undefined,
+): string | undefined {
+	return deltaCrl.nextUpdate === undefined
+		? 'delta CRL has no nextUpdate'
+		: crlFreshnessFailure(deltaCrl, at, skew, maxAgeMs);
+}
+
+/** Whether `deltaCrl` was issued by `at`, so its entries record revocations known then. */
+function isIssuedDeltaCrl(
+	deltaCrl: ParsedCertificateRevocationList,
+	at: Date,
+	skew: number,
 ): boolean {
-	return (
-		deltaCrl.nextUpdate !== undefined &&
-		crlFreshnessFailure(deltaCrl, at, skew, maxAgeMs) === undefined
-	);
+	return deltaCrl.thisUpdate.getTime() - skew <= at.getTime();
 }
 
 /**
@@ -1354,6 +1362,15 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 	}
 	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl, authority, verification);
 	if (!deltaResult.ok) return { kind: 'delta_rejected', failure: deltaResult };
+	if (deltaResult.value !== undefined && deltaResult.stale !== undefined) {
+		return staleDeltaCrlOutcome(
+			certificate,
+			completeCrl,
+			deltaResult.value,
+			deltaResult.stale,
+			input,
+		);
+	}
 	const deltaCrl = deltaResult.value;
 	const applicability = checkCrlApplicability(certificate, completeCrl);
 	if (!applicability.ok) return { kind: 'checked', result: applicability.failure };
@@ -1415,15 +1432,18 @@ export function rankApplicableDeltaCrls(
 	clockSkewMs: number,
 	crlMaxAgeMs: number | undefined,
 ): readonly ParsedCertificateRevocationList[] {
+	const isCurrent = (deltaCrl: ParsedCertificateRevocationList): boolean =>
+		deltaCrlFreshnessFailure(deltaCrl, at, clockSkewMs, crlMaxAgeMs) === undefined;
 	return deltaCrls
 		.filter(
 			(deltaCrl) =>
-				isCompatibleDeltaCrl(baseCrl, deltaCrl) &&
-				isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs),
+				isCompatibleDeltaCrl(baseCrl, deltaCrl) && isIssuedDeltaCrl(deltaCrl, at, clockSkewMs),
 		)
-		.sort((left, right) =>
-			isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0,
-		);
+		.sort((left, right) => {
+			const currentOrder = Number(isCurrent(right)) - Number(isCurrent(left));
+			if (currentOrder !== 0) return currentOrder;
+			return isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0;
+		});
 }
 
 /** Whether {@linkcode checkDeltaCrlCompatibility} accepts `deltaCrl` for `completeCrl`. */
@@ -1566,45 +1586,94 @@ function interimReasonsMask(
 	return ALL_DISTRIBUTION_POINT_REASONS;
 }
 
-/** Validates an optional delta CRL and checks compatibility with its complete CRL. */
+/**
+ * Authenticates an optional delta CRL and checks compatibility with its
+ * complete CRL. A delta CRL issued by `input.at` but not current there comes
+ * back with the freshness failure as `stale`.
+ */
 async function validateOptionalDeltaCrl(
 	input: CrlCheckOptions,
 	completeCrl: ParsedCertificateRevocationList,
 	authority: CrlAuthority,
 	verification: CallerVerification,
 ): Promise<
-	{ readonly ok: true; readonly value?: ParsedCertificateRevocationList } | CrlApplicabilityFailure
+	| {
+			readonly ok: true;
+			readonly value?: ParsedCertificateRevocationList;
+			readonly stale?: CrlApplicabilityFailure;
+	  }
+	| CrlApplicabilityFailure
 > {
 	if (input.deltaCrl === undefined) return { ok: true };
-	const deltaValidation = await validateCrlBy(
-		{
-			crl: input.deltaCrl,
-			...(input.at === undefined ? {} : { at: input.at }),
-			...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-			...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
-		},
-		authority,
-		verification,
-	);
-	if (!deltaValidation.ok) {
+	assertCrlMaxAge(input.maxAgeMs);
+	const authenticated = await authenticateCrl(input.deltaCrl, authority, verification);
+	if (!authenticated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(
-			deltaValidation.code,
-			deltaValidation.message,
+			authenticated.code,
+			authenticated.message,
 		);
 	}
-	if (deltaValidation.value.nextUpdate === undefined) {
-		return checkCertificateRevocationAgainstCrlFailureResult(
-			'stale_crl',
-			'delta CRL has no nextUpdate',
-		);
+	const at = input.at ?? new Date();
+	const skew = input.clockSkewMs ?? 0;
+	const freshnessFailure = deltaCrlFreshnessFailure(authenticated.value, at, skew, input.maxAgeMs);
+	if (freshnessFailure !== undefined && !isIssuedDeltaCrl(authenticated.value, at, skew)) {
+		return checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure);
 	}
 	let compatibilityFailure: CrlApplicabilityFailure | undefined;
 	try {
-		compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+		compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, authenticated.value);
 	} catch (error) {
 		return crlNameRefusalFailure(error);
 	}
-	return compatibilityFailure ?? { ok: true, value: deltaValidation.value };
+	if (compatibilityFailure !== undefined) {
+		return freshnessFailure === undefined
+			? compatibilityFailure
+			: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure);
+	}
+	return {
+		ok: true,
+		value: authenticated.value,
+		...(freshnessFailure === undefined
+			? {}
+			: {
+					stale: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+				}),
+	};
+}
+
+/**
+ * The outcome of `deltaCrl`, which updates `completeCrl` but is not current at
+ * `input.at`. Its revocation of `certificate` settles the status when no later
+ * CRL could remove it (RFC 5280 §5.3.1); otherwise the delta CRL is rejected
+ * with `stale`.
+ */
+function staleDeltaCrlOutcome(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList,
+	stale: CrlApplicabilityFailure,
+	input: CrlCheckOptions,
+): AuthenticatedCrlCheckOutcome {
+	const rejected = { kind: 'delta_rejected', failure: stale } as const;
+	if (
+		!checkCrlApplicability(certificate, completeCrl).ok ||
+		!checkCrlApplicability(certificate, deltaCrl, true).ok
+	) {
+		return rejected;
+	}
+	const lookup = findRevokedCertificateEntry(certificate, deltaCrl);
+	if (!lookup.ok || lookup.entry === undefined || lookup.entry.reasonCode === 'removeFromCRL') {
+		return rejected;
+	}
+	const result = revokedEntryResult(
+		completeCrl,
+		lookup.entry,
+		input.unrecognizedReasonCode ?? 'revoked',
+	);
+	if (!result.ok) return { kind: 'checked', result };
+	return irremovableCrlRevocation(certificate, result, input.at ?? new Date()) === undefined
+		? rejected
+		: { kind: 'checked', result };
 }
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */

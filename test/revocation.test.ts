@@ -955,6 +955,18 @@ describe('revocation boundary', () => {
 			expected: 'responder_revocation_unknown',
 		},
 		{
+			name: 'an expired delta CRL that revokes it',
+			base: {},
+			delta: { reason: 'keyCompromise', stale: true },
+			expected: 'responder_revoked',
+		},
+		{
+			name: 'an expired delta CRL that holds it',
+			base: {},
+			delta: { reason: 'certificateHold', stale: true },
+			expected: 'good',
+		},
+		{
 			name: 'a base CRL holding it',
 			base: { reason: 'certificateHold' },
 			delta: undefined,
@@ -1041,7 +1053,7 @@ describe('revocation boundary', () => {
 				: await crl({
 						crlNumber: 4,
 						baseCrlNumber: 1,
-						thisUpdate: new Date(now - 30 * 60 * 1000),
+						thisUpdate: new Date(now - ('stale' in delta ? 2 * 60 : 30) * 60 * 1000),
 						...delta,
 					});
 		const response = await createOcspResponse({

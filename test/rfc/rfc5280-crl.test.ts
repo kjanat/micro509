@@ -379,6 +379,7 @@ interface CrlFields {
 	readonly baseCrlNumber?: number;
 	readonly revokesLeaf?: boolean;
 	readonly revocationDate?: Date;
+	readonly reasonCode?: 'keyCompromise' | 'certificateHold';
 	readonly withoutNextUpdate?: boolean;
 }
 
@@ -412,6 +413,7 @@ async function crlPki() {
 							{
 								serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
 								revocationDate: fields.revocationDate ?? fields.thisUpdate,
+								...(fields.reasonCode === undefined ? {} : { reasonCode: fields.reasonCode }),
 							},
 						],
 					}
@@ -875,33 +877,39 @@ describe('RFC 5280 §5.2.4 L3572-3582: only a current delta CRL applies, and the
 		expect(status?.status).toBe('good');
 	});
 
-	it('never treats a delta CRL without nextUpdate as current', async () => {
-		const { ca, leaf, chain, issueCrl } = await crlPki();
-		const at = evaluationTime();
-		const base = await issueCrl({
-			thisUpdate: shift(at, -HOUR_MS),
-			nextUpdate: shift(at, DAY_MS),
-			crlNumber: 10,
-		});
-		const openDelta = await issueCrl({
-			thisUpdate: shift(at, -HOUR_MS),
-			nextUpdate: shift(at, DAY_MS),
-			crlNumber: 11,
-			baseCrlNumber: 10,
-			revokesLeaf: true,
-			withoutNextUpdate: true,
-		});
-		const direct = await checkCertificateRevocationAgainstCrl({
-			certificate: leaf.pem,
-			issuerCertificate: ca.certificate.pem,
-			crl: base,
-			deltaCrl: openDelta,
-			at,
-		});
-		expect(direct.ok ? direct.value.status : direct.code).toBe('stale_crl');
-		const status = await leafRevocation(chain, [base, openDelta], at);
-		expect(status?.status).toBe('good');
-	});
+	it.each([
+		{ revokesLeaf: false, direct: 'stale_crl', chain: 'good' },
+		{ revokesLeaf: true, direct: 'revoked', chain: 'revoked' },
+	] as const)(
+		'never treats a delta CRL without nextUpdate as current (revokes leaf $revokesLeaf)',
+		async ({ revokesLeaf, direct, chain: chainStatus }) => {
+			const { ca, leaf, chain, issueCrl } = await crlPki();
+			const at = evaluationTime();
+			const base = await issueCrl({
+				thisUpdate: shift(at, -HOUR_MS),
+				nextUpdate: shift(at, DAY_MS),
+				crlNumber: 10,
+			});
+			const openDelta = await issueCrl({
+				thisUpdate: shift(at, -HOUR_MS),
+				nextUpdate: shift(at, DAY_MS),
+				crlNumber: 11,
+				baseCrlNumber: 10,
+				revokesLeaf,
+				withoutNextUpdate: true,
+			});
+			const checked = await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: base,
+				deltaCrl: openDelta,
+				at,
+			});
+			expect(checked.ok ? checked.value.status : checked.code).toBe(direct);
+			const status = await leafRevocation(chain, [base, openDelta], at);
+			expect(status?.status).toBe(chainStatus);
+		},
+	);
 
 	it('applies the current delta CRL with the latest thisUpdate', async () => {
 		const { chain, issueCrl } = await crlPki();
@@ -1059,6 +1067,47 @@ describe('RFC 5280 §5.2.4 L3572-3582: only a current delta CRL applies, and the
 		expect(status?.status).toBe('good');
 		expect(status?.source?.thisUpdate).toEqual(shift(at, -HOUR_MS));
 	});
+});
+
+describe('RFC 5280 §5.3.1 L3847-3851: only removeFromCRL takes a certificate off a CRL, and every other reason code means revoked', () => {
+	it('prints the sentence this suite enforces', () => {
+		expect(printed(3847, 3851)).toContain(
+			'All other reason codes may appear in any CRL and indicate that the specified certificate should be considered revoked.',
+		);
+	});
+
+	it.each([
+		{ reasonCode: 'keyCompromise', direct: 'revoked', chain: 'revoked' },
+		{ reasonCode: 'certificateHold', direct: 'stale_crl', chain: 'good' },
+	] as const)(
+		'keeps a $reasonCode entry of a delta CRL past its nextUpdate beside a current clean base CRL as $chain',
+		async ({ reasonCode, direct, chain: chainStatus }) => {
+			const { ca, leaf, chain, issueCrl } = await crlPki();
+			const at = evaluationTime();
+			const base = await issueCrl({
+				thisUpdate: shift(at, -3 * HOUR_MS),
+				nextUpdate: shift(at, DAY_MS),
+				crlNumber: 10,
+			});
+			const expiredDelta = await issueCrl({
+				thisUpdate: shift(at, -2 * HOUR_MS),
+				nextUpdate: shift(at, -HOUR_MS),
+				crlNumber: 11,
+				baseCrlNumber: 10,
+				revokesLeaf: true,
+				reasonCode,
+			});
+			const checked = await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: base,
+				deltaCrl: expiredDelta,
+				at,
+			});
+			expect(checked.ok ? checked.value.status : checked.code).toBe(direct);
+			expect((await leafRevocation(chain, [base, expiredDelta], at))?.status).toBe(chainStatus);
+		},
+	);
 });
 
 describe('RFC 5280 §6.3.3(a)(1)(i) L5128-5132 "a delta CRL with a next update value that is after the current time" and §5.2.4 L3467-3479: a current delta CRL updates an expired complete CRL', () => {

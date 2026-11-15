@@ -1740,15 +1740,15 @@ function settleAuthenticatedCrlOutcome(
 	if (outcome.kind === 'delta_unresolved') {
 		return { kind: 'delta_unusable', complete: outcome.complete };
 	}
-	const result = outcome.kind === 'checked' ? outcome.result : outcome.failure;
+	if (outcome.kind === 'delta_rejected') {
+		return undefined;
+	}
+	const result = outcome.result;
 	if (!result.ok && result.code === 'stale_crl') {
 		state.sawStaleCrl = true;
 	}
 	if (!result.ok && result.code === 'reason_code_unrecognized') {
 		return { kind: 'reason_code_unrecognized' };
-	}
-	if (outcome.kind === 'delta_rejected') {
-		return undefined;
 	}
 	return result.ok
 		? { kind: 'checked', checked: result, crlThisUpdate }
