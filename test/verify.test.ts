@@ -3051,7 +3051,7 @@ describe('validation profiles', () => {
 		const result = await validateForTlsServer(input);
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'subject_alt_name_mismatch',
+			code: 'malformed',
 			index: 0,
 		});
 	});
@@ -3149,7 +3149,7 @@ describe('validation profiles', () => {
 			// Typed failure, never a throw
 			expect(result).toMatchObject({
 				ok: false,
-				code: 'subject_alt_name_mismatch',
+				code: 'malformed',
 				index: 0,
 			});
 		}
@@ -3200,7 +3200,7 @@ describe('validation profiles', () => {
 		});
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'subject_alt_name_mismatch',
+			code: 'malformed',
 			index: 0,
 		});
 	});

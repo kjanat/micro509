@@ -142,7 +142,7 @@ describe('identity boundary', () => {
 				certificate: { ...certificate, der: Uint8Array.of(0xff, 0xff) },
 				serviceIdentity: { type: 'dns', value: 'verify.example' },
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('matches wildcard DNS SANs through the dedicated identity API', async () => {
@@ -522,7 +522,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'ip', value: '1:2:3:4:5:6:7:8:9' },
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('matches URI SANs by scheme and host through the dedicated identity API', async () => {
@@ -605,7 +605,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'uri', value: 'https:voice.college.example' },
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('rejects URI SANs with matching scheme but different host', async () => {
@@ -673,7 +673,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'uri', value: 'not a uri' },
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('matches URI SANs across IDNA host forms', async () => {
@@ -809,7 +809,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'srv', value: 'xmpp-client.example.org' },
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it.each([
@@ -939,7 +939,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity,
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('matches SRV SANs across IDNA host forms', async () => {

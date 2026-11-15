@@ -1904,6 +1904,7 @@ function validateServiceIdentity(
 	if (
 		error.code !== 'subject_alt_name_mismatch' &&
 		error.code !== 'common_name_fallback_suppressed' &&
+		error.code !== 'malformed' &&
 		error.code !== 'unsupported' &&
 		error.code !== 'limit_exceeded'
 	) {
@@ -1927,7 +1928,7 @@ function validateServiceIdentityInput(
 	serviceIdentity: ServiceIdentityInput,
 ): ValidationCheckResult {
 	if (!isRecord(serviceIdentity)) {
-		return failure('subject_alt_name_mismatch', 'service identity input is malformed', 0);
+		return failure('malformed', 'service identity input is malformed', 0);
 	}
 	if (
 		serviceIdentity.type !== 'dns' &&
@@ -1936,7 +1937,7 @@ function validateServiceIdentityInput(
 		serviceIdentity.type !== 'srv'
 	) {
 		return failure(
-			'subject_alt_name_mismatch',
+			'malformed',
 			'service identity input is malformed',
 			0,
 			detail({ actual: String(serviceIdentity.type) }),
@@ -1944,7 +1945,7 @@ function validateServiceIdentityInput(
 	}
 	if (typeof serviceIdentity.value !== 'string') {
 		return failure(
-			'subject_alt_name_mismatch',
+			'malformed',
 			'service identity input is malformed',
 			0,
 			detail({ actual: serviceIdentity.type }),
@@ -1955,7 +1956,7 @@ function validateServiceIdentityInput(
 			parseIpAddressToBytes(serviceIdentity.value);
 		} catch {
 			return failure(
-				'subject_alt_name_mismatch',
+				'malformed',
 				'service identity input is malformed',
 				0,
 				detail({ expected: serviceIdentity.value, actual: 'ip' }),

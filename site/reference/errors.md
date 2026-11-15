@@ -174,6 +174,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 | ----------------------------------- | --------------------------------------------------------------------------------------- |
 | `common_name_fallback_suppressed`   | CN match suppressed by presented identifiers                                            |
 | `limit_exceeded`                    | The certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `malformed`                         | The certificate or the service identity input does not decode                           |
 | `service_identity_mismatch`         | SRV-ID or URI-ID service part does not match                                            |
 | `subject_alt_name_mismatch`         | No SAN matches the requested identity                                                   |
 | `unsupported`                       | The certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
