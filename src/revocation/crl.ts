@@ -1530,9 +1530,11 @@ export type CrlsCheckOutcome =
  * Checks `certificate` against `completeCrl`, which `authority` signs,
  * updated by the newest delta CRL in `deltaCrls` that applies to it. A
  * revocation in the complete CRL that no delta CRL could remove settles the
- * status even when the delta CRLs do not. Each delta CRL check spends one
- * from `budget`, and a complete CRL that does not cover `certificate` spends
- * none.
+ * status even when the delta CRLs do not. After a delta CRL settles it as
+ * good, older ones are read within the same limits for such a revocation it
+ * omits, until one past its `nextUpdate` records none. Each delta CRL check spends one
+ * from every budget in `budgets`, and a complete CRL that does not cover
+ * `certificate` spends none.
  *
  * @internal
  */
@@ -1543,7 +1545,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 	authority: CrlAuthority,
 	options: CrlCheckOptions,
 	verification: CallerVerification,
-	budget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE },
+	budgets: readonly DeltaCrlBudget[] = [],
 ): Promise<CrlsCheckOutcome> {
 	const authenticated = await authenticateCrl(completeCrl, authority, verification);
 	if (!authenticated.ok) {
@@ -1565,28 +1567,24 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 				options.maxAgeMs,
 			)
 		: [];
-	let attempts = 0;
-	let unexamined = true;
+	const search: DeltaCrlSearch = { attempts: 0, done: false, unexamined: true };
 	for (const deltaCrl of candidates) {
-		if (attempts >= DELTA_CRL_ATTEMPTS_PER_BASE || budget.remaining <= 0) break;
-		attempts += 1;
-		budget.remaining -= 1;
-		const outcome = await checkRevocationAgainstAuthenticatedCrl(
+		if (search.done || !spendDeltaCrlAttempt(search, budgets)) break;
+		recordDeltaCrlOutcome(
+			search,
 			certificate,
-			authenticated.value,
-			authority,
-			{ ...options, deltaCrl },
-			verification,
+			await checkRevocationAgainstAuthenticatedCrl(
+				certificate,
+				authenticated.value,
+				authority,
+				{ ...options, deltaCrl },
+				verification,
+			),
+			at,
 		);
-		if (outcome.kind === 'checked') return outcome;
-		if (outcome.kind === 'delta_unresolved') {
-			return settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
-		}
-		if (outcome.kind === 'delta_stale') {
-			unexamined = false;
-			break;
-		}
 	}
+	if (search.result !== undefined) return search.result;
+	if (search.good !== undefined) return search.good;
 	const alone = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
 		authenticated.value,
@@ -1595,9 +1593,80 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		verification,
 	);
 	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
-	return unexamined && candidates.length > attempts
+	return search.unexamined && candidates.length > search.attempts
 		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at))
 		: { kind: 'checked', result: aloneResult };
+}
+
+/** Where {@linkcode checkCertificateRevocationAgainstCrlsBy} stands in its delta CRL candidates. */
+interface DeltaCrlSearch {
+	attempts: number;
+	done: boolean;
+	unexamined: boolean;
+	good?: CrlsCheckOutcome;
+	result?: CrlsCheckOutcome;
+}
+
+/** Spends one delta CRL check from the per-base limit and every budget, or none when any is spent. */
+function spendDeltaCrlAttempt(search: DeltaCrlSearch, budgets: readonly DeltaCrlBudget[]): boolean {
+	if (
+		search.attempts >= DELTA_CRL_ATTEMPTS_PER_BASE ||
+		budgets.some((budget) => budget.remaining <= 0)
+	) {
+		return false;
+	}
+	search.attempts += 1;
+	for (const budget of budgets) budget.remaining -= 1;
+	return true;
+}
+
+/** Folds one delta CRL candidate's outcome into `search`. */
+function recordDeltaCrlOutcome(
+	search: DeltaCrlSearch,
+	certificate: ParsedCertificate,
+	outcome: AuthenticatedCrlCheckOutcome,
+	at: Date,
+): void {
+	if (search.good !== undefined) {
+		search.result = olderDeltaRevocation(certificate, outcome, at);
+		search.done = search.result !== undefined || outcome.kind === 'delta_stale';
+		return;
+	}
+	if (outcome.kind === 'checked') {
+		if (isGoodResult(outcome.result)) {
+			search.good = outcome;
+		} else {
+			search.result = outcome;
+			search.done = true;
+		}
+	} else if (outcome.kind === 'delta_unresolved') {
+		search.result = settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
+		search.done = true;
+	} else if (outcome.kind === 'delta_stale') {
+		search.unexamined = false;
+		search.done = true;
+	}
+}
+
+function isGoodResult(result: CheckCertificateRevocationAgainstCrlResult): boolean {
+	return result.ok && result.value.status === 'good';
+}
+
+/**
+ * A revocation that an older delta CRL records after a newer one settled the
+ * status as good. Only a revocation no later CRL may drop counts (RFC 5280
+ * §5.3.1, §3.3), so a newer delta CRL that omits it contradicts its issuer.
+ */
+function olderDeltaRevocation(
+	certificate: ParsedCertificate,
+	outcome: AuthenticatedCrlCheckOutcome,
+	at: Date,
+): CrlsCheckOutcome | undefined {
+	const revoked =
+		outcome.kind === 'checked'
+			? irremovableCrlRevocation(certificate, outcome.result, at)
+			: undefined;
+	return revoked === undefined ? undefined : { kind: 'checked', result: revoked };
 }
 
 function settledOrUnsettled(

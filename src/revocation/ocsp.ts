@@ -1980,7 +1980,7 @@ async function checkDelegatedResponderRevocation(
 			issuer,
 			crlCheck,
 			verification,
-			context.deltaBudget,
+			context.deltaBudget === undefined ? [] : [context.deltaBudget],
 		);
 		if (outcome.kind === 'unsettled') {
 			sawUnsettledDelta = true;

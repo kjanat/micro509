@@ -29,6 +29,7 @@ import {
 import type { DecodeFailureCode } from '#micro509/result/result';
 import type {
 	AuthenticatedCrlCheckOutcome,
+	CrlCheckOptions,
 	CrlSource,
 	checkCertificateRevocationAgainstCrl,
 	DeltaCrlBudget,
@@ -906,6 +907,7 @@ async function checkSignerAgainstCrlAuthorities(
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	ctx: SignerValidationContext,
 ): Promise<SignerCrlOutcome> {
+	const baseBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE };
 	for (const authority of collectCrlSignerCandidates(
 		crl,
 		issuer,
@@ -919,7 +921,10 @@ async function checkSignerAgainstCrlAuthorities(
 		) {
 			continue;
 		}
-		const outcome = await checkSignerAgainstCrl(signer, authority, crl, deltaCrls, ctx);
+		const outcome = await checkSignerAgainstCrl(signer, authority, crl, deltaCrls, ctx, [
+			baseBudget,
+			ctx.deltaBudget,
+		]);
 		if (outcome.kind !== 'reasons' || outcome.reasons.length > 0) return outcome;
 	}
 	return SIGNER_CRL_NO_EVIDENCE;
@@ -937,6 +942,7 @@ async function checkSignerAgainstCrl(
 	crl: ParsedCertificateRevocationList,
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	ctx: SignerValidationContext,
+	budgets: readonly DeltaCrlBudget[],
 ): Promise<SignerCrlOutcome> {
 	const outcome = await checkCertificateRevocationAgainstCrlsBy(
 		signer,
@@ -950,7 +956,7 @@ async function checkSignerAgainstCrl(
 			unrecognizedReasonCode: ctx.unrecognizedReasonCode,
 		},
 		signerVerification(ctx, issuer),
-		ctx.deltaBudget,
+		budgets,
 	);
 	if (outcome.kind === 'unsettled') {
 		return { kind: 'unsettled_delta' };
@@ -1769,20 +1775,9 @@ async function checkCrlAgainstDeltaCandidates(
 		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
 		unrecognizedReasonCode,
 	};
-	for (const deltaCrl of deltaCandidates) {
+	for (const [index, deltaCrl] of deltaCandidates.entries()) {
 		if (!takeDeltaCrlAttempt(budgets)) {
-			const alone = await checkRevocationAgainstAuthenticatedCrl(
-				cert,
-				authenticated.value,
-				candidate,
-				input,
-				verification,
-			);
-			return (
-				(alone.kind === 'checked'
-					? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
-					: undefined) ?? { kind: 'retry_limit' }
-			);
+			return await retryLimitOutcome(params, authenticated.value, input);
 		}
 		const outcome = await checkRevocationAgainstAuthenticatedCrl(
 			cert,
@@ -1803,7 +1798,15 @@ async function checkCrlAgainstDeltaCandidates(
 		if (settled.kind === 'delta_unusable') {
 			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
 		}
-		return settled;
+		if (settled.kind !== 'checked' || settled.checked.value.status !== 'good') return settled;
+		return (
+			(await olderDeltaCrlRevocation(
+				params,
+				authenticated.value,
+				input,
+				deltaCandidates.slice(index + 1),
+			)) ?? settled
+		);
 	}
 	return (
 		settleAuthenticatedCrlOutcome(
@@ -1818,6 +1821,66 @@ async function checkCrlAgainstDeltaCandidates(
 			state,
 		) ?? { kind: 'unusable_base' }
 	);
+}
+
+/**
+ * The outcome once the budgets end the delta CRL search: the base CRL's
+ * revocation that no delta CRL could remove, otherwise `retry_limit`.
+ */
+async function retryLimitOutcome(
+	params: DeltaCandidateCheck,
+	completeCrl: ParsedCertificateRevocationList,
+	input: CrlCheckOptions,
+): Promise<DeltaCandidateOutcome> {
+	const { cert, candidate, at, baseCrl, verification } = params;
+	const alone = await checkRevocationAgainstAuthenticatedCrl(
+		cert,
+		completeCrl,
+		candidate,
+		input,
+		verification,
+	);
+	return (
+		(alone.kind === 'checked'
+			? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
+			: undefined) ?? { kind: 'retry_limit' }
+	);
+}
+
+/**
+ * A revocation that an older delta CRL in `older` records after a newer one
+ * settled the status as good, read while the budgets last and until one past
+ * its `nextUpdate` records none. Only a revocation no later CRL may drop
+ * counts (RFC 5280 §5.3.1, §3.3), so the newer delta CRL contradicts its
+ * issuer.
+ */
+async function olderDeltaCrlRevocation(
+	params: DeltaCandidateCheck,
+	completeCrl: ParsedCertificateRevocationList,
+	input: CrlCheckOptions,
+	older: readonly ParsedCertificateRevocationList[],
+): Promise<DeltaCandidateOutcome | undefined> {
+	const { cert, candidate, at, baseCrl, budgets, verification } = params;
+	for (const deltaCrl of older) {
+		if (!takeDeltaCrlAttempt(budgets)) return undefined;
+		const outcome = await checkRevocationAgainstAuthenticatedCrl(
+			cert,
+			completeCrl,
+			candidate,
+			{ ...input, deltaCrl },
+			verification,
+		);
+		if (outcome.kind === 'delta_stale') return undefined;
+		if (outcome.kind !== 'checked') continue;
+		const revoked = irremovableRevocation(
+			cert,
+			outcome.result,
+			at,
+			laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
+		);
+		if (revoked !== undefined) return revoked;
+	}
+	return undefined;
 }
 
 /** The base CRL's revocation of `cert` in `complete` when no delta CRL could remove it at `at`. */

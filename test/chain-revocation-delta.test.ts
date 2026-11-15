@@ -345,7 +345,11 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 		{ base: 'clean', deltas: 'forged and expired revoking', expected: 'revoked' },
 		{ base: 'clean', deltas: 'expired holding', expected: 'good' },
 		{ base: 'clean', deltas: 'six expired clean', expected: 'good' },
-		{ base: 'clean', deltas: 'newer current clean and older expired revoking', expected: 'good' },
+		{
+			base: 'clean',
+			deltas: 'newer current clean and older expired revoking',
+			expected: 'revoked',
+		},
 	] as const)(
 		'checks a $base base CRL with $deltas delta CRLs as $expected',
 		async ({ base, deltas, expected }) => {
@@ -388,7 +392,7 @@ describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget
 				{ kind: 'certificate', certificate: s.caPem },
 				{ at: s.at },
 				callerVerification(undefined),
-				budget,
+				[budget],
 			);
 			expect(
 				result.kind === 'unsettled'
@@ -430,7 +434,7 @@ describe('checkCertificateRevocationAgainstCrlsBy with a complete CRL that does 
 			{ kind: 'certificate', certificate: s.caPem },
 			{ at: s.at },
 			callerVerification(undefined),
-			budget,
+			[budget],
 		);
 		expect(result).toMatchObject({
 			kind: 'checked',
@@ -616,6 +620,20 @@ describe('checkChainRevocation with a delta CRL past its nextUpdate', () => {
 		expect(await leafStatus(s, crls, [])).toEqual({
 			decision: 'allow',
 			status: 'good',
+			indeterminateReasons: undefined,
+		});
+	});
+
+	it('reads a permanent revocation an older expired delta CRL records beside a newer clean one', async () => {
+		const s = await scenario();
+		const crls = [
+			(await s.base(false)).der,
+			(await s.newerCleanDelta()).der,
+			(await s.expiredDelta('keyCompromise')).der,
+		];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
 			indeterminateReasons: undefined,
 		});
 	});

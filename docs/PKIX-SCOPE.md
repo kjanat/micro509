@@ -525,13 +525,17 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       from the latest `thisUpdate` down ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). After the current
       candidates it reads delta CRLs issued by the evaluation time that are no
       longer current or carry no `nextUpdate`. Such a delta CRL settles only
-      a revocation with a reason other than `certificateHold` or
-      `removeFromCRL` of a certificate that has not expired, which every later CRL must keep listing ([RFC 5280
+      an entry for a certificate that has not expired whose reason is neither
+      `certificateHold` nor `removeFromCRL`. Every later CRL must keep listing it ([RFC 5280
       §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is
       micro509 policy. The newest such delta CRL that authenticates and
       applies ends the search. [RFC 5280 §5.2.4][rfc5280-section-5.2.4] makes a later delta CRL
-      with its base CRL list every revocation an earlier one did, so a current
-      delta CRL settles the status even beside an older one that lists more. `checkCertificateRevocationAgainstCrl` applies it to
+      with its base CRL list every revocation an earlier one did. After a
+      delta CRL settles the status as good, the older candidates are still
+      read within the same limits for such an entry it omits, until one past
+      its `nextUpdate` records none; an omitted entry makes the certificate
+      revoked. Running out of attempts there leaves the good verdict; withholding
+      the older delta CRL has the same effect. `checkCertificateRevocationAgainstCrl` applies it to
       its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
       and the base CRL is evaluated alone once every candidate is skipped. A
