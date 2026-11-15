@@ -201,6 +201,7 @@ export interface TrustAnchor {
  * - `public_key_distrusted` — a certificate or bare trust anchor uses an explicitly distrusted SHA-256 SPKI.
  * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
  * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
+ * - `malformed` — a certificate source does not decode as a certificate, or the leaf source holds other than exactly one.
  * - `unsupported` — a certificate source holds a construct micro509 does not decode (see `ParseCertificateErrorCode`).
  * - `limit_exceeded` — a certificate source exceeds a micro509 decoding limit (see `ParseCertificateErrorCode`).
  */
@@ -232,6 +233,7 @@ export const VERIFY_ERROR_CODES = [
 	'public_key_distrusted',
 	'certificate_revoked',
 	'revocation_indeterminate',
+	'malformed',
 	'unsupported',
 	'limit_exceeded',
 ] as const;
@@ -694,7 +696,7 @@ function certificateSourceFailure(
 		return failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message, source }));
 	}
 	return failure(
-		'issuer_not_found',
+		'malformed',
 		'certificate source is malformed or leaf source does not contain exactly one certificate',
 		0,
 		detail({

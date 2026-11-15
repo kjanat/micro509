@@ -159,7 +159,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 `ec_domain_parameters_missing`, `explicit_policy_required`,
 `extended_key_usage_invalid`, `initial_policy_set_not_satisfied`,
 `intermediate_eku_constraint`, `issuer_not_found`, `key_cert_sign_required`,
-`name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,
+`malformed`, `name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,
 `public_key_distrusted`,
 `path_length_exceeded`,
 `path_building_limit_exceeded`,

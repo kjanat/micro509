@@ -488,6 +488,7 @@ Every other error-code union in the library is tabled in the
 | `certificate_revoked`                        | Revocation evidence confirms revocation        |
 | `public_key_distrusted`                      | Certificate or anchor public key is distrusted |
 | `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
+| `malformed`                                  | Certificate input does not decode              |
 | `unsupported`                                | Certificate input micro509 does not decode     |
 | `limit_exceeded`                             | Certificate input exceeds a decoding limit     |
 

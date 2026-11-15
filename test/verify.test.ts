@@ -746,7 +746,7 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'No certificate found' },
 		});
@@ -759,7 +759,7 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'Expected a single certificate source' },
 		});
@@ -1117,7 +1117,7 @@ describe('chain verification', () => {
 		});
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'DER child exceeds parent length' },
 		});
@@ -1316,7 +1316,7 @@ describe('chain verification', () => {
 		});
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'directoryName must wrap a Name SEQUENCE' },
 		});
@@ -5895,7 +5895,7 @@ describe('decode refusals at the verification entry points', () => {
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			details: { source: { kind: 'intermediates', position: 1 } },
 		});
 	});
