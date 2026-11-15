@@ -67,7 +67,7 @@ import {
 	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
 import type {
-	DecodeRefusalCode,
+	DecodeFailureCode,
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -136,14 +136,14 @@ export type EkuCheckResult =
 			readonly value: undefined;
 	  }
 	| IndexedErrorResult<
-			'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
+			'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeFailureCode,
 			Record<never, never>,
 			EkuCheckFailure
 	  >;
 
 /** Failure from {@linkcode checkExtendedKeyUsage} with the chain index of the certificate that failed. */
 export interface EkuCheckFailure
-	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode> {
+	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeFailureCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 	/** Zero-based index into the chain of the certificate that lacks the required EKU. */
@@ -524,7 +524,7 @@ export type VerifyChainResult =
 /** Failure from {@linkcode verifyCertificateSigningRequest}. */
 export interface VerifyRequestFailure
 	extends Micro509Error<
-		'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
+		'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeFailureCode,
 		VerifyFailureDetails
 	> {
 	/** Always `false` for failures. */
@@ -538,7 +538,7 @@ export type VerifyRequestResult =
 			readonly value: ParsedCertificateSigningRequest;
 	  }
 	| ErrorResult<
-			'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
+			'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeFailureCode,
 			VerifyFailureDetails,
 			VerifyRequestFailure
 	  >;
@@ -1304,7 +1304,7 @@ export async function validateCandidatePath(
 		}
 		return verifyFailureResult(
 			failure(
-				'signature_invalid',
+				'malformed',
 				'certificate input is malformed',
 				index,
 				detail({
@@ -1566,7 +1566,7 @@ export async function verifyCertificateSigningRequest(
 			);
 		}
 		return verifyRequestFailureResult(
-			'signature_invalid',
+			'malformed',
 			'certificate request input is malformed',
 			detail({
 				actual: error instanceof Error ? error.message : 'certificate request input is malformed',
@@ -1596,7 +1596,7 @@ export async function verifyCertificateSigningRequest(
 			);
 		}
 		return verifyRequestFailureResult(
-			'signature_invalid',
+			'malformed',
 			'certificate request input is malformed',
 			detail({
 				subjectCommonName: parsed.subject.values.commonName,
@@ -1651,11 +1651,7 @@ export function checkExtendedKeyUsage(
 	if (!normalized.ok) {
 		const refusal = decodeRefusalOf(normalized.error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? ekuCheckFailureResult(
-					'leaf_eku_missing',
-					'certificate input is malformed',
-					normalized.index,
-				)
+			? ekuCheckFailureResult('malformed', 'certificate input is malformed', normalized.index)
 			: ekuCheckFailureResult(refusal.code, refusal.message, normalized.index);
 	}
 	const normalizedChain = normalized.chain;
@@ -2113,7 +2109,7 @@ function verifyRequestFailureResult(
 	message: string,
 	details?: VerifyFailureDetails,
 ): ErrorResult<
-	'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
+	'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeFailureCode,
 	VerifyFailureDetails,
 	VerifyRequestFailure
 > {
@@ -2130,7 +2126,7 @@ function ekuCheckFailureResult(
 	message: string,
 	index: number,
 ): IndexedErrorResult<
-	'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
+	'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeFailureCode,
 	Record<never, never>,
 	EkuCheckFailure
 > {

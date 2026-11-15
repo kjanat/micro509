@@ -5477,7 +5477,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('checkExtendedKeyUsage fails closed for malformed ParsedCertificate DER', async () => {
@@ -5486,7 +5486,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			[{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
 			'serverAuth',
 		);
-		expect(result).toMatchObject({ ok: false, code: 'leaf_eku_missing' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	// --- parseIpAddressToBytes error paths (lines 1769, 1775) ---
