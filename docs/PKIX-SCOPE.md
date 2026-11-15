@@ -461,7 +461,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `noRevAvail` with cA TRUE, cRLDistributionPoints, freshestCRL or an
       `id-ad-ocsp` authorityInfoAccess entry ([RFC 9608 §3][rfc9608-section-3], [§4][rfc9608-section-4]).
 - [x] Require revocation evidence for a delegated CRL signer outside the
-      chain: CRLs from its own issuer must cover every reason, also when that
+      chain that carries neither `noRevAvail` nor `id-pkix-ocsp-nocheck`:
+      CRLs from its own issuer must cover every reason, also when that
       issuer is a chain certificate or the trust anchor ([RFC 5280 §6.3.3][rfc5280-section-6.3.3]
       step (f) validates the CRL issuer's path, revocation included). A
       revocation in a CRL from a signer whose own status stays indeterminate
@@ -511,8 +512,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       from the latest `thisUpdate` down ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). After the current
       candidates it reads delta CRLs issued by the evaluation time that are no
       longer current or carry no `nextUpdate`. Such a delta CRL settles only
-      a revocation with a reason other than `certificateHold` of a certificate
-      that has not expired, which every later CRL must keep listing ([RFC 5280
+      a revocation with a reason other than `certificateHold` or
+      `removeFromCRL` of a certificate that has not expired, which every later CRL must keep listing ([RFC 5280
       §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is
       micro509 policy. `checkCertificateRevocationAgainstCrl` applies it to
       its `deltaCrl`. A candidate that fails

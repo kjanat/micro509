@@ -189,9 +189,9 @@ supply a CRL from each such certificate's issuer.
 
 ## Supply revocation evidence for delegated CRL signers
 
-A delegated CRL signer outside the chain now needs CRLs from its own issuer
-that cover every reason, also when that issuer is a chain certificate or the
-trust anchor. Until they do, the chain reports `crl_signer_indeterminate` for
+A delegated CRL signer outside the chain without `noRevAvail` or
+`id-pkix-ocsp-nocheck` now needs CRLs from its own issuer that cover every
+reason, also when that issuer is a chain certificate or the trust anchor. Until they do, the chain reports `crl_signer_indeterminate` for
 the certificates its CRLs cover, and only a revocation in those CRLs counts.
 Add the issuer's CRL to `crls`, or issue the signer certificate with
 `noRevAvail` or `id-pkix-ocsp-nocheck`.
@@ -204,7 +204,8 @@ evidence.
 ## Expect revocations from delta CRLs past `nextUpdate`
 
 A delta CRL past its `nextUpdate`, or without one, still revokes an unexpired
-certificate it lists with a reason other than `certificateHold` ([RFC 5280
+certificate it lists with a reason other than `certificateHold` or
+`removeFromCRL` ([RFC 5280
 §5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)). A clean
 current base CRL beside such a delta CRL now yields `revoked` in chain
 revocation, `checkCertificateRevocation` and

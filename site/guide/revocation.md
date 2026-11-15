@@ -154,7 +154,8 @@ fails with `stale_crl`, and the chain reports it as `crl_expired`.
 | `responderRevocationCrlMaxAgeMs` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
 
 A delegated CRL signer outside the chain needs CRLs from its own issuer that
-cover every reason before its CRLs can report a certificate `good`. The
+cover every reason before its CRLs can report a certificate `good`, unless it
+carries `noRevAvail` or `id-pkix-ocsp-nocheck`. The
 chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
 delegated OCSP responders. In `checkCertificateRevocation`, the CRLs in
 `evidence`, delta CRLs included, also serve as revocation evidence for delegated OCSP responders,
