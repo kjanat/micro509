@@ -1,4 +1,5 @@
 import type { SignatureVerifierInput, SignatureVerifiers } from '#micro509/crypto';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
 	explicitContext,
@@ -141,4 +142,47 @@ export async function resignedOcspResponse(
 			sequence([sliceElement(responseBytes.value, responseType), octetString(basic)]),
 		),
 	]);
+}
+
+const AUTHORITY_KEY_IDENTIFIER = objectIdentifier('2.5.29.35');
+
+/** The crlExtensions of a TBSCertList without its authority key identifier. */
+function withoutAuthorityKeyIdentifier(crlExtensions: DerElement): Uint8Array {
+	const listDer = crlExtensions.value;
+	const kept = readSequenceChildren(listDer).flatMap((extension) => {
+		const extensionDer = sliceElement(listDer, extension);
+		const [oid] = readSequenceChildren(extensionDer);
+		const isAuthorityKeyIdentifier =
+			oid !== undefined &&
+			sliceElement(extensionDer, oid).every(
+				(byte, index, bytes) =>
+					bytes.length === AUTHORITY_KEY_IDENTIFIER.length &&
+					byte === AUTHORITY_KEY_IDENTIFIER[index],
+			);
+		return isAuthorityKeyIdentifier ? [] : [extensionDer];
+	});
+	return explicitContext(0, sequence(kept));
+}
+
+/**
+ * `crlDer` signed by `signer` under the parameter signature algorithm, without
+ * the authority key identifier its stand-in signer gave it.
+ */
+export async function resignedCrl(crlDer: Uint8Array, signer: ParameterKey): Promise<Uint8Array> {
+	const [tbsCertList] = readSequenceChildren(crlDer);
+	if (tbsCertList === undefined) throw new Error('expected a TBSCertList');
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const fields = readSequenceChildren(tbsDer);
+	const algorithmIndex = fields[0]?.tag === 0x02 ? 1 : 0;
+	const rebuilt = sequence(
+		fields.map((field, index) =>
+			index === algorithmIndex
+				? ALGORITHM
+				: field.tag === 0xa0
+					? withoutAuthorityKeyIdentifier(field)
+					: sliceElement(tbsDer, field),
+		),
+	);
+	const signature = await sign(signer.key, signer.parametersDer, rebuilt);
+	return sequence([rebuilt, ALGORITHM, bitString(signature)]);
 }

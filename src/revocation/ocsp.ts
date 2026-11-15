@@ -74,6 +74,7 @@ import {
 	anchorWorkingKey,
 	carriesTrustAnchorKey,
 	certificateWorkingKey,
+	pathWorkingKey,
 	withWorkingParameters,
 	workingParametersAt,
 } from '#micro509/internal/verify/verify-path';
@@ -103,7 +104,7 @@ import {
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
 } from '#micro509/revocation/crl';
-import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
+import type { TrustAnchor } from '#micro509/verify/verify';
 import { trustAnchorFromCertificate, verifyCertificateChain } from '#micro509/verify/verify';
 import type {
 	NameFieldKey,
@@ -1557,7 +1558,7 @@ async function validateDelegatedResponderPath(
 			'OCSP responder certificate chain does not validate',
 		);
 	}
-	return { ok: true, parametersDer: pathSignerParameters(chain.value) };
+	return { ok: true, parametersDer: pathWorkingKey(chain.value, 0).parametersDer };
 }
 
 /**
@@ -1583,15 +1584,6 @@ function delegatedPathStart(
 		roots: [],
 		trustAnchors: [withWorkingParameters(trustAnchorFromCertificate(issuer.certificate), working)],
 	};
-}
-
-/** The key parameters a validated path gives its first certificate. */
-function pathSignerParameters(path: CandidatePath): Uint8Array | undefined {
-	const top = path.chain[path.chain.length - 1];
-	if (top === undefined) return undefined;
-	return path.anchorCertificateInChain
-		? workingParametersAt(path.chain, 0, path.chain.length - 2, certificateWorkingKey(top))
-		: workingParametersAt(path.chain, 0, path.chain.length - 1, anchorWorkingKey(path.trustAnchor));
 }
 
 function sameDer(left: Uint8Array, right: Uint8Array): boolean {

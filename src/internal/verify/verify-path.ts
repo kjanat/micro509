@@ -24,6 +24,7 @@ import {
 } from '#micro509/internal/crypto/sig-verify';
 import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import type {
+	CandidatePath,
 	CertificateSource,
 	TrustAnchor,
 	VerifyChainFailure,
@@ -314,6 +315,29 @@ export function withWorkingParameters(anchor: TrustAnchor, parametersDer: Uint8A
 			sequence([algorithmDer.subarray(oid.start - oid.headerLength, oid.end), parametersDer]),
 			spki.subarray(subjectPublicKey.start - subjectPublicKey.headerLength, subjectPublicKey.end),
 		]),
+	};
+}
+
+/**
+ * The working key of `path.chain[index]` along a validated path: its own key
+ * parameters, or those it inherits from the root or bare anchor above it.
+ */
+export function pathWorkingKey(path: CandidatePath, index: number): WorkingPublicKey {
+	const certificate = path.chain[index];
+	const top = path.chain[path.chain.length - 1];
+	if (certificate === undefined || top === undefined) {
+		throw new Error(`no certificate at path index ${index}`);
+	}
+	return {
+		algorithmOid: certificate.publicKeyAlgorithmOid,
+		parametersDer: path.anchorCertificateInChain
+			? workingParametersAt(path.chain, index, path.chain.length - 2, certificateWorkingKey(top))
+			: workingParametersAt(
+					path.chain,
+					index,
+					path.chain.length - 1,
+					anchorWorkingKey(path.trustAnchor),
+				),
 	};
 }
 

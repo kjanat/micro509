@@ -16,6 +16,7 @@ import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
 	checkChainRevocation,
+	createCertificateRevocationList,
 	createOcspResponse,
 	validateCertificateRevocationList,
 	validateOcspResponse,
@@ -42,6 +43,7 @@ import {
 	parameterKey,
 	parameterSignatureVerifiers,
 	rekeyedCertificate,
+	resignedCrl,
 	resignedOcspResponse,
 } from '#test/oracles/parameter-signature';
 
@@ -704,7 +706,7 @@ async function delegatedOcspResponse(
 	return await resignedOcspResponse(built.der, responderKey, embedded);
 }
 
-describe('delegated OCSP responders and inherited key parameters', () => {
+describe('revocation signers and inherited key parameters', () => {
 	it('validates a responder under an issuer whose key inherits its parameters', async () => {
 		const root = parameterKey('P', true);
 		const ca = parameterKey('P', false);
@@ -776,5 +778,43 @@ describe('delegated OCSP responders and inherited key parameters', () => {
 				signatureVerifiers: parameterSignatureVerifiers,
 			}),
 		).toMatchObject({ ok: true });
+	});
+
+	it('authenticates a CRL from a separate signer with the parameters its path gives it', async () => {
+		const root = parameterKey('P', true);
+		const ca = parameterKey('P', false);
+		const crlSigner = parameterKey('P', false);
+		const leaf = parameterKey('P', false);
+		const rootDer = await parameterCertificate('Parameter Root', root, 'self', CA_EXTENSIONS);
+		const underRoot = { commonName: 'Parameter Root', key: root };
+		const caDer = await parameterCertificate('Parameter CA', ca, underRoot, CA_EXTENSIONS);
+		const crlSignerDer = await parameterCertificate('Parameter CA', crlSigner, underRoot, {
+			basicConstraints: { ca: true },
+			keyUsage: ['cRLSign'],
+		});
+		const leafDer = await parameterCertificate(
+			'parameter-crl.example',
+			leaf,
+			{ commonName: 'Parameter CA', key: ca },
+			undefined,
+		);
+		const now = new Date(Date.now() + 5_000);
+		const stand = await createSelfSignedCertificate({ subject: { commonName: 'Parameter CA' } });
+		const built = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Parameter CA' },
+			signerPrivateKey: stand.keyPair.privateKey,
+			issuerCertificate: stand.certificate.der,
+			thisUpdate: new Date(now.getTime() - 60_000),
+			nextUpdate: new Date(now.getTime() + 60_000),
+		});
+		const result = await checkChainRevocation({
+			chain: [leafDer, caDer, rootDer].map((der) => unwrap(parseCertificateDer(der))),
+			crls: [await resignedCrl(built.der, crlSigner)],
+			extraCertificates: [crlSignerDer],
+			at: now,
+			signatureVerifiers: parameterSignatureVerifiers,
+		});
+		expect(result.value.certificates[0]).toMatchObject({ status: 'good', source: { kind: 'crl' } });
 	});
 });

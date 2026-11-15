@@ -22,6 +22,7 @@ import {
 	anchorWorkingKey,
 	carriesTrustAnchorKey,
 	certificateWorkingKey,
+	pathWorkingKey,
 	workingParametersAt,
 } from '#micro509/internal/verify/verify-path';
 import type { DecodeFailureCode } from '#micro509/result/result';
@@ -59,7 +60,7 @@ import {
 	validateOcspResponseBy,
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
-import type { TrustAnchor } from '#micro509/verify/verify';
+import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
 import { verifyCertificateChain } from '#micro509/verify/verify';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
@@ -580,7 +581,20 @@ async function crlSignerChainsToAnchor(
 		at,
 		...(ctx.signatureVerifiers !== undefined && { signatureVerifiers: ctx.signatureVerifiers }),
 	});
+	if (result.ok) recordPathKeys(result.value, ctx);
 	return result.ok;
+}
+
+/**
+ * Remembers the working key that a signer's validated path gives each of its
+ * certificates outside the checked chain (RFC 5280 §6.1.4 (e)).
+ */
+function recordPathKeys(path: CandidatePath, ctx: SignerValidationContext): void {
+	path.chain.forEach((certificate, index) => {
+		if (!ctx.chain.some((member) => sameCertificate(member, certificate))) {
+			ctx.pathKeys.set(certCacheKey(certificate), pathWorkingKey(path, index));
+		}
+	});
 }
 
 /**
@@ -609,6 +623,7 @@ async function chainsToBareAnchor(
 		at,
 		...(ctx.signatureVerifiers !== undefined && { signatureVerifiers: ctx.signatureVerifiers }),
 	});
+	if (result.ok) recordPathKeys(result.value, ctx);
 	return result.ok;
 }
 
@@ -646,6 +661,8 @@ interface SignerValidationContext {
 	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
 	/** The RFC 5280 §6.1 working key of a CRL or OCSP signer. */
 	readonly workingKeyOf: (certificate: ParsedCertificate) => WorkingPublicKey;
+	/** Working keys of signers outside the chain, from their validated paths. */
+	readonly pathKeys: Map<string, WorkingPublicKey>;
 	/** The bare trust anchor above the chain, when it ends below one. */
 	readonly trustAnchor: TrustAnchor | undefined;
 }
@@ -1349,6 +1366,13 @@ async function resolveBaseCrlAgainstSigners(
 		chain,
 		signerCtx.trustAnchor,
 	)) {
+		const authorized = await crlSignerChainsToAnchor(
+			candidate,
+			chain,
+			extraCertificates,
+			at,
+			signerCtx,
+		);
 		const resolved = await checkCrlAgainstDeltaCandidates({
 			cert,
 			baseCrl,
@@ -1365,7 +1389,7 @@ async function resolveBaseCrlAgainstSigners(
 		if (resolved.kind === 'unusable_base') {
 			continue;
 		}
-		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at, signerCtx))) {
+		if (!authorized) {
 			state.sawCrlSignerNotAuthorized = true;
 			continue;
 		}
@@ -1997,6 +2021,11 @@ export async function checkChainRevocation(
 
 	// Create signer validation context with memoization cache
 	// This cache is shared across all certificate checks in this chain evaluation
+	const pathKeys = new Map<string, WorkingPublicKey>();
+	const chainKeys = chainWorkingKeys(
+		chain,
+		input.trustAnchor === undefined ? undefined : anchorWorkingKey(input.trustAnchor),
+	);
 	const signerCtx: SignerValidationContext = {
 		cache: new Map(),
 		chain,
@@ -2008,10 +2037,9 @@ export async function checkChainRevocation(
 		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
 		signatureVerifiers: input.signatureVerifiers,
 		verifiers,
-		workingKeyOf: chainWorkingKeys(
-			chain,
-			input.trustAnchor === undefined ? undefined : anchorWorkingKey(input.trustAnchor),
-		),
+		workingKeyOf: (certificate) =>
+			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
+		pathKeys,
 		trustAnchor: input.trustAnchor,
 	};
 	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
