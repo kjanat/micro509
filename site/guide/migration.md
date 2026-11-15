@@ -163,6 +163,19 @@ report on. If a responder is trusted for several issuers, supply an entry for
 each issuer. Trust for one CA no longer grants authority over every CA in the
 validated path.
 
+## Supply revocation evidence for delegated OCSP responders
+
+`responderRevocationPolicy` now defaults to `'nocheck-or-evidence'`. A
+delegated responder without `id-pkix-ocsp-nocheck` fails with
+`responder_revocation_unknown` unless `responderRevocationCrls` shows it is
+not revoked. Supply the responder's CRLs, or ask its CA to issue responder
+certificates with `id-pkix-ocsp-nocheck`.
+
+`'honor-nocheck'` keeps the tolerant behaviour: only a revoked verdict
+rejects. A responder with a critical cRLDistributionPoints extension still
+needs evidence under it. For chain revocation, set
+`policy.ocspResponderRevocation`.
+
 ## Set an age policy for CRLs without `nextUpdate`
 
 A received complete CRL without `nextUpdate` now fails with `stale_crl` unless

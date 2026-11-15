@@ -23,6 +23,7 @@ import {
 	FAR_FUTURE_NEXT_UPDATE,
 	fieldAt,
 	hexToBytes,
+	OCSP_NOCHECK_EXTENSION,
 	rewriteCertificateSubject,
 	sliceElement,
 	withRevokedEntryReasonCode,
@@ -1625,7 +1626,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			publicKey: responderKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerCertificate: ca.certificate.der,
-			extensions: { extendedKeyUsage: ['ocspSigning'] },
+			extensions: { extendedKeyUsage: ['ocspSigning'], customExtensions: [OCSP_NOCHECK_EXTENSION] },
 		});
 		// No embedded certificates — discovery must fall back to extraCertificates
 		const response = await createOcspResponse({
@@ -1897,6 +1898,7 @@ async function createBareAnchorFixture() {
 	});
 	const responder = await issueUnderRoot('Bare Anchor OCSP Responder', {
 		extendedKeyUsage: ['ocspSigning'],
+		customExtensions: [OCSP_NOCHECK_EXTENSION],
 	});
 	const leafKeys = await generateKeyPair();
 	const leaf = await createCertificate({

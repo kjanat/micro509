@@ -122,7 +122,7 @@ export interface RevocationPolicy {
 	/**
 	 * Revocation policy for delegated OCSP responder certificates
 	 * (RFC 6960 §4.2.2.2.1). Supplied CRLs double as responder revocation
-	 * evidence. Defaults to `'honor-nocheck'`.
+	 * evidence. Defaults to `'nocheck-or-evidence'`.
 	 */
 	readonly ocspResponderRevocation?: OcspResponderRevocationPolicy;
 	/**

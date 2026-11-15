@@ -11,6 +11,7 @@ import {
 	parseCertificatePem,
 	parseOcspRequestPemOrThrow,
 	parseOcspResponseDerOrThrow,
+	pemEncode,
 	unwrap,
 	validateOcspResponse,
 } from '#micro509';
@@ -32,7 +33,13 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { FAR_FUTURE_NEXT_UPDATE, hexToBytes, withRevokedEntryReasonCode } from '#test/helpers';
+import {
+	FAR_FUTURE_NEXT_UPDATE,
+	hexToBytes,
+	OCSP_NOCHECK_EXTENSION,
+	replaceCertificateExtension,
+	withRevokedEntryReasonCode,
+} from '#test/helpers';
 
 interface FixtureResponderInput {
 	readonly commonName: string;
@@ -41,6 +48,7 @@ interface FixtureResponderInput {
 	readonly signerPrivateKey?: CryptoKey;
 	readonly issuerCertificate?: string | Uint8Array | ParsedCertificate;
 	readonly extendedKeyUsage?: readonly ('ocspSigning' | 'serverAuth')[];
+	readonly noCheck?: boolean;
 }
 
 type FixtureResponderIdInput =
@@ -89,6 +97,7 @@ async function issueOcspFixtureAuthority(commonName: string) {
 				...(options.extendedKeyUsage === undefined
 					? {}
 					: { extendedKeyUsage: options.extendedKeyUsage }),
+				...(options.noCheck === true ? { customExtensions: [OCSP_NOCHECK_EXTENSION] } : {}),
 			},
 		});
 		return { responder, responderKeys };
@@ -205,6 +214,7 @@ describe('ocsp fixtures', () => {
 			await issueResponder({
 				commonName: 'Allowed Delegated Responder',
 				extendedKeyUsage: ['ocspSigning'],
+				noCheck: true,
 			});
 		const allowedResponse = await createOcspResponse({
 			signerPrivateKey: allowedResponderKeys.privateKey,
@@ -365,6 +375,7 @@ describe('ocsp fixtures', () => {
 		const { responder, responderKeys } = await issueResponder({
 			commonName: 'Fixture Parsed Responder',
 			extendedKeyUsage: ['ocspSigning'],
+			noCheck: true,
 		});
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
@@ -552,7 +563,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		expect(result).toMatchObject({ ok: true });
 	});
 
-	it('rejects a revoked responder without nocheck under honor-nocheck', async () => {
+	it('rejects a revoked responder without nocheck under the default policy', async () => {
 		const authority = await issueAuthority('Revoked Responder CA');
 		const responder = await issueDelegatedResponder(authority);
 		expect(hasOcspNoCheckExtension(responder.certificate.pem)).toBe(false);
@@ -643,6 +654,83 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		}
 	});
 
+	it.each([
+		{ label: 'the default', policy: undefined, noCheck: false, critical: false, accepted: false },
+		{ label: 'the default', policy: undefined, noCheck: true, critical: false, accepted: true },
+		{
+			label: 'nocheck-or-evidence',
+			policy: 'nocheck-or-evidence',
+			noCheck: false,
+			critical: false,
+			accepted: false,
+		},
+		{
+			label: 'honor-nocheck',
+			policy: 'honor-nocheck',
+			noCheck: false,
+			critical: false,
+			accepted: true,
+		},
+		{
+			label: 'honor-nocheck',
+			policy: 'honor-nocheck',
+			noCheck: false,
+			critical: true,
+			accepted: false,
+		},
+		{ label: 'skip', policy: 'skip', noCheck: false, critical: false, accepted: true },
+	] as const)(
+		'responder without CRL evidence under $label (nocheck $noCheck, critical CRL DP $critical)',
+		async ({ policy, noCheck, critical, accepted }) => {
+			const authority = await issueAuthority('Policy Evidence CA');
+			const keys = await generateKeyPair();
+			const built = await createCertificate({
+				issuer: { commonName: authority.commonName },
+				subject: { commonName: 'Policy Evidence responder' },
+				publicKey: keys.publicKey,
+				signerPrivateKey: authority.ca.keyPair.privateKey,
+				issuerCertificate: authority.ca.certificate.der,
+				extensions: {
+					extendedKeyUsage: ['ocspSigning'],
+					crlDistributionPoints: [
+						{
+							distributionPoint: {
+								type: 'fullName',
+								fullName: [{ type: 'uri', value: 'http://example.test/responder.crl' }],
+							},
+						},
+					],
+					...(noCheck ? { customExtensions: [OCSP_NOCHECK_EXTENSION] } : {}),
+				},
+			});
+			const distributionPoints = unwrap(parseCertificatePem(built.pem)).extensions.find(
+				(extension) => extension.oid === OIDS.cRLDistributionPoints,
+			);
+			if (distributionPoints === undefined) throw new Error('expected cRLDistributionPoints');
+			const certificateDer = critical
+				? await replaceCertificateExtension(built.der, authority.ca.keyPair.privateKey, {
+						oid: OIDS.cRLDistributionPoints,
+						value: distributionPoints.valueDer,
+						critical: true,
+					})
+				: built.der;
+			const response = await goodResponse(
+				authority,
+				keys.privateKey,
+				pemEncode('CERTIFICATE', certificateDer),
+				true,
+			);
+			const result = await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				...(policy === undefined ? {} : { responderRevocationPolicy: policy }),
+			});
+			expect(result).toMatchObject(
+				accepted ? { ok: true } : { ok: false, code: 'responder_revocation_unknown' },
+			);
+		},
+	);
+
 	it('require-evidence: rejects without evidence, ignores nocheck, accepts with good CRL', async () => {
 		const authority = await issueAuthority('Evidence CA');
 		const withNoCheck = await issueDelegatedResponder(authority, { noCheck: true });
@@ -689,6 +777,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		});
 		// Responder valid only in a past window
 		const responder = await issueDelegatedResponder(authority, {
+			noCheck: true,
 			validity: {
 				notBefore: new Date(now - 10 * 24 * HOUR_MS),
 				notAfter: new Date(now - 5 * 24 * HOUR_MS),

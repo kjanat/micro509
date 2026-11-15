@@ -40,6 +40,7 @@ import {
 	callUntyped,
 	hexToBytes,
 	issueChain,
+	OCSP_NOCHECK_EXTENSION,
 	sliceElement,
 	withSignatureValue,
 } from '#test/helpers';
@@ -686,6 +687,7 @@ const CA_EXTENSIONS = {
 } as const satisfies CertificateExtensions;
 const RESPONDER_EXTENSIONS = {
 	extendedKeyUsage: ['ocspSigning'],
+	customExtensions: [OCSP_NOCHECK_EXTENSION],
 } as const satisfies CertificateExtensions;
 
 async function delegatedOcspResponse(
@@ -774,7 +776,7 @@ describe('revocation signers and inherited key parameters', () => {
 				'Parameter Chained Responder',
 				responder,
 				{ commonName: 'Parameter Responder CA', key: intermediate },
-				RESPONDER_EXTENSIONS,
+				{ extendedKeyUsage: ['ocspSigning'] },
 			);
 			const leafDer = await parameterCertificate(
 				'parameter-chained.example',

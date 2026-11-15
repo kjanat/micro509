@@ -48,7 +48,7 @@ outline: [2, 3]
 - Responder authorization (CA-signed, delegated with `ocspSigning` EKU,
   locally trusted responders per [RFC 6960 §4.2.2.2][rfc6960-section-4.2.2.2] criterion 1)
 - Delegated responder revocation policy: `id-pkix-ocsp-nocheck`
-  (`hasOcspNoCheckExtension()`), `honor-nocheck` / `require-evidence` /
+  (`hasOcspNoCheckExtension()`), `nocheck-or-evidence` (default) / `honor-nocheck` / `require-evidence` /
   `skip` knobs with CRL evidence
 - Historical-time responder chain validation (`at` flows through delegated
   chain checks)

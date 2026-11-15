@@ -456,6 +456,12 @@ export async function flattenedText(file: string): Promise<string> {
 
 export const FAR_FUTURE_NEXT_UPDATE = new Date('2999-01-01T00:00:00Z');
 
+/** The id-pkix-ocsp-nocheck extension (RFC 6960 §4.2.2.2.1), for a certificate builder's `customExtensions`. */
+export const OCSP_NOCHECK_EXTENSION: { readonly oid: string; readonly value: Uint8Array } = {
+	oid: OIDS.ocspNoCheck,
+	value: nullValue(),
+};
+
 export async function withoutCrlNextUpdate(
 	crlDer: Uint8Array,
 	signerPrivateKey: CryptoKey,

@@ -41,7 +41,7 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { expectRejectedErrorCode, hexToBytes } from '#test/helpers';
+import { expectRejectedErrorCode, hexToBytes, OCSP_NOCHECK_EXTENSION } from '#test/helpers';
 
 describe('ocsp', () => {
 	it.each([
@@ -249,6 +249,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -304,6 +305,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const otherResponder = await createCertificate({
@@ -315,6 +317,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -620,6 +623,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -1553,6 +1557,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -1998,6 +2003,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -2386,6 +2392,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -3304,6 +3311,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();

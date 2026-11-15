@@ -421,18 +421,27 @@ export type VerifyOcspResponseSignatureResult =
 	  >;
 
 /**
- * Revocation policy for delegated OCSP responder certificates (RFC 6960 §4.2.2.2.1).
+ * Revocation policy for delegated OCSP responder certificates. RFC 6960
+ * §4.2.2.2.1 leaves the check of a responder without `id-pkix-ocsp-nocheck` to
+ * local policy. CRL evidence comes from
+ * {@linkcode ValidateOcspResponseInput.responderRevocationCrls}.
  *
- * - `'honor-nocheck'` (default): a responder carrying `id-pkix-ocsp-nocheck`
- *   is exempt from revocation checking. Otherwise, CRL evidence from
- *   {@linkcode ValidateOcspResponseInput.responderRevocationCrls} is consulted
- *   when provided — a revoked responder rejects the response; missing or
- *   unusable evidence is tolerated (soft).
- * - `'require-evidence'`: `nocheck` is ignored; CRL evidence must positively
- *   show the responder is not revoked, otherwise the response is rejected.
+ * - `'nocheck-or-evidence'` (default): a responder carrying
+ *   `id-pkix-ocsp-nocheck` is exempt. Otherwise CRL evidence must show it is
+ *   not revoked, as RFC 9608 §4 runs the RFC 5280 §6.1.3 (a)(3) check.
+ * - `'honor-nocheck'`: as `'nocheck-or-evidence'`, but missing or unusable
+ *   evidence is tolerated and only a revoked verdict rejects. A responder with
+ *   a critical cRLDistributionPoints extension still needs evidence (X.509
+ *   (2019) §9.6.2.1).
+ * - `'require-evidence'`: `nocheck` is ignored and CRL evidence must show the
+ *   responder is not revoked.
  * - `'skip'`: no responder revocation checking.
  */
-export type OcspResponderRevocationPolicy = 'honor-nocheck' | 'require-evidence' | 'skip';
+export type OcspResponderRevocationPolicy =
+	| 'nocheck-or-evidence'
+	| 'honor-nocheck'
+	| 'require-evidence'
+	| 'skip';
 
 /**
  * Input for {@linkcode validateOcspResponse}.
@@ -459,7 +468,7 @@ export interface ValidateOcspResponseInput {
 	 * matching certificate.
 	 */
 	readonly trustedOcspResponders?: readonly OcspCertificateSource[];
-	/** Revocation policy for delegated responder certificates. Defaults to `'honor-nocheck'`. */
+	/** Revocation policy for delegated responder certificates. Defaults to `'nocheck-or-evidence'`. */
 	readonly responderRevocationPolicy?: OcspResponderRevocationPolicy;
 	/** CRLs used as revocation evidence for delegated responder certificates. */
 	readonly responderRevocationCrls?: readonly CrlSource[];
@@ -1833,11 +1842,11 @@ async function checkDelegatedResponderRevocation(
 	input: OcspValidationOptions,
 	context: Required<OcspCallerVerification>,
 ): Promise<{ readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult>> {
-	const policy = input.responderRevocationPolicy ?? 'honor-nocheck';
+	const policy = input.responderRevocationPolicy ?? 'nocheck-or-evidence';
 	if (policy === 'skip') {
 		return { ok: true };
 	}
-	if (policy === 'honor-nocheck' && hasOcspNoCheckExtension(signer)) {
+	if (policy !== 'require-evidence' && hasOcspNoCheckExtension(signer)) {
 		return { ok: true };
 	}
 	const crlCheck = responderCrlCheck(input);
@@ -1876,14 +1885,21 @@ async function checkDelegatedResponderRevocation(
 	}
 	// A definitive good requires every revocation reason to be covered; a single
 	// reason-scoped CRL does not prove the responder unrevoked.
-	if (coversAllDistributionPointReasons(coveredReasons) || policy === 'honor-nocheck') {
-		// honor-nocheck tolerates missing evidence (soft) — only a positive
-		// revoked verdict rejects when no usable evidence proves 'good'.
+	if (
+		coversAllDistributionPointReasons(coveredReasons) ||
+		(policy === 'honor-nocheck' && !hasCriticalCrlDistributionPoints(signer))
+	) {
 		return { ok: true };
 	}
 	return validateOcspResponseFailureResult(
 		'responder_revocation_unknown',
 		'Delegated OCSP responder revocation status could not be established',
+	);
+}
+
+function hasCriticalCrlDistributionPoints(certificate: ParsedCertificate): boolean {
+	return certificate.extensions.some(
+		(extension) => extension.oid === OIDS.cRLDistributionPoints && extension.critical,
 	);
 }
 
