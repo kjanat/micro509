@@ -171,6 +171,9 @@ delegated responder without `id-pkix-ocsp-nocheck` or `noRevAvail` fails with
 not revoked. Supply the responder's CRLs, or ask its CA to issue responder
 certificates with `id-pkix-ocsp-nocheck`.
 
+`'require-evidence'` rejects a responder carrying `noRevAvail`, since no CRL
+can list it.
+
 `'honor-nocheck'` keeps the tolerant behaviour: only a revoked verdict
 rejects. A responder with a critical cRLDistributionPoints extension still
 needs evidence under it. For chain revocation, set

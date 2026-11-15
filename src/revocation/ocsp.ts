@@ -434,9 +434,10 @@ export type VerifyOcspResponseSignatureResult =
  *   evidence is tolerated and only a revoked verdict rejects. A responder with
  *   a critical cRLDistributionPoints extension still needs evidence (X.509
  *   (2019) §9.6.2.1).
- * - `'require-evidence'`: `id-pkix-ocsp-nocheck` and noRevAvail are ignored
- *   and CRL evidence must show the responder is not revoked (RFC 5280 §6.1
- *   lets an application further limit the valid paths).
+ * - `'require-evidence'`: `id-pkix-ocsp-nocheck` is ignored and CRL evidence
+ *   must show the responder is not revoked (RFC 5280 §6.1 lets an application
+ *   further limit the valid paths). A responder carrying noRevAvail is
+ *   rejected, as RFC 9608 §2 keeps it off every CRL.
  * - `'skip'`: no responder revocation checking.
  */
 export type OcspResponderRevocationPolicy =
@@ -1803,6 +1804,21 @@ export function hasOcspNoCheckExtension(certificate: OcspCertificateSource): boo
 	return carriesOcspNoCheck(normalizeCertificate(certificate));
 }
 
+/**
+ * The extension that exempts a certificate from revocation checking (RFC 9608
+ * §4): `'no_rev_avail'` for noRevAvail (RFC 9608 §2) or `'ocsp_nocheck'` for
+ * id-pkix-ocsp-nocheck.
+ */
+export type RevocationSkipReason = 'no_rev_avail' | 'ocsp_nocheck';
+
+/** The RFC 9608 §4 exemption a certificate parsed from its signed DER carries. */
+export function revocationSkipReasonOf(
+	certificate: ParsedCertificate,
+): RevocationSkipReason | undefined {
+	if (certificate.noRevAvail === true) return 'no_rev_avail';
+	return carriesOcspNoCheck(certificate) ? 'ocsp_nocheck' : undefined;
+}
+
 /** Whether a parsed certificate carries `id-pkix-ocsp-nocheck` with its NULL value. */
 export function carriesOcspNoCheck(certificate: ParsedCertificate): boolean {
 	return certificate.extensions.some(
@@ -1834,6 +1850,26 @@ function responderCrlCheck(input: OcspValidationOptions): CrlCheckOptions {
 	};
 }
 
+/** The responder revocation outcome that `policy` and the responder's own extensions settle before any CRL is read. */
+function responderRevocationSettledWithoutCrls(
+	signer: ParsedCertificate,
+	policy: OcspResponderRevocationPolicy,
+): { readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult> | undefined {
+	if (policy === 'skip') {
+		return { ok: true };
+	}
+	const skipReason = revocationSkipReasonOf(signer);
+	if (skipReason === 'no_rev_avail') {
+		return policy === 'require-evidence'
+			? validateOcspResponseFailureResult(
+					'responder_revocation_unknown',
+					'Delegated OCSP responder carries noRevAvail, which no CRL lists',
+				)
+			: { ok: true };
+	}
+	return skipReason === 'ocsp_nocheck' && policy !== 'require-evidence' ? { ok: true } : undefined;
+}
+
 /**
  * Applies the delegated-responder revocation policy (RFC 6960 §4.2.2.2.1).
  * See {@linkcode OcspResponderRevocationPolicy} for the policy semantics.
@@ -1845,14 +1881,9 @@ async function checkDelegatedResponderRevocation(
 	context: Required<OcspCallerVerification>,
 ): Promise<{ readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult>> {
 	const policy = input.responderRevocationPolicy ?? 'nocheck-or-evidence';
-	if (policy === 'skip') {
-		return { ok: true };
-	}
-	if (
-		policy !== 'require-evidence' &&
-		(signer.noRevAvail === true || hasOcspNoCheckExtension(signer))
-	) {
-		return { ok: true };
+	const settled = responderRevocationSettledWithoutCrls(signer, policy);
+	if (settled !== undefined) {
+		return settled;
 	}
 	const crlCheck = responderCrlCheck(input);
 	const coveredReasons = new Set<string>();

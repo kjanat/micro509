@@ -660,6 +660,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: undefined,
 			exemption: 'none',
 			critical: false,
+			cleanCrl: false,
 			accepted: false,
 		},
 		{
@@ -667,6 +668,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: undefined,
 			exemption: 'nocheck',
 			critical: false,
+			cleanCrl: false,
 			accepted: true,
 		},
 		{
@@ -674,6 +676,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: undefined,
 			exemption: 'noRevAvail',
 			critical: false,
+			cleanCrl: false,
 			accepted: true,
 		},
 		{
@@ -681,6 +684,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: 'nocheck-or-evidence',
 			exemption: 'none',
 			critical: false,
+			cleanCrl: false,
 			accepted: false,
 		},
 		{
@@ -688,6 +692,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: 'honor-nocheck',
 			exemption: 'none',
 			critical: false,
+			cleanCrl: false,
 			accepted: true,
 		},
 		{
@@ -695,6 +700,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: 'honor-nocheck',
 			exemption: 'none',
 			critical: true,
+			cleanCrl: false,
 			accepted: false,
 		},
 		{
@@ -702,12 +708,21 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			policy: 'require-evidence',
 			exemption: 'noRevAvail',
 			critical: false,
+			cleanCrl: false,
+			accepted: false,
+		},
+		{
+			label: 'require-evidence',
+			policy: 'require-evidence',
+			exemption: 'noRevAvail',
+			critical: false,
+			cleanCrl: true,
 			accepted: false,
 		},
 		{ label: 'skip', policy: 'skip', exemption: 'none', critical: false, accepted: true },
 	] as const)(
-		'responder without CRL evidence under $label (exemption $exemption, critical CRL DP $critical)',
-		async ({ policy, exemption, critical, accepted }) => {
+		'responder under $label (exemption $exemption, critical CRL DP $critical, clean CRL $cleanCrl)',
+		async ({ policy, exemption, critical, cleanCrl, accepted }) => {
 			const authority = await issueAuthority('Policy Evidence CA');
 			const keys = await generateKeyPair();
 			const built = await createCertificate({
@@ -750,10 +765,18 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 				pemEncode('CERTIFICATE', certificateDer),
 				true,
 			);
+			const crl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: authority.commonName },
+				signerPrivateKey: authority.ca.keyPair.privateKey,
+				issuerCertificate: authority.ca.certificate.der,
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+			});
 			const result = await validateOcspResponse({
 				response: response.der,
 				issuerCertificate: authority.ca.certificate.pem,
 				...(policy === undefined ? {} : { responderRevocationPolicy: policy }),
+				...(cleanCrl ? { responderRevocationCrls: [crl.pem] } : {}),
 			});
 			expect(result).toMatchObject(
 				accepted ? { ok: true } : { ok: false, code: 'responder_revocation_unknown' },
