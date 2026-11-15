@@ -1299,7 +1299,6 @@ export async function validateOcspResponseBy(
 	const responderAuthorization = await validateOcspResponderAuthorization(
 		input,
 		parsedResponse,
-		issuer,
 		responder,
 		{ verifiers: context.verifiers, issuerWorkingKey },
 	);
@@ -1417,9 +1416,18 @@ type OcspResponder =
 			readonly path: DelegatedResponderPath;
 	  };
 
-/** The certification path of a delegated responder, or why it does not validate. */
+/**
+ * A delegated responder's validated path: the parameters it gives the
+ * responder's key, and the responder's immediate issuer with its working key,
+ * whose CRLs cover the responder. Otherwise why the path does not validate.
+ */
 type DelegatedResponderPath =
-	| { readonly ok: true; readonly parametersDer: Uint8Array | undefined }
+	| {
+			readonly ok: true;
+			readonly parametersDer: Uint8Array | undefined;
+			readonly issuer: ResolvedOcspKey;
+			readonly issuerWorkingKey: WorkingPublicKey;
+	  }
 	| ValidateOcspResponseFailureBranch;
 
 async function classifyOcspResponder(
@@ -1467,7 +1475,6 @@ function responderWorkingParameters(
 async function validateOcspResponderAuthorization(
 	input: OcspValidationOptions,
 	parsedResponse: ParsedOcspResponse,
-	issuer: ResolvedOcspKey,
 	responder: OcspResponder,
 	context: Required<OcspCallerVerification>,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
@@ -1484,7 +1491,10 @@ async function validateOcspResponderAuthorization(
 	if (!responder.path.ok) {
 		return responder.path;
 	}
-	return await validateDelegatedOcspResponder(input, issuer, responder.certificate, context);
+	return await validateDelegatedOcspResponder(input, responder.path.issuer, responder.certificate, {
+		verifiers: context.verifiers,
+		issuerWorkingKey: responder.path.issuerWorkingKey,
+	});
 }
 
 /**
@@ -1558,7 +1568,17 @@ async function validateDelegatedResponderPath(
 			'OCSP responder certificate chain does not validate',
 		);
 	}
-	return { ok: true, parametersDer: pathWorkingKey(chain.value, 0).parametersDer };
+	const immediateIssuer = chain.value.chain[1];
+	return {
+		ok: true,
+		parametersDer: pathWorkingKey(chain.value, 0).parametersDer,
+		...(immediateIssuer === undefined
+			? { issuer, issuerWorkingKey }
+			: {
+					issuer: { kind: 'certificate', certificate: immediateIssuer },
+					issuerWorkingKey: pathWorkingKey(chain.value, 1),
+				}),
+	};
 }
 
 /**

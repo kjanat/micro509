@@ -36,7 +36,13 @@ import {
 	createSelfSignedCertificate,
 	parseCertificateDer,
 } from '#micro509/x509';
-import { callUntyped, issueChain, sliceElement, withSignatureValue } from '#test/helpers';
+import {
+	callUntyped,
+	hexToBytes,
+	issueChain,
+	sliceElement,
+	withSignatureValue,
+} from '#test/helpers';
 import { DSA_WITH_SHA1, DSA_WITH_SHA256, dsaSignatureVerifiers } from '#test/oracles/dsa';
 import type { ParameterKey } from '#test/oracles/parameter-signature';
 import {
@@ -736,49 +742,79 @@ describe('revocation signers and inherited key parameters', () => {
 		});
 	});
 
-	it('verifies a chained responder with the parameters its own path gives it', async () => {
-		const issuer = parameterKey('P1', true);
-		const intermediate = parameterKey('P2', true);
-		const responder = parameterKey('P2', false);
-		const leaf = parameterKey('P1', false);
-		const issuerDer = await parameterCertificate('Parameter Issuer', issuer, 'self', CA_EXTENSIONS);
-		const underIssuer = { commonName: 'Parameter Issuer', key: issuer };
-		const intermediateDer = await parameterCertificate(
-			'Parameter Responder CA',
-			intermediate,
-			underIssuer,
-			CA_EXTENSIONS,
-		);
-		const responderDer = await parameterCertificate(
-			'Parameter Chained Responder',
-			responder,
-			{ commonName: 'Parameter Responder CA', key: intermediate },
-			RESPONDER_EXTENSIONS,
-		);
-		const leafDer = await parameterCertificate(
-			'parameter-chained.example',
-			leaf,
-			underIssuer,
-			undefined,
-		);
-		const now = new Date(Date.now() + 5_000);
-		expect(
-			await validateOcspResponse({
-				response: await delegatedOcspResponse(
-					leafDer,
-					issuerDer,
-					responder,
-					[responderDer, intermediateDer],
-					now,
-				),
-				issuerCertificate: issuerDer,
-				allowChainedResponderCertificate: true,
-				responderRevocationPolicy: 'skip',
-				at: now,
-				signatureVerifiers: parameterSignatureVerifiers,
-			}),
-		).toMatchObject({ ok: true });
-	});
+	it.each([
+		{ policy: 'skip', revokedByResponderCa: false, expected: { ok: true } },
+		{ policy: 'require-evidence', revokedByResponderCa: false, expected: { ok: true } },
+		{
+			policy: 'honor-nocheck',
+			revokedByResponderCa: true,
+			expected: { ok: false, code: 'responder_revoked' },
+		},
+	] as const)(
+		'checks a chained responder with its own path under $policy (revoked $revokedByResponderCa)',
+		async ({ policy, revokedByResponderCa, expected }) => {
+			const issuer = parameterKey('P1', true);
+			const intermediate = parameterKey('P2', true);
+			const responder = parameterKey('P2', false);
+			const leaf = parameterKey('P1', false);
+			const issuerDer = await parameterCertificate(
+				'Parameter Issuer',
+				issuer,
+				'self',
+				CA_EXTENSIONS,
+			);
+			const underIssuer = { commonName: 'Parameter Issuer', key: issuer };
+			const intermediateDer = await parameterCertificate(
+				'Parameter Responder CA',
+				intermediate,
+				underIssuer,
+				CA_EXTENSIONS,
+			);
+			const responderDer = await parameterCertificate(
+				'Parameter Chained Responder',
+				responder,
+				{ commonName: 'Parameter Responder CA', key: intermediate },
+				RESPONDER_EXTENSIONS,
+			);
+			const leafDer = await parameterCertificate(
+				'parameter-chained.example',
+				leaf,
+				underIssuer,
+				undefined,
+			);
+			const now = new Date(Date.now() + 5_000);
+			const stand = await createSelfSignedCertificate({
+				subject: { commonName: 'Parameter Responder CA' },
+			});
+			const responderSerial = hexToBytes(unwrap(parseCertificateDer(responderDer)).serialNumberHex);
+			const responderCaCrl = await createCertificateRevocationList({
+				crlNumber: 1,
+				issuer: { commonName: 'Parameter Responder CA' },
+				signerPrivateKey: stand.keyPair.privateKey,
+				issuerCertificate: stand.certificate.der,
+				thisUpdate: new Date(now.getTime() - 60_000),
+				nextUpdate: new Date(now.getTime() + 60_000),
+				revokedCertificates: revokedByResponderCa ? [{ serialNumber: responderSerial }] : [],
+			});
+			expect(
+				await validateOcspResponse({
+					response: await delegatedOcspResponse(
+						leafDer,
+						issuerDer,
+						responder,
+						[responderDer, intermediateDer],
+						now,
+					),
+					issuerCertificate: issuerDer,
+					allowChainedResponderCertificate: true,
+					responderRevocationPolicy: policy,
+					responderRevocationCrls: [await resignedCrl(responderCaCrl.der, intermediate)],
+					at: now,
+					signatureVerifiers: parameterSignatureVerifiers,
+				}),
+			).toMatchObject(expected);
+		},
+	);
 
 	it('authenticates a CRL from a separate signer with the parameters its path gives it', async () => {
 		const root = parameterKey('P', true);
