@@ -2002,6 +2002,13 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			status: 'indeterminate',
 			reasons: ['ocsp_responder_revoked', 'no_applicable_crl'],
 		},
+		{ delta: false, embedded: false, status: 'good', reasons: undefined },
+		{
+			delta: true,
+			embedded: false,
+			status: 'indeterminate',
+			reasons: ['ocsp_responder_revoked', 'no_applicable_crl'],
+		},
 	] as const)(
 		'applies a delta CRL that revokes a delegated responder (delta $delta, embedded $embedded)',
 		async ({ delta, embedded, status, reasons }) => {

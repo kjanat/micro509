@@ -1193,7 +1193,7 @@ async function validateOcspResponseWithResponderFallback(
 			ocspIssuer,
 			context,
 		);
-		if (retry.ok) {
+		if (retry.ok || !OCSP_RESPONDER_FAILURE_CODES.has(retry.code)) {
 			return retry;
 		}
 	}
