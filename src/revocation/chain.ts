@@ -1922,6 +1922,20 @@ function issuerAt(
 }
 
 /**
+ * Each certificate of `chain` that has an issuer, with that issuer. Without
+ * `trustAnchor` the last certificate is the anchor and has none.
+ */
+function certificatesWithIssuers(
+	chain: readonly ParsedCertificate[],
+	trustAnchor: TrustAnchor | undefined,
+): readonly { readonly cert: ParsedCertificate; readonly issuer: RevocationIssuer }[] {
+	return chain.flatMap((cert, index) => {
+		const issuer = issuerAt(chain, index, trustAnchor);
+		return issuer === undefined ? [] : [{ cert, issuer }];
+	});
+}
+
+/**
  * RFC 9608 §4: path validation skips RFC 5280 §6.1.3 step (a)(3) for a
  * certificate carrying noRevAvail or id-pkix-ocsp-nocheck, read from its
  * signed DER.
@@ -2026,19 +2040,12 @@ async function checkChainRevocationAt(
 	const signerCtx = signerValidationContext(input, verifiers);
 	const deltaBudget = signerCtx.deltaBudget;
 
-	const certsToCheck = input.trustAnchor === undefined ? chain.slice(0, -1) : chain;
 	const certificates: CertificateRevocationStatus[] = [];
 	const revokedCertificates: ParsedCertificate[] = [];
 	const indeterminateCertificates: ParsedCertificate[] = [];
 	const allExecutionErrors: RevocationExecutionError[] = [];
 
-	for (let i = 0; i < certsToCheck.length; i++) {
-		const cert = certsToCheck[i];
-		const issuer = issuerAt(chain, i, input.trustAnchor);
-		if (cert === undefined || issuer === undefined) {
-			continue;
-		}
-
+	for (const { cert, issuer } of certificatesWithIssuers(chain, input.trustAnchor)) {
 		const skipReason = revocationSkipReason(cert);
 		if (skipReason !== undefined) {
 			certificates.push({ certificate: cert, status: 'skipped', skipReason });

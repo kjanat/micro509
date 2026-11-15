@@ -1299,21 +1299,12 @@ async function checkCompleteCrlAlone(
 	options: CrlCheckOptions,
 	verification: CallerVerification,
 ): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	const { deltaCrl: _deltaCrl, ...completeOnly } = options;
 	const alone = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
 		completeCrl,
 		authority,
-		{
-			...(options.at === undefined ? {} : { at: options.at }),
-			...(options.clockSkewMs === undefined ? {} : { clockSkewMs: options.clockSkewMs }),
-			...(options.maxAgeMs === undefined ? {} : { maxAgeMs: options.maxAgeMs }),
-			...(options.unrecognizedReasonCode === undefined
-				? {}
-				: { unrecognizedReasonCode: options.unrecognizedReasonCode }),
-			...(options.signatureVerifiers === undefined
-				? {}
-				: { signatureVerifiers: options.signatureVerifiers }),
-		},
+		completeOnly,
 		verification,
 	);
 	return alone.kind === 'checked' ? alone.result : alone.failure;
@@ -1732,10 +1723,10 @@ function isGoodResult(result: CheckCertificateRevocationAgainstCrlResult): boole
 
 /**
  * What an older delta CRL changes after a newer one settled the status as
- * good: a revocation no later CRL may drop (RFC 5280 §5.3.1, §3.3), an entry
- * `unrecognizedReasonCode: 'reject'` refuses, or entries that cannot settle
- * the status. A newer delta CRL that omits such an entry contradicts its
- * issuer.
+ * good: a revocation no later CRL may drop (RFC 5280 §5.3.1, §3.3), a
+ * failure such as an entry `unrecognizedReasonCode: 'reject'` refuses, or
+ * entries that cannot settle the status. A newer delta CRL that omits such an
+ * entry contradicts its issuer.
  */
 function olderDeltaRevocation(
 	certificate: ParsedCertificate,
@@ -1750,11 +1741,7 @@ function olderDeltaRevocation(
 		);
 	}
 	if (outcome.kind !== 'checked') return undefined;
-	if (!outcome.result.ok) {
-		return outcome.result.code === 'reason_code_unrecognized'
-			? { kind: 'checked', result: outcome.result, deltaCrl }
-			: undefined;
-	}
+	if (!outcome.result.ok) return { kind: 'checked', result: outcome.result, deltaCrl };
 	const revoked = irremovableCrlRevocation(certificate, outcome.result, at);
 	return revoked === undefined ? undefined : { kind: 'checked', result: revoked, deltaCrl };
 }

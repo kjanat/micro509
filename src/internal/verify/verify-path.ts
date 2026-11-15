@@ -499,7 +499,6 @@ export async function buildChainInternal(
 		order.set(fingerprint(candidate), index);
 	});
 
-	const maxDepth = candidates.length + 1;
 	const startFingerprint = fingerprint(leaf);
 	const success = await search(leaf, [leaf], new Set([startFingerprint]), 0, []);
 	if (success !== undefined) {
@@ -571,9 +570,6 @@ export async function buildChainInternal(
 		}
 		const terminal = await terminateAtAnchor(current, path, pending);
 		if (terminal !== 'open') return terminal;
-		if (path.length > maxDepth) {
-			return undefined;
-		}
 		return await searchIssuers(current, path, visited, caBelowCount, pending);
 	}
 

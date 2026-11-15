@@ -407,40 +407,9 @@ export function curveBytes(parametersOid: string | undefined): number | undefine
 }
 
 /**
- * Verify a signature against the signer's SPKI and the signed TBS bytes.
- *
- * Throws on unsupported algorithms. Use {@linkcode verifySignedDataDetailed} for
- * a non-throwing variant.
- */
-export async function verifySignedData(
-	signatureAlgorithmOid: string,
-	signatureAlgorithmParametersDer: Uint8Array | undefined,
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-	subjectPublicKeyInfoDer: Uint8Array,
-	signature: Uint8Array,
-	signedData: Uint8Array,
-): Promise<boolean> {
-	const result = await verifySignedDataDetailed(
-		signatureAlgorithmOid,
-		signatureAlgorithmParametersDer,
-		publicKeyAlgorithmOid,
-		publicKeyParametersOid,
-		subjectPublicKeyInfoDer,
-		signature,
-		0,
-		signedData,
-	);
-	if (!result.ok) {
-		throw new Error(result.reason);
-	}
-	return result.valid;
-}
-
-/**
- * Non-throwing variant of {@linkcode verifySignedData} — returns a typed
- * {@linkcode VerifySignedDataResult} instead of throwing on unsupported algorithms
- * or runtime verification failures.
+ * Verifies a signature against the signer's SPKI and the signed bytes. Returns
+ * a typed {@linkcode VerifySignedDataResult} for unsupported algorithms and
+ * runtime verification failures.
  *
  * Tries both DER and raw ECDSA encodings when the first attempt fails.
  *

@@ -1511,8 +1511,8 @@ async function validateOcspResponderAuthorization(
 	responder: OcspResponder,
 	context: ResolvedOcspCallerVerification,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
-	const responderBinding = await safeValidateOcspResponderIdBinding(
-		parsedResponse,
+	const responderBinding = await validateOcspResponderIdBinding(
+		parsedResponse.responderId,
 		responder.kind === 'issuer' ? ocspKeyOf(responder.signer) : responder.certificate,
 	);
 	if (!responderBinding.ok) {
@@ -1555,23 +1555,6 @@ function isOcspIssuer(signer: ParsedCertificate, issuer: ResolvedOcspKey): boole
 		return isSameOcspCertificate(signer, issuer.certificate);
 	}
 	return carriesTrustAnchorKey(signer, issuer.trustAnchor);
-}
-
-async function safeValidateOcspResponderIdBinding(
-	parsedResponse: ParsedOcspResponse,
-	signer: OcspIssuerKey,
-): Promise<ValidateOcspResponseFailureBranch | { readonly ok: true }> {
-	try {
-		return await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		return refusal === undefined
-			? validateOcspResponseFailureResult(
-					'malformed',
-					'OCSP responder certificate input is malformed',
-				)
-			: validateOcspResponseFailureResult(refusal.code, refusal.message);
-	}
 }
 
 /**

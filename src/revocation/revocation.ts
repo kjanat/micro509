@@ -541,11 +541,7 @@ async function checkRevocationEvidence(
 	for (const [index, entry] of evidence.entries()) {
 		const entryChecks =
 			entry.kind === 'ocsp'
-				? [
-						await guardedEvidenceCheck('ocsp', () =>
-							checkCertificateRevocationWithOcsp(input, entry, certificate, budget),
-						),
-					]
+				? [await checkCertificateRevocationWithOcsp(input, entry, certificate, budget)]
 				: await checkCrlEvidenceEntry(parsed[index], checkedCompleteCrls, (completeCrl) =>
 						checkCertificateRevocationWithCrl(input, completeCrl, deltaCrls, certificate, budget),
 					);
@@ -572,7 +568,7 @@ async function checkCrlEvidenceEntry(
 		const key = signedCrlKey(completeCrl);
 		if (checked.has(key)) continue;
 		checked.add(key);
-		const result = await guardedEvidenceCheck('crl', () => check(completeCrl));
+		const result = await check(completeCrl);
 		checks.push(result);
 		if (result.status === 'revoked') break;
 	}
@@ -593,18 +589,6 @@ function completeCrlsOf(
 			? [entry.deltaCrl.crl]
 			: []),
 	];
-}
-
-/** One evidence check, with an undecodable input reported as indeterminate evidence. */
-async function guardedEvidenceCheck(
-	kind: RevocationEvidenceKind,
-	check: () => Promise<RevocationEvidenceCheck>,
-): Promise<RevocationEvidenceCheck> {
-	try {
-		return await check();
-	} catch (error) {
-		return undecodableEvidence(kind, error);
-	}
 }
 
 function undecodableEvidence(

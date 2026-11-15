@@ -1588,37 +1588,17 @@ export async function verifyCertificateSigningRequest(
 			}),
 		);
 	}
-	let signatureResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
-	try {
-		signatureResult = await verifySignedDataDetailed(
-			parsed.signatureAlgorithmOid,
-			parsed.signatureAlgorithmParametersDer,
-			parsed.publicKeyAlgorithmOid,
-			parsed.publicKeyParametersOid,
-			parsed.subjectPublicKeyInfoDer,
-			parsed.signatureValue,
-			parsed.signatureValueUnusedBits,
-			parsed.certificationRequestInfoDer,
-			verification,
-		);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		if (refusal !== undefined) {
-			return verifyRequestFailureResult(
-				refusal.code,
-				refusal.message,
-				detail({ subjectCommonName: parsed.subject.values.commonName, actual: refusal.message }),
-			);
-		}
-		return verifyRequestFailureResult(
-			'malformed',
-			'certificate request input is malformed',
-			detail({
-				subjectCommonName: parsed.subject.values.commonName,
-				actual: error instanceof Error ? error.message : 'certificate request input is malformed',
-			}),
-		);
-	}
+	const signatureResult = await verifySignedDataDetailed(
+		parsed.signatureAlgorithmOid,
+		parsed.signatureAlgorithmParametersDer,
+		parsed.publicKeyAlgorithmOid,
+		parsed.publicKeyParametersOid,
+		parsed.subjectPublicKeyInfoDer,
+		parsed.signatureValue,
+		parsed.signatureValueUnusedBits,
+		parsed.certificationRequestInfoDer,
+		verification,
+	);
 	if (!signatureResult.ok) {
 		const code =
 			signatureResult.code === 'verification_error' ? 'signature_invalid' : signatureResult.code;
