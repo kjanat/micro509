@@ -1254,10 +1254,11 @@ export async function validateOcspResponseWith(
  * @internal
  */
 export async function validateOcspResponseBy(
-	input: OcspValidationOptions,
+	callerInput: OcspValidationOptions,
 	issuerInput: OcspIssuer,
 	context: OcspCallerVerification,
 ): Promise<ValidateOcspResponseResult> {
+	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	assertCrlMaxAge(input.responderRevocationCrlMaxAgeMs);
 	let parsedResponse: ParsedOcspResponse;
 	try {

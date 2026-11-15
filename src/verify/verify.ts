@@ -1351,8 +1351,9 @@ export async function validateCandidatePath(
  * ```
  */
 export async function verifyCertificateChain(
-	input: VerifyCertificateChainInput,
+	callerInput: VerifyCertificateChainInput,
 ): Promise<VerifyChainResult> {
+	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	const distrustedSpkiSha256 =
 		input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256];
 	assertCrlMaxAge(input.revocation?.policy?.crlMaxAgeMs);

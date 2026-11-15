@@ -1935,7 +1935,14 @@ function revocationSkipReason(certificate: ParsedCertificate): RevocationSkipRea
 export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
-	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
+	return await checkChainRevocationAt({ ...input, at: input.at ?? new Date() });
+}
+
+/** {@linkcode checkChainRevocation} with its evaluation time resolved once for every check. */
+async function checkChainRevocationAt(
+	input: CheckChainRevocationInput & { readonly at: Date },
+): Promise<CheckChainRevocationResult> {
+	const { chain, policy, crls = [], extraCertificates = [], at } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
 	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
 	assertIssuedByTrustAnchor(chain, input.trustAnchor);

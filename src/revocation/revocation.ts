@@ -367,8 +367,9 @@ export function resolveOcspResponderCandidates(
  * ```
  */
 export async function checkCertificateRevocation(
-	input: CheckCertificateRevocationInput,
+	callerInput: CheckCertificateRevocationInput,
 ): Promise<CheckCertificateRevocationResult> {
+	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	assertCrlMaxAge(input.crlMaxAgeMs);
 	resolveSignatureVerifiers(input.signatureVerifiers);
 	const evidence = input.evidence ?? [];
