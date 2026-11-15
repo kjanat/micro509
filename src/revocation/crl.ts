@@ -1312,6 +1312,9 @@ async function checkCompleteCrlAlone(
  * Result of {@linkcode checkRevocationAgainstAuthenticatedCrl}, keyed by the
  * stage that settled it. `delta_rejected` means the delta CRL failed
  * authentication, freshness, compatibility or applicability;
+ * `delta_stale` means it passed them except freshness and records no
+ * revocation that stands, so the newer CRLs it accumulates into settle the
+ * status;
  * `delta_unresolved` means it passed them and its revoked entries could not
  * settle the certificate's status; `complete` is then the complete CRL's own
  * result, without its freshness check.
@@ -1321,6 +1324,7 @@ async function checkCompleteCrlAlone(
 export type AuthenticatedCrlCheckOutcome =
 	| { readonly kind: 'checked'; readonly result: CheckCertificateRevocationAgainstCrlResult }
 	| { readonly kind: 'delta_rejected'; readonly failure: CrlApplicabilityFailure }
+	| { readonly kind: 'delta_stale'; readonly failure: CrlApplicabilityFailure }
 	| {
 			readonly kind: 'delta_unresolved';
 			readonly failure: CrlApplicabilityFailure;
@@ -1559,6 +1563,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 			)
 		: [];
 	let attempts = 0;
+	let unexamined = true;
 	for (const deltaCrl of candidates) {
 		if (attempts >= DELTA_CRL_ATTEMPTS_PER_BASE || budget.remaining <= 0) break;
 		attempts += 1;
@@ -1574,6 +1579,10 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		if (outcome.kind === 'delta_unresolved') {
 			return settledOrUnsettled(irremovableCrlRevocation(certificate, outcome.complete, at));
 		}
+		if (outcome.kind === 'delta_stale') {
+			unexamined = false;
+			break;
+		}
 	}
 	const alone = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
@@ -1583,7 +1592,7 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		verification,
 	);
 	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
-	return candidates.length > attempts
+	return unexamined && candidates.length > attempts
 		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at))
 		: { kind: 'checked', result: aloneResult };
 }
@@ -1691,8 +1700,11 @@ async function validateOptionalDeltaCrl(
 /**
  * The outcome of `deltaCrl`, which updates `completeCrl` but is not current at
  * `input.at`. Its revocation of `certificate` settles the status when no later
- * CRL could remove it (RFC 5280 §5.3.1); otherwise the delta CRL is rejected
- * with `stale`.
+ * CRL could remove it (RFC 5280 §5.3.1). Otherwise it is `delta_stale` when it
+ * applies to `certificate`, and an older delta CRL adds nothing: a later delta
+ * CRL combined with a complete CRL it updates lists every revocation an
+ * earlier one did (RFC 5280 §5.2.4). A delta CRL that does not apply is
+ * rejected with `stale`.
  */
 function staleDeltaCrlOutcome(
 	certificate: ParsedCertificate,
@@ -1709,9 +1721,9 @@ function staleDeltaCrlOutcome(
 		return rejected;
 	}
 	const lookup = findRevokedCertificateEntry(certificate, deltaCrl);
-	if (!lookup.ok || lookup.entry === undefined || lookup.entry.reasonCode === 'removeFromCRL') {
-		return rejected;
-	}
+	if (!lookup.ok) return rejected;
+	const settled = { kind: 'delta_stale', failure: stale } as const;
+	if (lookup.entry === undefined || lookup.entry.reasonCode === 'removeFromCRL') return settled;
 	const result = revokedEntryResult(
 		completeCrl,
 		lookup.entry,
@@ -1719,7 +1731,7 @@ function staleDeltaCrlOutcome(
 	);
 	if (!result.ok) return { kind: 'checked', result };
 	return irremovableCrlRevocation(certificate, result, input.at ?? new Date()) === undefined
-		? rejected
+		? settled
 		: { kind: 'checked', result };
 }
 

@@ -226,6 +226,24 @@ async function scenario() {
 				nextUpdate: new Date(at.getTime() - HOUR_MS),
 				revokedCertificates: revocation.map((entry) => ({ ...entry, reasonCode })),
 			}),
+		expiredCleanDeltas: (count: number) =>
+			Promise.all(
+				Array.from(
+					{ length: count },
+					async (_, index) =>
+						(
+							await createCertificateRevocationList({
+								issuer: { commonName: CA_NAME },
+								issuerCertificate: ca.certificate.der,
+								signerPrivateKey: ca.keyPair.privateKey,
+								crlNumber: 10 + index,
+								baseCrlNumber: 5,
+								thisUpdate: new Date(at.getTime() - 2 * HOUR_MS + index * 60_000),
+								nextUpdate: new Date(at.getTime() - HOUR_MS + index * 60_000),
+							})
+						).der,
+				),
+			),
 		revokingDelta: (baseCrlNumber = 5, crlNumber = 6) =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -291,6 +309,7 @@ const HELPER_DELTAS = {
 	'five other-scope': (s: Scenario) => s.otherScopeDeltas(5),
 	'expired revoking': async (s: Scenario) => [(await s.expiredDelta('keyCompromise')).der],
 	'expired holding': async (s: Scenario) => [(await s.expiredDelta('certificateHold')).der],
+	'six expired clean': (s: Scenario) => s.expiredCleanDeltas(6),
 	'forged and expired revoking': async (s: Scenario) => [
 		...(await s.forgedDeltas(1)),
 		(await s.expiredDelta('keyCompromise')).der,
@@ -314,6 +333,7 @@ describe('checkCertificateRevocationAgainstCrlsBy', () => {
 		{ base: 'clean', deltas: 'expired revoking', expected: 'revoked' },
 		{ base: 'clean', deltas: 'forged and expired revoking', expected: 'revoked' },
 		{ base: 'clean', deltas: 'expired holding', expected: 'good' },
+		{ base: 'clean', deltas: 'six expired clean', expected: 'good' },
 	] as const)(
 		'checks a $base base CRL with $deltas delta CRLs as $expected',
 		async ({ base, deltas, expected }) => {
@@ -578,6 +598,16 @@ describe('checkChainRevocation with an authenticated delta CRL that cannot settl
 });
 
 describe('checkChainRevocation with a delta CRL past its nextUpdate', () => {
+	it('reads a current clean base CRL beside six authentic delta CRLs past their nextUpdate as good', async () => {
+		const s = await scenario();
+		const crls = [(await s.base(false)).der, ...(await s.expiredCleanDeltas(6))];
+		expect(await leafStatus(s, crls, [])).toEqual({
+			decision: 'allow',
+			status: 'good',
+			indeterminateReasons: undefined,
+		});
+	});
+
 	it.each([
 		{ reason: 'keyCompromise', mode: 'hard-fail', decision: 'deny', status: 'revoked' },
 		{ reason: 'keyCompromise', mode: 'soft-fail', decision: 'deny', status: 'revoked' },

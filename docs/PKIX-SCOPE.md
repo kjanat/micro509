@@ -515,7 +515,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       a revocation with a reason other than `certificateHold` or
       `removeFromCRL` of a certificate that has not expired, which every later CRL must keep listing ([RFC 5280
       §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is
-      micro509 policy. `checkCertificateRevocationAgainstCrl` applies it to
+      micro509 policy. The newest such delta CRL that authenticates and
+      applies ends the search. [RFC 5280 §5.2.4][rfc5280-section-5.2.4] makes a later delta CRL
+      with its base CRL list every revocation an earlier one did. `checkCertificateRevocationAgainstCrl` applies it to
       its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
       and the base CRL is evaluated alone once every candidate is skipped. A

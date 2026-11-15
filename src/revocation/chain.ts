@@ -1696,7 +1696,7 @@ type DeltaCandidateOutcome =
 /**
  * Authenticates `baseCrl` with `candidate` once, then checks it with each
  * ranked delta CRL while the budgets last, and alone once every delta CRL is
- * rejected. A delta CRL that passes authentication, freshness, compatibility
+ * rejected or a delta CRL past its `nextUpdate` leaves the status to it. A delta CRL that passes authentication, freshness, compatibility
  * and applicability ends the search.
  */
 async function checkCrlAgainstDeltaCandidates(
@@ -1726,26 +1726,7 @@ async function checkCrlAgainstDeltaCandidates(
 		unrecognizedReasonCode,
 	};
 	for (const deltaCrl of deltaCandidates) {
-		const settled = takeDeltaCrlAttempt(budgets)
-			? settleAuthenticatedCrlOutcome(
-					await checkRevocationAgainstAuthenticatedCrl(
-						cert,
-						authenticated.value,
-						candidate,
-						{ ...input, deltaCrl },
-						verification,
-					),
-					laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
-					state,
-				)
-			: ({ kind: 'retry_limit' } as const);
-		if (settled === undefined) {
-			continue;
-		}
-		if (settled.kind === 'delta_unusable') {
-			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
-		}
-		if (settled.kind === 'retry_limit') {
+		if (!takeDeltaCrlAttempt(budgets)) {
 			const alone = await checkRevocationAgainstAuthenticatedCrl(
 				cert,
 				authenticated.value,
@@ -1756,8 +1737,27 @@ async function checkCrlAgainstDeltaCandidates(
 			return (
 				(alone.kind === 'checked'
 					? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
-					: undefined) ?? settled
+					: undefined) ?? { kind: 'retry_limit' }
 			);
+		}
+		const outcome = await checkRevocationAgainstAuthenticatedCrl(
+			cert,
+			authenticated.value,
+			candidate,
+			{ ...input, deltaCrl },
+			verification,
+		);
+		if (outcome.kind === 'delta_stale') break;
+		const settled = settleAuthenticatedCrlOutcome(
+			outcome,
+			laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
+			state,
+		);
+		if (settled === undefined) {
+			continue;
+		}
+		if (settled.kind === 'delta_unusable') {
+			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
 		}
 		return settled;
 	}
@@ -1807,7 +1807,7 @@ function settleAuthenticatedCrlOutcome(
 	if (outcome.kind === 'delta_unresolved') {
 		return { kind: 'delta_unusable', complete: outcome.complete };
 	}
-	if (outcome.kind === 'delta_rejected') {
+	if (outcome.kind === 'delta_rejected' || outcome.kind === 'delta_stale') {
 		return undefined;
 	}
 	const result = outcome.result;
