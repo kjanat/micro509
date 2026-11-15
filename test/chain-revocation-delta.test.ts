@@ -491,6 +491,20 @@ const HELPER_DELTAS = {
 			s.deltaAt(8, -1.5),
 			s.deltaAt(40, -0.5, { nextUpdateHours: -0.25 }),
 		]),
+	'two current clean and an older holding one with a higher CRL number': async (s: Scenario) =>
+		ders([
+			s.deltaAt(10, -2.75, { reasonCode: 'certificateHold' }),
+			s.deltaAt(8, -2),
+			s.deltaAt(9, -1),
+		]),
+	'expired clean, current clean and an older holding one with a higher CRL number': async (
+		s: Scenario,
+	) =>
+		ders([
+			s.deltaAt(10, -2.75, { reasonCode: 'certificateHold' }),
+			s.deltaAt(8, -2),
+			s.deltaAt(20, -1, { nextUpdateHours: -0.5 }),
+		]),
 	'four forged and older current clean': async (s: Scenario) => [
 		...(await s.forgedDeltas(4)),
 		...(await ders([s.deltaAt(6, -2)])),
@@ -820,6 +834,26 @@ describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget
 			expected: 'unsettled',
 		},
 		{ deltas: 'six expired clean', remaining: 1, expected: 'good' },
+		{
+			deltas: 'two current clean and an older holding one with a higher CRL number',
+			remaining: 1,
+			expected: 'unsettled',
+		},
+		{
+			deltas: 'two current clean and an older holding one with a higher CRL number',
+			remaining: 3,
+			expected: 'revoked',
+		},
+		{
+			deltas: 'expired clean, current clean and an older holding one with a higher CRL number',
+			remaining: 2,
+			expected: 'unsettled',
+		},
+		{
+			deltas: 'expired clean, current clean and an older holding one with a higher CRL number',
+			remaining: 3,
+			expected: 'revoked',
+		},
 	] as const)(
 		'checks $deltas delta CRLs with $remaining attempts left as $expected',
 		async ({ deltas, remaining, expected }) => {
