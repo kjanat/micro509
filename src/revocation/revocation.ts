@@ -375,7 +375,9 @@ export function resolveOcspResponderCandidates(
  * `delta_crl_unusable` in `details.indeterminateEvidence`, and a candidate
  * the limits leave unread that could change the status records
  * `delta_crl_retry_limit_exceeded` there; either keeps other evidence from
- * settling the status as `good`.
+ * settling the status as `good`. Unless other evidence revokes the
+ * certificate, the result is then `indeterminate` with the top-level code
+ * `revocation_status_indeterminate`.
  * A certificate carrying noRevAvail is `skipped` without consulting evidence
  * (RFC 9608 §4). One carrying id-pkix-ocsp-nocheck is still checked against
  * the evidence, which may list it as revoked.

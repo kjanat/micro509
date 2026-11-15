@@ -234,8 +234,9 @@ clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
 records the new code `delta_crl_unusable` in `details.indeterminateEvidence`,
 and a candidate the attempt limits leave unread that could change the status
 records `delta_crl_retry_limit_exceeded` there. Either one keeps OCSP or other
-CRL evidence from settling the status as `good`, and the result is
-`indeterminate` with the top-level code `revocation_status_indeterminate`.
+CRL evidence from settling the status as `good`. Unless other evidence revokes
+the certificate, the result is then `indeterminate` with the top-level code
+`revocation_status_indeterminate`.
 An undecodable `deltaCrl` no longer hides its complete CRL, so a clean
 complete CRL beside it can still yield `good`. Evidence that does not decode
 records `malformed` in `details.indeterminateEvidence`.
