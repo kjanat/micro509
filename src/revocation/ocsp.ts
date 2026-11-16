@@ -91,6 +91,7 @@ import type {
 	CrlSource,
 	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
@@ -503,6 +504,13 @@ export interface ValidateOcspResponseInput {
 	 * another CRL provides good coverage. Defaults to `'revoked'`.
 	 */
 	readonly responderRevocationUnrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Treatment of `responderRevocationCrls` delta CRLs that the attempt limits
+	 * leave unread although one already read supersedes them. See
+	 * {@linkcode SupersededDeltaCrlPolicy}. Defaults to `'indeterminate'`, which
+	 * leaves the responder `responder_revocation_unknown`.
+	 */
+	readonly responderRevocationUnreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy;
 	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/**
@@ -1920,6 +1928,9 @@ function responderCrlCheck(input: OcspValidationOptions): CrlCheckOptions {
 		...(input.responderRevocationUnrecognizedReasonCode === undefined
 			? {}
 			: { unrecognizedReasonCode: input.responderRevocationUnrecognizedReasonCode }),
+		...(input.responderRevocationUnreadSupersededDeltaCrls === undefined
+			? {}
+			: { unreadSupersededDeltaCrls: input.responderRevocationUnreadSupersededDeltaCrls }),
 	};
 }
 

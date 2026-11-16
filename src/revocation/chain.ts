@@ -33,6 +33,7 @@ import type {
 	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
 	ParsedRevocationReason,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
@@ -173,6 +174,13 @@ export interface RevocationPolicy {
 	 * A revocation of the signer in such a CRL counts under either value.
 	 */
 	readonly crlSignerSelfEvidence?: 'delegated' | 'any';
+	/**
+	 * Treatment of delta CRLs that the attempt limits leave unread although
+	 * one already read supersedes them, for the chain, its CRL signers and its
+	 * delegated OCSP responders. See {@linkcode SupersededDeltaCrlPolicy}.
+	 * Defaults to `'indeterminate'`.
+	 */
+	readonly unreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy;
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -276,8 +284,8 @@ function signerCertificateOf(
  *   `ocsp_next_update_missing`
  * - **Delta CRL**: `delta_crl_unusable` when an authenticated, current delta
  *   CRL cannot settle the status, `delta_crl_retry_limit_exceeded` when the
- *   attempt limits leave a delta CRL candidate unread that could change the
- *   status. Either one outranks a
+ *   attempt limits leave a delta CRL candidate unread that counts under
+ *   `unreadSupersededDeltaCrls`. Either one outranks a
  *   `good` verdict from other evidence.
  * - **Reason code**: `crl_reason_code_unrecognized` and
  *   `ocsp_reason_code_unrecognized` when evidence revokes the certificate with
@@ -705,6 +713,7 @@ interface SignerValidationContext {
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
 	readonly crlSignerSelfEvidence: NonNullable<RevocationPolicy['crlSignerSelfEvidence']>;
+	readonly unreadSupersededDeltaCrls: SupersededDeltaCrlPolicy;
 	readonly signatureVerifiers: SignatureVerifiers | undefined;
 	readonly distrustedSpkiSha256: readonly string[] | undefined;
 	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
@@ -946,6 +955,7 @@ async function checkSignerAgainstCrl(
 			...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
 			...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
 			unrecognizedReasonCode: ctx.unrecognizedReasonCode,
+			unreadSupersededDeltaCrls: ctx.unreadSupersededDeltaCrls,
 		},
 		signerVerification(ctx, issuer),
 		budgets,
@@ -1183,6 +1193,26 @@ const OCSP_RESPONDER_FAILURE_CODES: ReadonlySet<ValidateOcspResponseFailure['cod
 	'limit_exceeded',
 ]);
 
+/** The {@linkcode validateOcspResponse} options that a chain's `policy` sets. */
+function ocspPolicyOptions(policy: RevocationPolicy | undefined) {
+	return {
+		...(policy?.ocspResponderRevocation !== undefined
+			? { responderRevocationPolicy: policy.ocspResponderRevocation }
+			: {}),
+		...(policy?.crlMaxAgeMs !== undefined
+			? { responderRevocationCrlMaxAgeMs: policy.crlMaxAgeMs }
+			: {}),
+		...(policy?.clockSkewMs !== undefined ? { clockSkewMs: policy.clockSkewMs } : {}),
+		...(policy?.ocspProfile !== undefined ? { profile: policy.ocspProfile } : {}),
+		...(policy?.unrecognizedReasonCode !== undefined
+			? { responderRevocationUnrecognizedReasonCode: policy.unrecognizedReasonCode }
+			: {}),
+		...(policy?.unreadSupersededDeltaCrls !== undefined
+			? { responderRevocationUnreadSupersededDeltaCrls: policy.unreadSupersededDeltaCrls }
+			: {}),
+	};
+}
+
 /**
  * Validates an OCSP response, retrying with caller-provided extra certificates
  * as explicit responder certificates when embedded discovery fails.
@@ -1220,19 +1250,9 @@ async function validateOcspResponseWithResponderFallback(
 	const shared = {
 		at,
 		...(trustedOcspResponders !== undefined ? { trustedOcspResponders } : {}),
-		...(input.policy?.ocspResponderRevocation !== undefined
-			? { responderRevocationPolicy: input.policy.ocspResponderRevocation }
-			: {}),
+		...ocspPolicyOptions(input.policy),
 		// Chain-level CRLs double as responder revocation evidence
 		...(input.crls !== undefined ? { responderRevocationCrls: input.crls } : {}),
-		...(input.policy?.crlMaxAgeMs !== undefined
-			? { responderRevocationCrlMaxAgeMs: input.policy.crlMaxAgeMs }
-			: {}),
-		...(input.policy?.clockSkewMs !== undefined ? { clockSkewMs: input.policy.clockSkewMs } : {}),
-		...(input.policy?.ocspProfile !== undefined ? { profile: input.policy.ocspProfile } : {}),
-		...(input.policy?.unrecognizedReasonCode !== undefined
-			? { responderRevocationUnrecognizedReasonCode: input.policy.unrecognizedReasonCode }
-			: {}),
 		...(input.signatureVerifiers !== undefined
 			? { signatureVerifiers: input.signatureVerifiers }
 			: {}),
@@ -1471,6 +1491,7 @@ async function resolveBaseCrlAgainstSigners(
 			crlMaxAgeMs,
 			clockSkewMs,
 			unrecognizedReasonCode,
+			unreadSupersededDeltaCrls: signerCtx.unreadSupersededDeltaCrls,
 			budgets: [deltaBudget],
 			state,
 			verification,
@@ -1704,6 +1725,7 @@ interface DeltaCandidateCheck {
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
+	readonly unreadSupersededDeltaCrls: SupersededDeltaCrlPolicy;
 	readonly budgets: readonly DeltaCrlBudget[];
 	readonly state: CrlEvidenceState;
 	readonly verification: CallerVerification;
@@ -1740,6 +1762,7 @@ async function checkCrlAgainstDeltaCandidates(
 		crlMaxAgeMs,
 		clockSkewMs,
 		unrecognizedReasonCode,
+		unreadSupersededDeltaCrls,
 		budgets,
 		state,
 		verification,
@@ -1754,6 +1777,7 @@ async function checkCrlAgainstDeltaCandidates(
 			...(crlMaxAgeMs === undefined ? {} : { maxAgeMs: crlMaxAgeMs }),
 			...(clockSkewMs === undefined ? {} : { clockSkewMs }),
 			unrecognizedReasonCode,
+			unreadSupersededDeltaCrls,
 		},
 		verification,
 		budgets,
@@ -2000,6 +2024,7 @@ function signerValidationContext(
 		clockSkewMs: policy?.clockSkewMs,
 		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
 		crlSignerSelfEvidence: policy?.crlSignerSelfEvidence ?? 'delegated',
+		unreadSupersededDeltaCrls: policy?.unreadSupersededDeltaCrls ?? 'indeterminate',
 		signatureVerifiers: input.signatureVerifiers,
 		distrustedSpkiSha256:
 			input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256],

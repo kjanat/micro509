@@ -168,6 +168,22 @@ export type ParsedRevocationReason = RevocationReason | UnrecognizedRevocationRe
 export type UnrecognizedReasonCodePolicy = 'revoked' | 'reject';
 
 /**
+ * Treatment of delta CRLs that the attempt limits leave unread when a delta
+ * CRL already read supersedes them by both `thisUpdate` and CRL number. RFC
+ * 5280 §5.2.4 has a relying party use the most recent delta CRL, and §3.3 and
+ * §5.3.1 keep a lasting revocation listed in every later CRL, so reading the
+ * older ones is a check on the issuer's consistency.
+ *
+ * - `'indeterminate'`: any unread candidate leaves the status
+ *   `delta_crl_retry_limit_exceeded`, unless a revocation no delta CRL can
+ *   remove already settled it (default).
+ * - `'ignore'`: an unread candidate does not count when the delta CRL that
+ *   settled the status as good supersedes it, or, without a good status, when
+ *   it is not current and a delta CRL read supersedes it.
+ */
+export type SupersededDeltaCrlPolicy = 'indeterminate' | 'ignore';
+
+/**
  * Input for {@linkcode createCertificateRevocationList}.
  */
 export interface CreateCertificateRevocationListInput {
@@ -1330,11 +1346,15 @@ type AuthenticatedCrlCheckOutcome =
 			readonly complete: CheckCertificateRevocationAgainstCrlResult;
 	  };
 
-/** The options of a CRL check once its certificate, CRL and authority are resolved. */
+/**
+ * The options of a CRL check once its certificate, CRL and authority are
+ * resolved. `unreadSupersededDeltaCrls` applies when
+ * {@linkcode checkCertificateRevocationAgainstCrlsBy} runs out of attempts.
+ */
 export type CrlCheckOptions = Omit<
 	CheckCertificateRevocationAgainstCrlInput,
 	'certificate' | 'issuerCertificate' | 'crl'
->;
+> & { readonly unreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy };
 
 /**
  * Checks `certificate` against a complete CRL that {@linkcode authenticateCrl}
@@ -1543,9 +1563,9 @@ function supersedesDeltaCrl(
  * names the delta CRL its result came from, if any. `unsettled` means an
  * applicable delta CRL could not settle the status (`delta_unusable`), or the
  * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit or a shared
- * {@linkcode DeltaCrlBudget} left a delta CRL unread that could change the
- * status (`retry_limit`). An unread delta CRL may then revoke the
- * certificate, so the complete CRL's good is no evidence.
+ * {@linkcode DeltaCrlBudget} left a delta CRL unread that counts under
+ * `unreadSupersededDeltaCrls` (`retry_limit`). An unread delta CRL may then
+ * revoke the certificate, so the complete CRL's good is no evidence.
  *
  * @internal
  */
@@ -1566,10 +1586,11 @@ export type CrlsCheckOutcome =
  * could remove (RFC 5280 §5.3.1, §3.3). After a good status, older delta CRLs
  * are still read for such a revocation the newer one omits. Each delta CRL
  * check spends one from {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} and from every
- * budget in `budgets`. When they leave a delta CRL unread that
- * {@linkcode mayChangeSettledStatus} finds could change the status, the
- * outcome is `retry_limit` unless the complete CRL holds such a revocation. A complete CRL that does not cover
- * `certificate` spends none.
+ * budget in `budgets`. When they leave a delta CRL unread, the outcome is
+ * `retry_limit` unless the complete CRL holds such a revocation. Under
+ * `unreadSupersededDeltaCrls: 'ignore'`, only an unread delta CRL that
+ * {@linkcode mayChangeSettledStatus} finds could change the status counts. A
+ * complete CRL that does not cover `certificate` spends none.
  *
  * @internal
  */
@@ -1617,9 +1638,10 @@ export async function checkCertificateRevocationAgainstCrlsBy(
 		);
 		if (search.result !== undefined) return search.result;
 	}
-	const unreadMaySettle = search.unread.some((deltaCrl) =>
-		mayChangeSettledStatus(search, deltaCrl, at, options),
-	);
+	const unreadMaySettle =
+		options.unreadSupersededDeltaCrls === 'ignore'
+			? search.unread.some((deltaCrl) => mayChangeSettledStatus(search, deltaCrl, at, options))
+			: search.unread.length > 0;
 	if (!unreadMaySettle && search.good !== undefined) return search.good;
 	const alone = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,

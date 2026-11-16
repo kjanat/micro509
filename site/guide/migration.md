@@ -232,8 +232,8 @@ updated by the newest applicable delta CRL among every `deltaCrl` in
 one with an older delta CRL that holds the certificate and one with a newer
 clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
 records the new code `delta_crl_unusable` in `details.indeterminateEvidence`,
-and a candidate the attempt limits leave unread that could change the status
-records `delta_crl_retry_limit_exceeded` there. Either one keeps OCSP or other
+and a candidate the attempt limits leave unread records
+`delta_crl_retry_limit_exceeded` there. Either one keeps OCSP or other
 CRL evidence from settling the status as `good`. Unless other evidence revokes
 the certificate, the result is then `indeterminate` with the top-level code
 `revocation_status_indeterminate`.
@@ -252,13 +252,21 @@ Delta CRLs are now read newest first whether or not they are current, so a
 newer delta CRL past its `nextUpdate` that revokes an unexpired certificate
 for a reason other than `certificateHold` yields `revoked` beside older
 current clean ones. A delta CRL past its `nextUpdate` without such an entry no
-longer ends the search. When the attempt limits leave a delta CRL unread that
-could change the status, the result is indeterminate with
-`delta_crl_retry_limit_exceeded` instead of `good`: one that the delta CRL
-settling a good status does not supersede, or, without a good status, a
-current one or one that no delta CRL read supersedes. Two delta CRLs whose
-`thisUpdate` and CRL number order them differently rank alike, and the
-stricter of their results stands.
+longer ends the search. When the attempt limits leave a delta CRL unread, the
+result is indeterminate with `delta_crl_retry_limit_exceeded` instead of
+`good`, unless the complete CRL holds a revocation no delta CRL can remove.
+Two delta CRLs whose `thisUpdate` and CRL number order them differently rank
+alike, and the stricter of their results stands.
+
+The new `unreadSupersededDeltaCrls: 'ignore'` option of `RevocationPolicy` and
+`checkCertificateRevocation`, and
+`responderRevocationUnreadSupersededDeltaCrls: 'ignore'` of
+`validateOcspResponse`, skip an unread delta CRL that a delta CRL already read
+supersedes by both `thisUpdate` and CRL number: after a good status, one the
+delta CRL settling it supersedes, and otherwise one past its `nextUpdate`,
+without one or over the age bound. A permanent revocation that only such an
+older delta CRL lists then goes unread. The default `'indeterminate'` counts
+every unread candidate.
 
 ## Pass a valid `clockSkewMs`
 

@@ -351,6 +351,7 @@ export type {
 	RevocationSource,
 	RevocationStatus,
 	RevokedCertificateInput,
+	SupersededDeltaCrlPolicy,
 	TrustedOcspResponder,
 	UnrecognizedReasonCodePolicy,
 	UnrecognizedRevocationReason,

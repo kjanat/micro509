@@ -20,6 +20,7 @@ import type {
 	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
 	ParsedRevocationReason,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
@@ -148,6 +149,13 @@ export interface CheckCertificateRevocationInput {
 	 * settling the status as `good`. Defaults to `'revoked'`.
 	 */
 	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Treatment of delta CRLs in `evidence` that the attempt limits leave unread
+	 * although one already read supersedes them, for the certificate and its
+	 * delegated OCSP responders. See {@linkcode SupersededDeltaCrlPolicy}.
+	 * Defaults to `'indeterminate'`.
+	 */
+	readonly unreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy;
 	/**
 	 * Caller verifiers for signature algorithms micro509 does not verify through
 	 * WebCrypto, keyed by dotted-decimal signature algorithm OID, for the CRL and
@@ -373,9 +381,9 @@ export function resolveOcspResponderCandidates(
  * same attempt limits, which the CRL checks of delegated OCSP responders
  * share. A delta CRL that cannot settle the status records
  * `delta_crl_unusable` in `details.indeterminateEvidence`, and a candidate
- * the limits leave unread that could change the status records
- * `delta_crl_retry_limit_exceeded` there; either keeps other evidence from
- * settling the status as `good`. Unless other evidence revokes the
+ * the limits leave unread that counts under `unreadSupersededDeltaCrls`
+ * records `delta_crl_retry_limit_exceeded` there; either keeps other evidence
+ * from settling the status as `good`. Unless other evidence revokes the
  * certificate, the result is then `indeterminate` with the top-level code
  * `revocation_status_indeterminate`.
  * A certificate carrying noRevAvail is `skipped` without consulting evidence
@@ -655,6 +663,9 @@ async function checkCertificateRevocationWithCrl(
 			...(input.unrecognizedReasonCode === undefined
 				? {}
 				: { unrecognizedReasonCode: input.unrecognizedReasonCode }),
+			...(input.unreadSupersededDeltaCrls === undefined
+				? {}
+				: { unreadSupersededDeltaCrls: input.unreadSupersededDeltaCrls }),
 		},
 		callerVerification(input.signatureVerifiers),
 		[budget],
@@ -667,8 +678,7 @@ async function checkCertificateRevocationWithCrl(
 				? {
 						kind: 'crl',
 						code: 'delta_crl_retry_limit_exceeded',
-						message:
-							'A delta CRL candidate that could change the status remained after the attempt limit',
+						message: 'A delta CRL candidate remained unread after the attempt limit',
 					}
 				: {
 						kind: 'crl',
@@ -749,6 +759,9 @@ function ocspEvidenceValidationInput(
 		...(input.unrecognizedReasonCode === undefined
 			? {}
 			: { responderRevocationUnrecognizedReasonCode: input.unrecognizedReasonCode }),
+		...(input.unreadSupersededDeltaCrls === undefined
+			? {}
+			: { responderRevocationUnreadSupersededDeltaCrls: input.unreadSupersededDeltaCrls }),
 		...(input.signatureVerifiers === undefined
 			? {}
 			: { signatureVerifiers: input.signatureVerifiers }),

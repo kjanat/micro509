@@ -47,6 +47,7 @@ export type {
 	ParsedRevokedCertificate,
 	RevocationReason,
 	RevokedCertificateInput,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 	UnrecognizedRevocationReason,
 	ValidateCertificateRevocationListFailure,
