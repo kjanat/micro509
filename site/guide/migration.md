@@ -3,14 +3,161 @@
 For a migration from the separate jose library, see
 [Migrate from jose](./jose-migration.md).
 
-This guide covers upgrading from **0.14.x to 0.15.0**: certificate issuance,
-CRL creation and freshness, OCSP responder trust, and revocation result types.
+Each section covers the changes one release requires, newest first.
 
 For the full change history, see the [changelog](https://github.com/kjanat/micro509/blob/master/CHANGELOG.md). The
 [certificate guide](./getting-started.md), [revocation guide](./revocation.md),
 and the generated API pages cover the current workflows.
 
-## Supply the issuer certificate
+## 0.18 to 0.19
+
+Revocation checking fails closed in more places: delegated OCSP responders
+and CRL signers need revocation evidence, delta CRLs are read newest first, and
+malformed input reports `malformed`.
+
+### Supply revocation evidence for delegated OCSP responders
+
+`responderRevocationPolicy` now defaults to `'nocheck-or-evidence'`. A
+delegated responder without `id-pkix-ocsp-nocheck` or `noRevAvail` fails with
+`responder_revocation_unknown` unless `responderRevocationCrls` shows it is
+not revoked. Supply the responder's CRLs, or ask its CA to issue responder
+certificates with `id-pkix-ocsp-nocheck`.
+
+`'require-evidence'` rejects a responder carrying `noRevAvail`, since no CRL
+can list it.
+
+`'honor-nocheck'` keeps the tolerant behaviour: a revoked verdict rejects,
+and so do a CRL entry for the responder whose reason code
+`unrecognizedReasonCode: 'reject'` refuses and an applicable delta CRL that
+cannot settle the responder's status. A responder with a critical
+cRLDistributionPoints extension still needs evidence under it. For chain revocation, set
+`policy.ocspResponderRevocation`. For `checkCertificateRevocation`, set
+`ocspResponderRevocation`; the CRLs in its `evidence`, delta CRLs included,
+serve as responder evidence.
+
+With `allowChainedResponderCertificate`, the same policy applies to every CA
+certificate between the issuer and the responder. Under the default policy,
+supply a CRL from each such certificate's issuer.
+
+### Supply revocation evidence for delegated CRL signers
+
+A delegated CRL signer outside the chain without `noRevAvail` or
+`id-pkix-ocsp-nocheck` now needs CRLs that cover every reason, from its issuer
+or from an authorized indirect CRL issuer, also when that issuer is a chain
+certificate or the trust anchor. Every CA on the signer's path outside the
+chain needs the same. Until they do, the chain reports `crl_signer_indeterminate` for
+the certificates its CRLs cover, and only a revocation in those CRLs counts.
+Add the issuer's CRL to `crls`, or issue the signer certificate with
+`noRevAvail` or `id-pkix-ocsp-nocheck`.
+
+A CRL the signer signed itself proves its own status only when the signer's
+cRLDistributionPoints names it as cRLIssuer. A signer that shares its CA's
+name and signs the CA's CRLs with a separate key needs a CRL from the CA key,
+or `policy.crlSignerSelfEvidence: 'any'`.
+
+`checkChainRevocation` accepts `distrustedSpkiSha256`, and
+`verifyCertificateChain({ revocation })` passes its own list on. A CRL signer
+or delegated OCSP responder whose path carries a listed key yields no
+evidence.
+
+### Expect revocations from CRLs past `nextUpdate`
+
+A CRL past its `nextUpdate`, older than the age bound, or without
+`nextUpdate` and an age bound still revokes an unexpired certificate it lists,
+unless the reason is `certificateHold`, or `removeFromCRL` in a delta CRL
+([RFC 5280 §5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)).
+Such a CRL now yields `revoked` instead of `stale_crl` in chain revocation,
+`checkCertificateRevocation`, `checkCertificateRevocationAgainstCrl` and
+delegated responder checks. A clean current base CRL beside such a delta CRL
+also yields `revoked`, and so does a newer clean delta CRL beside it.
+
+A delta CRL past its `nextUpdate` that lists no such entry now leaves the
+status to its base CRL in `checkCertificateRevocationAgainstCrl` and
+`checkCertificateRevocation`, instead of failing with `stale_crl`.
+
+### Expect `checkCertificateRevocation` to pool delta CRLs
+
+`checkCertificateRevocation` used to check each CRL evidence entry as its own
+complete CRL and delta CRL pair. It now checks each distinct complete CRL once,
+updated by the newest applicable delta CRL among every `deltaCrl` in
+`evidence`, as `checkChainRevocation` does. Two entries for one complete CRL,
+one with an older delta CRL that holds the certificate and one with a newer
+clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
+records the new code `delta_crl_unusable` in `details.indeterminateEvidence`,
+and a candidate the attempt limits leave unread records
+`delta_crl_retry_limit_exceeded` there. Either one keeps OCSP or other
+CRL evidence from settling the status as `good`. Unless other evidence revokes
+the certificate, the result is then `indeterminate` with the top-level code
+`revocation_status_indeterminate`.
+An undecodable `deltaCrl` no longer hides its complete CRL, so a clean
+complete CRL beside it can still yield `good`. Evidence that does not decode
+records `malformed` in `details.indeterminateEvidence`.
+
+Each CRL in `evidence` now counts as a delta CRL when it carries the delta CRL
+indicator and as a complete CRL otherwise, whichever of `crl` and `deltaCrl`
+holds it. The delta CRL checks of delegated OCSP responders now share the 32
+checks per call, and `validateOcspResponse` spends at most 32 on its own.
+
+### Expect delta CRLs to be read newest first
+
+Delta CRLs are now read newest first whether or not they are current, so a
+newer delta CRL past its `nextUpdate` that revokes an unexpired certificate
+for a reason other than `certificateHold` yields `revoked` beside older
+current clean ones. A delta CRL past its `nextUpdate` without such an entry no
+longer ends the search. When the attempt limits leave a delta CRL unread, the
+result is indeterminate with `delta_crl_retry_limit_exceeded` instead of
+`good`, unless the complete CRL holds a revocation no delta CRL can remove.
+Two delta CRLs whose `thisUpdate` and CRL number order them differently rank
+alike, and the stricter of their results stands.
+
+The new `unreadSupersededDeltaCrls: 'ignore'` option of `RevocationPolicy` and
+`checkCertificateRevocation`, and
+`responderRevocationUnreadSupersededDeltaCrls: 'ignore'` of
+`validateOcspResponse`, skip an unread delta CRL that a delta CRL already read
+supersedes by both `thisUpdate` and CRL number: after a good status, one the
+delta CRL settling it supersedes, and otherwise one past its `nextUpdate`,
+without one or over the age bound. A permanent revocation that only such an
+older delta CRL lists then goes unread. The default `'indeterminate'` counts
+every unread candidate, so excess delta CRLs, forged ones included, can make a
+status indeterminate, which `mode: 'soft-fail'` allows and hard-fail denies.
+
+### Pass a valid `clockSkewMs`
+
+A negative or non-finite `clockSkewMs` now throws `RangeError`, as an invalid
+CRL maximum age does, in `validateCertificateRevocationList`,
+`checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation`,
+`validateOcspResponse`, `checkChainRevocation` and
+`verifyCertificateChain({ revocation })`.
+
+### Expect `malformed` for input that does not decode
+
+Input that does not decode now fails with `malformed`:
+
+| API                                                                             | Previous code                              |
+| ------------------------------------------------------------------------------- | ------------------------------------------ |
+| `buildCandidatePath`, `verifyCertificateChain`                                  | `issuer_not_found`                         |
+| `validateCandidatePath`, `verifyCertificateSigningRequest`                      | `signature_invalid`                        |
+| `checkExtendedKeyUsage`                                                         | `leaf_eku_missing`                         |
+| `verifyCertificateRevocationListSignature`, `validateCertificateRevocationList` | `signature_invalid`                        |
+| `checkCertificateRevocationAgainstCrl`                                          | `non_applicable`                           |
+| `checkCertificateRevocation`                                                    | `revocation_status_indeterminate`          |
+| `verifyOcspResponseSignature`, `validateOcspResponse`                           | `signature_invalid`, or `request_mismatch` |
+| `matchServiceIdentity`, the `serviceIdentity` check of `verifyCertificateChain` | `subject_alt_name_mismatch`                |
+
+### Expect a revoked CA under a bare trust anchor to be checked
+
+Below a bare trust anchor, the last chain certificate is the first certificate
+of the path, and `checkChainRevocation` now checks it. Pass the anchor as
+`trustAnchor`; `verifyCertificateChain` passes the one its path ends at. With
+`trustAnchor` set, a chain that ends with the anchor's own certificate, or
+whose last certificate the anchor did not issue, throws `RangeError`.
+
+## 0.14 to 0.15
+
+Certificate issuance, CRL creation and freshness, OCSP responder trust, and
+revocation result types.
+
+### Supply the issuer certificate
 
 `createCertificate` used to accept the issuer's public key as
 `issuerPublicKey`. It now accepts the issuer certificate as `issuerCertificate`
@@ -47,7 +194,7 @@ throws a `ResultError` with code `issuer_certificate_invalid`. Supplying the
 certificate also aligns the authority key identifier with issuers whose
 subject key identifier was not derived by the default method.
 
-## Provide required CRL fields
+### Provide required CRL fields
 
 `createCertificateRevocationList` now requires `issuerCertificate`,
 `crlNumber`, and `nextUpdate`. It always writes the Authority Key Identifier,
@@ -83,7 +230,7 @@ non-integral, or larger than the permitted 20 encoded octets throws with code
 `crl_number_invalid`. An invalid issuer certificate throws
 `issuer_certificate_invalid`.
 
-## Handle CRL numbers as `bigint`
+### Handle CRL numbers as `bigint`
 
 The builder still accepts a `number` or `bigint` for `crlNumber` and
 `baseCrlNumber`. Use `bigint` for parsed values and for numbers above
@@ -106,7 +253,7 @@ conversion rules. Use a bigint literal such as `100n` for equality and
 arithmetic with a parsed CRL number. Convert to `number` only when the value is
 within the safe integer range and an API requires a number.
 
-## Handle unrecognized CRL reason codes
+### Handle unrecognized CRL reason codes
 
 CRL reason codes outside the recognized values are no longer dropped. Parsed
 reason values use `ParsedRevocationReason`: recognized values are strings,
@@ -129,7 +276,7 @@ to `'revoked'`. Choosing `'reject'` returns an unrecognized-reason error and pre
 other evidence from settling the status as good. A critical CRL reason with an
 unrecognized value makes the CRL malformed.
 
-## Handle OCSP reason codes as `bigint`
+### Handle OCSP reason codes as `bigint`
 
 `revocationReasonCode` on a revoked `ParsedOcspCertStatus` and on the revoked
 result from `checkCertificateRevocation` is now `bigint | undefined`.
@@ -142,7 +289,7 @@ When serializing parsed CRL numbers or reason codes to JSON, convert those
 fields to decimal strings with `.toString()`. `JSON.stringify` does not
 serialize `bigint` values directly.
 
-## Bind trusted OCSP responders to their issuer
+### Bind trusted OCSP responders to their issuer
 
 `trustedOcspResponders` on `checkChainRevocation` and
 `verifyCertificateChain({ revocation })` now takes `TrustedOcspResponder`
@@ -163,121 +310,7 @@ report on. If a responder is trusted for several issuers, supply an entry for
 each issuer. Trust for one CA no longer grants authority over every CA in the
 validated path.
 
-## Supply revocation evidence for delegated OCSP responders
-
-`responderRevocationPolicy` now defaults to `'nocheck-or-evidence'`. A
-delegated responder without `id-pkix-ocsp-nocheck` or `noRevAvail` fails with
-`responder_revocation_unknown` unless `responderRevocationCrls` shows it is
-not revoked. Supply the responder's CRLs, or ask its CA to issue responder
-certificates with `id-pkix-ocsp-nocheck`.
-
-`'require-evidence'` rejects a responder carrying `noRevAvail`, since no CRL
-can list it.
-
-`'honor-nocheck'` keeps the tolerant behaviour: a revoked verdict rejects,
-and so do a CRL entry for the responder whose reason code
-`unrecognizedReasonCode: 'reject'` refuses and an applicable delta CRL that
-cannot settle the responder's status. A responder with a critical
-cRLDistributionPoints extension still needs evidence under it. For chain revocation, set
-`policy.ocspResponderRevocation`. For `checkCertificateRevocation`, set
-`ocspResponderRevocation`; the CRLs in its `evidence`, delta CRLs included,
-serve as responder evidence.
-
-With `allowChainedResponderCertificate`, the same policy applies to every CA
-certificate between the issuer and the responder. Under the default policy,
-supply a CRL from each such certificate's issuer.
-
-## Supply revocation evidence for delegated CRL signers
-
-A delegated CRL signer outside the chain without `noRevAvail` or
-`id-pkix-ocsp-nocheck` now needs CRLs that cover every reason, from its issuer
-or from an authorized indirect CRL issuer, also when that issuer is a chain
-certificate or the trust anchor. Every CA on the signer's path outside the
-chain needs the same. Until they do, the chain reports `crl_signer_indeterminate` for
-the certificates its CRLs cover, and only a revocation in those CRLs counts.
-Add the issuer's CRL to `crls`, or issue the signer certificate with
-`noRevAvail` or `id-pkix-ocsp-nocheck`.
-
-A CRL the signer signed itself proves its own status only when the signer's
-cRLDistributionPoints names it as cRLIssuer. A signer that shares its CA's
-name and signs the CA's CRLs with a separate key needs a CRL from the CA key,
-or `policy.crlSignerSelfEvidence: 'any'`.
-
-`checkChainRevocation` accepts `distrustedSpkiSha256`, and
-`verifyCertificateChain({ revocation })` passes its own list on. A CRL signer
-or delegated OCSP responder whose path carries a listed key yields no
-evidence.
-
-## Expect revocations from CRLs past `nextUpdate`
-
-A CRL past its `nextUpdate`, older than the age bound, or without
-`nextUpdate` and an age bound still revokes an unexpired certificate it lists,
-unless the reason is `certificateHold`, or `removeFromCRL` in a delta CRL
-([RFC 5280 §5.3.1](https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1)).
-Such a CRL now yields `revoked` instead of `stale_crl` in chain revocation,
-`checkCertificateRevocation`, `checkCertificateRevocationAgainstCrl` and
-delegated responder checks. A clean current base CRL beside such a delta CRL
-also yields `revoked`, and so does a newer clean delta CRL beside it.
-
-A delta CRL past its `nextUpdate` that lists no such entry now leaves the
-status to its base CRL in `checkCertificateRevocationAgainstCrl` and
-`checkCertificateRevocation`, instead of failing with `stale_crl`.
-
-## Expect `checkCertificateRevocation` to pool delta CRLs
-
-`checkCertificateRevocation` used to check each CRL evidence entry as its own
-complete CRL and delta CRL pair. It now checks each distinct complete CRL once,
-updated by the newest applicable delta CRL among every `deltaCrl` in
-`evidence`, as `checkChainRevocation` does. Two entries for one complete CRL,
-one with an older delta CRL that holds the certificate and one with a newer
-clean delta CRL, now yield `good`. A delta CRL that cannot settle the status
-records the new code `delta_crl_unusable` in `details.indeterminateEvidence`,
-and a candidate the attempt limits leave unread records
-`delta_crl_retry_limit_exceeded` there. Either one keeps OCSP or other
-CRL evidence from settling the status as `good`. Unless other evidence revokes
-the certificate, the result is then `indeterminate` with the top-level code
-`revocation_status_indeterminate`.
-An undecodable `deltaCrl` no longer hides its complete CRL, so a clean
-complete CRL beside it can still yield `good`. Evidence that does not decode
-records `malformed` in `details.indeterminateEvidence`.
-
-Each CRL in `evidence` now counts as a delta CRL when it carries the delta CRL
-indicator and as a complete CRL otherwise, whichever of `crl` and `deltaCrl`
-holds it. The delta CRL checks of delegated OCSP responders now share the 32
-checks per call, and `validateOcspResponse` spends at most 32 on its own.
-
-## Expect delta CRLs to be read newest first
-
-Delta CRLs are now read newest first whether or not they are current, so a
-newer delta CRL past its `nextUpdate` that revokes an unexpired certificate
-for a reason other than `certificateHold` yields `revoked` beside older
-current clean ones. A delta CRL past its `nextUpdate` without such an entry no
-longer ends the search. When the attempt limits leave a delta CRL unread, the
-result is indeterminate with `delta_crl_retry_limit_exceeded` instead of
-`good`, unless the complete CRL holds a revocation no delta CRL can remove.
-Two delta CRLs whose `thisUpdate` and CRL number order them differently rank
-alike, and the stricter of their results stands.
-
-The new `unreadSupersededDeltaCrls: 'ignore'` option of `RevocationPolicy` and
-`checkCertificateRevocation`, and
-`responderRevocationUnreadSupersededDeltaCrls: 'ignore'` of
-`validateOcspResponse`, skip an unread delta CRL that a delta CRL already read
-supersedes by both `thisUpdate` and CRL number: after a good status, one the
-delta CRL settling it supersedes, and otherwise one past its `nextUpdate`,
-without one or over the age bound. A permanent revocation that only such an
-older delta CRL lists then goes unread. The default `'indeterminate'` counts
-every unread candidate, so excess delta CRLs, forged ones included, can make a
-status indeterminate, which `mode: 'soft-fail'` allows and hard-fail denies.
-
-## Pass a valid `clockSkewMs`
-
-A negative or non-finite `clockSkewMs` now throws `RangeError`, as an invalid
-CRL maximum age does, in `validateCertificateRevocationList`,
-`checkCertificateRevocationAgainstCrl`, `checkCertificateRevocation`,
-`validateOcspResponse`, `checkChainRevocation` and
-`verifyCertificateChain({ revocation })`.
-
-## Set an age policy for CRLs without `nextUpdate`
+### Set an age policy for CRLs without `nextUpdate`
 
 A received complete CRL without `nextUpdate` now fails with `stale_crl` unless
 you supply a maximum age for its `thisUpdate`. Choose the age according to
@@ -300,7 +333,7 @@ responders. Under the default hard-fail policy, a CRL without `nextUpdate` and
 without an age bound cannot establish good status. Other applicable evidence
 may still establish the certificate's status.
 
-## Handle skipped revocation results
+### Handle skipped revocation results
 
 Chain revocation results now include `status: 'skipped'` for certificates
 whose signed extensions exempt them from revocation checks. The `skipReason`
@@ -317,7 +350,7 @@ and no revocation evidence was consulted for that certificate.
 a certificate (RFC 9608 §2), so a CRL without it shows nothing. A certificate
 carrying `id-pkix-ocsp-nocheck` is still checked against the evidence.
 
-## Update exhaustive type handling
+### Update exhaustive type handling
 
 `SubjectAltName` has additional typed variants, including `upn`,
 `krb5PrincipalName` and `smtpUtf8Mailbox`. Code that previously handled these
