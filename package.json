@@ -156,7 +156,7 @@
 		"@kjanat/tsc-bridge": "catalog:typebridge",
 		"@kprint/kprint": "catalog:",
 		"@micro509/doc-render": "workspace:*",
-		"@tsconfig/node24": "catalog:ts",
+		"@tsconfig/node26": "catalog:ts",
 		"@types/bun": "catalog:ts",
 		"@types/deno": "catalog:deno",
 		"@types/node": "catalog:ts",
@@ -248,7 +248,7 @@
 		},
 		"ts": {
 			"@arethetypeswrong/core": "^0.18.4",
-			"@tsconfig/node24": "^24.0.6",
+			"@tsconfig/node26": "^26.0.0",
 			"@types/bun": "^1.4.2",
 			"@types/deno": "^2.7.0",
 			"@types/node": "^26.6.3",
