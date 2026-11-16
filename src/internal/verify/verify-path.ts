@@ -585,25 +585,19 @@ export async function buildChainInternal(
 		) {
 			return path;
 		}
-		const matchedAnchor = await matchTrustAnchor(
-			current,
-			anchorIndex,
-			callbacks,
-			path.length - 1,
-			verifyAnchorOnce,
-			chargeBudget,
+		const matchedAnchor = await matchTrustAnchor(current, anchorIndex, callbacks, path.length - 1, {
+			verifyAnchor: verifyAnchorOnce,
+			charge: chargeBudget,
 			distrust,
-		);
+			completesPath: (anchor) =>
+				verifyInheritedLinks(path, pending, anchorWorkingKey(anchor), path.length - 1),
+		});
 		if (budget.exhausted) return undefined;
 		if (!matchedAnchor.matched) {
 			if (matchedAnchor.failure !== undefined) recordFailure(matchedAnchor.failure, path);
 			return 'open';
 		}
-		const anchor = matchedAnchor.anchor;
-		if (!(await verifyInheritedLinks(path, pending, anchorWorkingKey(anchor), path.length - 1))) {
-			return 'open';
-		}
-		selectedAnchor = anchor;
+		selectedAnchor = matchedAnchor.anchor;
 		return path;
 	}
 
@@ -1070,14 +1064,24 @@ function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolea
 }
 
 /** Attempts to verify `certificate` against each bare trust anchor whose subject DN matches. */
+/**
+ * What {@linkcode matchTrustAnchor} runs for each candidate anchor:
+ * `completesPath` verifies the links below that wait on the parameters the
+ * anchor passes down (RFC 5280 §6.1.4 (e)).
+ */
+interface TrustAnchorChecks {
+	readonly verifyAnchor: typeof verifyTrustAnchorSignature;
+	readonly charge: () => boolean;
+	readonly distrust: (spki: Uint8Array) => Promise<string | undefined>;
+	readonly completesPath: (anchor: TrustAnchor) => Promise<boolean>;
+}
+
 async function matchTrustAnchor(
 	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
 	callbacks: VerifyPathCallbacks,
 	index: number,
-	verifyAnchor: typeof verifyTrustAnchorSignature,
-	charge: () => boolean,
-	distrust: (spki: Uint8Array) => Promise<string | undefined>,
+	{ verifyAnchor, charge, distrust, completesPath }: TrustAnchorChecks,
 ): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
@@ -1129,6 +1133,7 @@ async function matchTrustAnchor(
 			}
 			continue;
 		}
+		if (!(await completesPath(anchor))) continue;
 		return { matched: true, anchor };
 	}
 	return firstFailure !== undefined

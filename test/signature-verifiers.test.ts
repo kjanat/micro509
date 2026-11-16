@@ -48,6 +48,7 @@ import {
 import { DSA_WITH_SHA1, DSA_WITH_SHA256, dsaSignatureVerifiers } from '#test/oracles/dsa';
 import type { ParameterKey } from '#test/oracles/parameter-signature';
 import {
+	PARAMETER_SIGNATURE_OID,
 	parameterKey,
 	parameterSignatureVerifiers,
 	rekeyedCertificate,
@@ -1071,6 +1072,57 @@ describe('revocation signers and inherited key parameters', () => {
 		});
 		expect(result.value.certificates[0]).toMatchObject({ status: 'good', source: { kind: 'crl' } });
 	});
+});
+
+describe('bare trust anchors that pass different parameters down', () => {
+	it.each([{ order: 'wrong anchor first' }, { order: 'right anchor first' }] as const)(
+		'tries the next anchor when inherited links fail under one ($order)',
+		async ({ order }) => {
+			const right = parameterKey('P1', true);
+			const wrong = { ...right, parametersDer: parameterKey('P2', true).parametersDer };
+			const caKey = parameterKey('P1', false);
+			const anchorFor = async (key: ParameterKey) =>
+				trustAnchorFromCertificate(
+					unwrap(
+						parseCertificateDer(
+							await parameterCertificate('Shadow Root', key, 'self', CA_EXTENSIONS),
+						),
+					),
+				);
+			const rightAnchor = await anchorFor(right);
+			const wrongAnchor = await anchorFor(wrong);
+			const ca = await parameterCertificate(
+				'Shadow CA',
+				caKey,
+				{ commonName: 'Shadow Root', key: right },
+				CA_EXTENSIONS,
+			);
+			const leaf = await parameterCertificate(
+				'shadow.example',
+				parameterKey('P1', false),
+				{ commonName: 'Shadow CA', key: caKey },
+				undefined,
+			);
+			const anchorSpkis = [rightAnchor, wrongAnchor].map(
+				(anchor) => anchor.subjectPublicKeyInfoDer,
+			);
+			const verifyParameterSignature = parameterSignatureVerifiers[PARAMETER_SIGNATURE_OID];
+			const result = await verifyCertificateChain({
+				leaf,
+				intermediates: [ca],
+				roots: [],
+				trustAnchors:
+					order === 'wrong anchor first' ? [wrongAnchor, rightAnchor] : [rightAnchor, wrongAnchor],
+				signatureVerifiers: {
+					[PARAMETER_SIGNATURE_OID]: async (input) =>
+						anchorSpkis.some((spki) => equalBytes(spki, input.signerSpkiDer)) ||
+						(await verifyParameterSignature?.(input)) === true,
+				},
+			});
+			expect(result).toMatchObject({ ok: true });
+			if (result.ok) expect(result.value.trustAnchor).toBe(rightAnchor);
+		},
+	);
 });
 
 describe('self-signed leaf check with inherited key parameters', () => {
