@@ -148,7 +148,7 @@ jobs:
             exit 1
           }
 
-          $files = if ($needsAsset) { @($asset) } else { @() }
+          $files = @(if ($needsAsset) { $asset })
 
           $releaseArgs = @()
           if ($outputs.prerelease -eq 'true') { $releaseArgs += '--prerelease' }
