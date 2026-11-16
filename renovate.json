@@ -71,6 +71,11 @@
 			"allowedVersions": "<7"
 		},
 		{
+			"description": "jose-v5 pins jose 5 for the jose migration fixtures and interop tests; the jose dependency tracks 6.",
+			"matchDepNames": ["jose-v5"],
+			"allowedVersions": "<6"
+		},
+		{
 			"description": "Update the native TypeScript compiler as one weekly batch after seven days.",
 			"matchPackageNames": ["typescript"],
 			"matchCurrentValue": "/^(?:>=|\\^|~)?7/",
