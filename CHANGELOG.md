@@ -18,6 +18,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-16
+
+Verify signatures WebCrypto cannot run, such as DSA, with caller verifiers
+across chains, CRLs, OCSP, CSRs and CMS. Revocation checking fails closed in
+more places: delegated OCSP responders and CRL signers need revocation
+evidence, delta CRLs are read newest first through one shared search, and a
+delta CRL the attempt limits leave unread makes the status indeterminate.
+
+### Added
+
+- **Caller signature verifiers.** `signatureVerifiers` maps a signature
+  algorithm OID to `(input) => Promise<boolean>`. Path building and
+  validation, `verifyCertificateChain`, CRL and OCSP verification, chain
+  revocation, `checkCertificateRevocation`, `verifyCertificateSigningRequest`,
+  `verifyPkcs7SignedData` and `verifySignature` accept it. A verifier runs only
+  for a signature native verification refuses, and only a resolved `true`
+  counts as valid. Naming a natively verified OID, a non-OID key, one OID
+  twice or a non-function throws `RangeError`. The input carries the RFC 5280
+  §6.1 working key parameters, so a DSA key without parameters inherits them
+  from its path ([RFC 5280 §6.1.4][rfc5280-section-6.1.4]).
+  [#14](https://github.com/kjanat/micro509/issues/14)
+- Parsed certificates, CSRs, CRLs and OCSP responses keep a signature's unused
+  bit count as `signatureValueUnusedBits`. Native verification fails a
+  non-zero count as `signature_invalid`.
+- `checkChainRevocation` takes `trustAnchor`, `distrustedSpkiSha256` and
+  `policy.crlSignerSelfEvidence` (`'delegated'` by default, or `'any'`).
+- `unreadSupersededDeltaCrls` on `RevocationPolicy` and
+  `checkCertificateRevocation`, and
+  `responderRevocationUnreadSupersededDeltaCrls` on `validateOcspResponse`.
+  `'indeterminate'` is the default; `'ignore'` skips an unread delta CRL that
+  one already read supersedes.
+- The verification guide explains peer authentication: only the transport's
+  proof of possession ties the leaf to a TLS peer. A recipe authenticates a
+  TLS client by the handshake certificate's SPKI.
+  [#236](https://github.com/kjanat/micro509/issues/236)
+
+### Changed
+
+- `responderRevocationPolicy` defaults to `'nocheck-or-evidence'`. A delegated
+  OCSP responder without `id-pkix-ocsp-nocheck` or `noRevAvail` needs CRL
+  evidence and otherwise fails with `responder_revocation_unknown`
+  ([RFC 9608 §4][rfc9608-section-4]). `'honor-nocheck'` stays as an opt-in.
+  This changes verification defaults.
+- A delegated CRL signer outside the chain needs CRLs covering every reason,
+  checked against the issuer its own validated path gives it, and every CA on
+  that path outside the chain must be good
+  ([RFC 5280 §6.3.3][rfc5280-section-6.3.3]).
+- Chain revocation, CRL signers, delegated responders,
+  `checkCertificateRevocation` and `checkCertificateRevocationAgainstCrl` share
+  one delta CRL search. It reads applicable delta CRLs newest first, current
+  or not. A non-current CRL settles only a revocation other than
+  `certificateHold` of an unexpired certificate
+  ([RFC 5280 §5.3.1][rfc5280-section-5.3.1]). A delta CRL left unread by the
+  4-per-base and 32-per-call limits yields `delta_crl_retry_limit_exceeded`
+  unless the base CRL holds a lasting revocation.
+- `checkCertificateRevocation` checks each distinct complete CRL once with the
+  newest applicable delta CRL in its evidence, returns `skipped` with
+  `skipReason: 'no_rev_avail'` for a `noRevAvail` certificate, and records
+  `delta_crl_unusable`, `delta_crl_retry_limit_exceeded` and `malformed` in
+  `details.indeterminateEvidence`.
+- Input that does not decode fails with `malformed` across path building,
+  validation, CSR, CRL, OCSP and service identity APIs, instead of a code that
+  names a different problem.
+- A negative or non-finite `clockSkewMs` throws `RangeError`.
+- Nested revocation checks share one evaluation instant when `at` is omitted.
+
+### Fixed
+
+- A revoked CA directly under a bare trust anchor passed chain revocation.
+- A CRL past its `nextUpdate`, over the age bound or without `nextUpdate`
+  reported `stale_crl` for a certificate it revoked, so soft-fail allowed it.
+- Four older current clean delta CRLs could spend the attempt limit ahead of a
+  newer expired delta CRL revoking for keyCompromise.
+- An undecodable `deltaCrl` hid a revocation in its complete CRL.
+- A CRL signer outside the chain counted as good without a CRL covering it, or
+  under a revoked CA.
+- `verifySignature` and `verifySignatureWithKey` refused a native algorithm
+  whose OID had a redundant leading zero.
+
+### Security
+
+- Tests cover the three node-forge 1.4.1 advisories: a `pathLenConstraint`
+  without keyUsage, deeply nested BIT STRINGs, and non-canonical DigestInfo
+  with an e=3 forgery. micro509 needed no change and refuses each case.
+  [#256](https://github.com/kjanat/micro509/issues/256)
+
 ## [0.18.0] - 2026-11-14
 
 Sign and verify JWTs with RS384, RS512, ES256 and ES384, encrypt with compact
@@ -2142,7 +2228,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/kjanat/micro509/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kjanat/micro509/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/kjanat/micro509/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/kjanat/micro509/compare/v0.16.0...v0.17.0
