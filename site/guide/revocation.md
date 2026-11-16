@@ -198,6 +198,36 @@ A CRL whose entry marks its cRLReason critical and holds an unrecognized code
 is malformed, since [RFC 5280 Appendix B][rfc5280-appendix-B] requires rejecting a critical
 extension with values the implementation does not recognize.
 
+### Delta CRL attempt limits
+
+Delta CRLs for one complete CRL are read newest first. At most four are checked
+per complete CRL and signer, and 32 per `checkChainRevocation`,
+`checkCertificateRevocation` or `validateOcspResponse` call. When those limits
+leave a delta CRL unread, the status is indeterminate with
+`delta_crl_retry_limit_exceeded`, unless the complete CRL holds a revocation
+no delta CRL can remove. `mode` then decides: hard-fail denies and soft-fail
+allows. Anyone who can add CRLs to the evidence, forged ones included, can
+push a certificate into this state.
+
+The `unreadSupersededDeltaCrls` option sets how an unread delta CRL counts
+when a delta CRL already read supersedes it by both `thisUpdate` and CRL
+number.
+
+| Value                       | Effect                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'indeterminate'` (default) | Every unread delta CRL counts                                                                                                                                 |
+| `'ignore'`                  | After `good`, one the delta CRL settling it supersedes does not count; otherwise one past its `nextUpdate`, without one, or over the age bound does not count |
+
+Under `'ignore'`, a permanent revocation that only an older unread delta CRL
+lists goes unseen, since [RFC 5280 §5.3.1][rfc5280-section-5.3.1] and [§3.3][rfc5280-section-3.3] expect every
+later CRL to keep listing it.
+
+| Option                                         | Where                                                                             |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| `unreadSupersededDeltaCrls`                    | `checkCertificateRevocation`                                                      |
+| `unreadSupersededDeltaCrls`                    | `policy` of `checkChainRevocation` and `verifyCertificateChain({ revocation })`   |
+| `responderRevocationUnreadSupersededDeltaCrls` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
+
 ## OCSP
 
 ### Build a request

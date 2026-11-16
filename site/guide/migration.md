@@ -266,7 +266,8 @@ supersedes by both `thisUpdate` and CRL number: after a good status, one the
 delta CRL settling it supersedes, and otherwise one past its `nextUpdate`,
 without one or over the age bound. A permanent revocation that only such an
 older delta CRL lists then goes unread. The default `'indeterminate'` counts
-every unread candidate.
+every unread candidate, so excess delta CRLs, forged ones included, can make a
+status indeterminate, which `mode: 'soft-fail'` allows and hard-fail denies.
 
 ## Pass a valid `clockSkewMs`
 

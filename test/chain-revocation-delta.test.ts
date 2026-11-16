@@ -21,6 +21,7 @@ import {
 	addRevokedEntryCertificateIssuers,
 	hexToBytes,
 	withCrlIssuer,
+	withoutCrlNextUpdate,
 	withRevokedEntryReasonCode,
 } from '#test/helpers';
 import {
@@ -326,6 +327,7 @@ async function scenario() {
 							})),
 						}),
 			}),
+		withoutNextUpdate: (der: Uint8Array) => withoutCrlNextUpdate(der, ca.keyPair.privateKey),
 		delegatedOcspGood: async () => {
 			const responderKeys = await generateKeyPair();
 			const responder = await createCertificate({
@@ -583,6 +585,32 @@ const HELPER_DELTAS = {
 			s.deltaAt(10, -2.75, { reasonCode: 'certificateHold' }),
 			s.deltaAt(8, -2),
 			s.deltaAt(20, -1, { nextUpdateHours: -0.5 }),
+		]),
+	'six without nextUpdate': async (s: Scenario) =>
+		Promise.all(
+			(
+				await ders(Array.from({ length: 6 }, (_, index) => s.deltaAt(10 + index, -2 + index / 60)))
+			).map(s.withoutNextUpdate),
+		),
+	'newest current clean and four older expired clean': (s: Scenario) =>
+		ders([
+			...Array.from({ length: 4 }, (_, index) =>
+				s.deltaAt(6 + index, -2.5 + index / 4, { nextUpdateHours: -0.5 }),
+			),
+			s.deltaAt(20, -0.5),
+		]),
+	'newest current clean and four older without nextUpdate': async (s: Scenario) => [
+		...(await Promise.all(
+			(
+				await ders(Array.from({ length: 4 }, (_, index) => s.deltaAt(6 + index, -2.5 + index / 4)))
+			).map(s.withoutNextUpdate),
+		)),
+		...(await ders([s.deltaAt(20, -0.5)])),
+	],
+	'newest current clean and four older over two hours old': (s: Scenario) =>
+		ders([
+			...Array.from({ length: 4 }, (_, index) => s.deltaAt(6 + index, -2.9 + index / 10)),
+			s.deltaAt(20, -0.5),
 		]),
 	'five current clean': (s: Scenario) =>
 		ders(Array.from({ length: 5 }, (_, index) => s.deltaAt(6 + index, -2.5 + index / 4))),
@@ -966,6 +994,55 @@ describe('checkCertificateRevocationAgainstCrlsBy with a shared delta CRL budget
 				{ at: s.at, unreadSupersededDeltaCrls: policy },
 				callerVerification(undefined),
 				[{ remaining }],
+			);
+			expect(
+				result.kind === 'unsettled'
+					? 'unsettled'
+					: result.result.ok
+						? result.result.value.status
+						: result.result.code,
+			).toBe(expected);
+		},
+	);
+});
+
+describe('checkCertificateRevocationAgainstCrlsBy with unread superseded delta CRLs of each kind', () => {
+	it.each(
+		underEachPolicy(
+			(
+				[
+					{ deltas: 'six expired clean', maxAgeMs: undefined },
+					{ deltas: 'six without nextUpdate', maxAgeMs: undefined },
+					{ deltas: 'newest current clean and four older expired clean', maxAgeMs: undefined },
+					{ deltas: 'newest current clean and four older without nextUpdate', maxAgeMs: undefined },
+					{
+						deltas: 'newest current clean and four older over two hours old',
+						maxAgeMs: 2 * HOUR_MS,
+					},
+					{ deltas: 'five current clean', maxAgeMs: undefined },
+				] as const
+			).flatMap((row) => [
+				{ ...row, budget: 'per-base', expected: 'unsettled', ignore: 'good' } as const,
+				{ ...row, budget: 'shared', expected: 'unsettled', ignore: 'good' } as const,
+			]),
+		),
+	)(
+		'checks $deltas at the $budget limit under $policy as $expected',
+		async ({ deltas, maxAgeMs, budget, policy, expected }) => {
+			const s = await scenario();
+			const parse = (der: Uint8Array) => unwrap(parseCertificateRevocationListDer(der));
+			const result = await checkCertificateRevocationAgainstCrlsBy(
+				unwrap(parseCertificatePem(s.leafPem)),
+				parse((await s.baseNumbered(5)).der),
+				(await HELPER_DELTAS[deltas](s)).map(parse),
+				{ kind: 'certificate', certificate: s.caPem },
+				{
+					at: s.at,
+					unreadSupersededDeltaCrls: policy,
+					...(maxAgeMs === undefined ? {} : { maxAgeMs }),
+				},
+				callerVerification(undefined),
+				budget === 'shared' ? [{ remaining: 1 }] : [],
 			);
 			expect(
 				result.kind === 'unsettled'

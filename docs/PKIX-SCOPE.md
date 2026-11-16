@@ -553,7 +553,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]), and a
       permanent revocation that only such an unread candidate lists goes
       unseen. [RFC 5280 §5.2.4][rfc5280-section-5.2.4] has a relying party
-      use the most recent delta CRL.
+      use the most recent delta CRL. Under the default, excess delta CRLs,
+      forged ones included, can make a status indeterminate, and the caller's
+      hard-fail or soft-fail `mode` decides.
       `checkCertificateRevocationAgainstCrl` applies these rules to
       its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
