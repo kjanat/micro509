@@ -394,6 +394,35 @@ Supported identity types:
   and IP hosts compared by octets
 - **SRV-ID** — service name matching via otherName SAN, with wildcard matching
 
+## Caller signature verifiers
+
+WebCrypto runs RSA, ECDSA and Ed25519. A certification path signed with
+another algorithm, such as DSA in a legacy PKI, fails with
+`unsupported_signature_algorithm_parameters` by default. To verify one, pass
+`signatureVerifiers`, keyed by signature algorithm OID. micro509 calls a
+verifier only for a signature it would otherwise refuse with that code. A key
+for an algorithm micro509 verifies natively throws `RangeError`.
+
+A verifier receives the signature algorithm, the signer's
+SubjectPublicKeyInfo, the key parameters to verify with, the signature, the
+unused bits of its `signatureValue` BIT STRING and the signed bytes. It
+resolves `true` for a valid signature. Any other resolution, or a rejection,
+counts as an invalid signature. When the signer's key
+omits its parameters, `signerPublicKeyParametersDer` carries the parameters it
+inherits along the path, as [RFC 5280 §6.1.4 (e)][rfc5280-section-6.1.4] and
+[RFC 3279 §2.3.2][rfc3279-section-2.3.2] describe for DSA. It is absent when
+the path leaves none, and the verifier then refuses the signature.
+
+These APIs accept `signatureVerifiers`:
+
+| Signatures             | APIs                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Certification path     | `verifyCertificateChain`, `buildCandidatePath`, `validateCandidatePath`, `validateFor*` profiles                                                  |
+| CRL                    | `verifyCertificateRevocationListSignature`, `validateCertificateRevocationList`, `checkCertificateRevocationAgainstCrl`                           |
+| OCSP response          | `verifyOcspResponseSignature`, `validateOcspResponse`                                                                                             |
+| Revocation for a chain | `checkChainRevocation`, `checkCertificateRevocation`, and the `revocation` option of `verifyCertificateChain`, which reuses the chain's verifiers |
+| CSR, CMS, detached     | `verifyCertificateSigningRequest`, `verifyPkcs7SignedData`, `verifySignature`                                                                     |
+
 ## Advanced validation policy
 
 Path building tries every issuer candidate and bare trust anchor whose subject
@@ -459,6 +488,7 @@ Every other error-code union in the library is tabled in the
 | `certificate_revoked`                        | Revocation evidence confirms revocation        |
 | `public_key_distrusted`                      | Certificate or anchor public key is distrusted |
 | `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
+| `malformed`                                  | Certificate input does not decode              |
 | `unsupported`                                | Certificate input micro509 does not decode     |
 | `limit_exceeded`                             | Certificate input exceeds a decoding limit     |
 
@@ -640,3 +670,5 @@ An incompatible algorithm or a key without public `verify` usage returns
 an error branch with `code` and `reason`.
 
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4
+[rfc3279-section-2.3.2]: https://www.rfc-editor.org/rfc/rfc3279.html#section-2.3.2
+[rfc5280-section-6.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-6.1.4

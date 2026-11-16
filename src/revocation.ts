@@ -47,12 +47,14 @@ export type {
 	ParsedRevokedCertificate,
 	RevocationReason,
 	RevokedCertificateInput,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 	UnrecognizedRevocationReason,
 	ValidateCertificateRevocationListFailure,
 	ValidateCertificateRevocationListInput,
 	ValidateCertificateRevocationListResult,
 	VerifyCertificateRevocationListSignatureFailure,
+	VerifyCertificateRevocationListSignatureOptions,
 	VerifyCertificateRevocationListSignatureResult,
 } from '#micro509/revocation/crl';
 export {
@@ -95,11 +97,13 @@ export type {
 	ParseOcspResponseErrorCode,
 	ParseOcspResponseFailure,
 	ParseOcspResponseResult,
+	RevocationSkipReason,
 	ValidateOcspResponseErrorCode,
 	ValidateOcspResponseFailure,
 	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
 	VerifyOcspResponseSignatureFailure,
+	VerifyOcspResponseSignatureOptions,
 	VerifyOcspResponseSignatureResult,
 } from '#micro509/revocation/ocsp';
 export {
@@ -133,6 +137,7 @@ export type {
 	RevocationCheckGoodValue,
 	RevocationCheckIndeterminateValue,
 	RevocationCheckRevokedValue,
+	RevocationCheckSkippedValue,
 	RevocationCrlEvidenceInput,
 	RevocationEvidenceInput,
 	RevocationEvidenceKind,

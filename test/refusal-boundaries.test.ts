@@ -212,6 +212,72 @@ describe('decode refusals in checkCertificateRevocation', () => {
 	});
 });
 
+describe('decode refusals in the distribution point names of a delta CRL', () => {
+	async function scopedCrls() {
+		const { intermediate, intermediateKeys } = await fixture();
+		const crlUri = 'http://example.test/scoped.crl';
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Verify Intermediate CA' },
+			subject: { commonName: 'scoped-delta.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerCertificate: intermediate.der,
+			extensions: {
+				crlDistributionPoints: [
+					{ distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: crlUri }] } },
+				],
+			},
+		});
+		const scopedCrl = (fields: { readonly crlNumber: number; readonly baseCrlNumber?: number }) =>
+			createCertificateRevocationList({
+				...fields,
+				issuer: { commonName: 'Verify Intermediate CA' },
+				signerPrivateKey: intermediateKeys.privateKey,
+				issuerCertificate: intermediate.der,
+				issuingDistributionPoint: {
+					distributionPoint: {
+						type: 'fullName',
+						fullName: [
+							{ type: 'directoryName', derHex: toHex(teletexSubject) },
+							{ type: 'uri', value: crlUri },
+						],
+					},
+				},
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+			});
+		return {
+			leaf,
+			intermediate,
+			base: await scopedCrl({ crlNumber: 1 }),
+			delta: await scopedCrl({ crlNumber: 2, baseCrlNumber: 1 }),
+		};
+	}
+
+	it('checkCertificateRevocationAgainstCrl reports the delta CRL as unsupported', async () => {
+		const { leaf, intermediate, base, delta } = await scopedCrls();
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: intermediate.pem,
+				crl: base.der,
+				deltaCrl: delta.der,
+			}),
+		).toMatchObject(unsupported);
+	});
+
+	it('checkCertificateRevocation leaves the delta CRL unread and the complete CRL decides', async () => {
+		const { leaf, intermediate, base, delta } = await scopedCrls();
+		expect(
+			await checkCertificateRevocation({
+				certificate: leaf.pem,
+				issuerCertificate: intermediate.pem,
+				evidence: [{ kind: 'crl', crl: base.der, deltaCrl: delta.der }],
+			}),
+		).toMatchObject({ ok: true, value: { status: 'good' } });
+	});
+});
+
 describe('decode refusals in the PKCS#7 builders', () => {
 	it('createPkcs7CertBag reports an undecodable certificate as unsupported', async () => {
 		const { leaf, unsupportedLeaf } = await fixture();

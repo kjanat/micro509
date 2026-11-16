@@ -49,6 +49,7 @@ import type { ParsedNameConstraintForm } from '#micro509/x509/extensions';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
 	appendCertificateExtensions,
+	callUntyped,
 	createCertificateWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
@@ -373,6 +374,17 @@ describe('chain verification', () => {
 				serviceIdentity: { type: 'dns', value: 'wrong.example' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch', index: 0 });
+
+		for (const serviceIdentity of ['service.example', { type: 'dns', value: 42 }]) {
+			expect(
+				await callUntyped(verifyCertificateChain, {
+					leaf: validChain.leaf.pem,
+					intermediates: [validChain.intermediate.pem],
+					roots: [validChain.root.certificate.pem],
+					serviceIdentity,
+				}),
+			).toMatchObject({ ok: false, code: 'malformed', index: 0 });
+		}
 
 		const expiredChain = await issueChain({
 			leafValidity: {
@@ -746,7 +758,7 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'No certificate found' },
 		});
@@ -759,7 +771,7 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'Expected a single certificate source' },
 		});
@@ -1117,7 +1129,7 @@ describe('chain verification', () => {
 		});
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'DER child exceeds parent length' },
 		});
@@ -1316,7 +1328,7 @@ describe('chain verification', () => {
 		});
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			index: 0,
 			details: { actual: 'directoryName must wrap a Name SEQUENCE' },
 		});
@@ -3051,7 +3063,7 @@ describe('validation profiles', () => {
 		const result = await validateForTlsServer(input);
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'subject_alt_name_mismatch',
+			code: 'malformed',
 			index: 0,
 		});
 	});
@@ -3149,7 +3161,7 @@ describe('validation profiles', () => {
 			// Typed failure, never a throw
 			expect(result).toMatchObject({
 				ok: false,
-				code: 'subject_alt_name_mismatch',
+				code: 'malformed',
 				index: 0,
 			});
 		}
@@ -3200,7 +3212,7 @@ describe('validation profiles', () => {
 		});
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'subject_alt_name_mismatch',
+			code: 'malformed',
 			index: 0,
 		});
 	});
@@ -5477,7 +5489,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('checkExtendedKeyUsage fails closed for malformed ParsedCertificate DER', async () => {
@@ -5486,7 +5498,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			[{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
 			'serverAuth',
 		);
-		expect(result).toMatchObject({ ok: false, code: 'leaf_eku_missing' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	// --- parseIpAddressToBytes error paths (lines 1769, 1775) ---
@@ -5895,7 +5907,7 @@ describe('decode refusals at the verification entry points', () => {
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'issuer_not_found',
+			code: 'malformed',
 			details: { source: { kind: 'intermediates', position: 1 } },
 		});
 	});

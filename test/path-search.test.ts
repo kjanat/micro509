@@ -125,6 +125,7 @@ function countingChecks() {
 			counts.trustAnchor += 1;
 			return verifyTrustAnchorSignature(certificate, anchor);
 		},
+		inheritsParameters: () => false,
 	};
 	return { counts, checks };
 }

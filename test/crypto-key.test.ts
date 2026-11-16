@@ -113,6 +113,40 @@ describe('verifySignatureWithKey', () => {
 		});
 	}
 
+	it('compares the signature algorithm OID canonically', async () => {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const signed = await signData(keys.privateKey, data);
+		const spelled = signed.algorithmOid.replace(/\.(\d+)$/, '.0$1');
+		expect(spelled).not.toBe(signed.algorithmOid);
+		const input = {
+			publicKey: keys.publicKey,
+			signatureEncoding: 'der',
+			signature: signed.signature,
+			data,
+		} as const;
+		expect(
+			await verifySignatureWithKey({ ...input, signatureAlgorithm: { oid: spelled } }),
+		).toEqual({ ok: true, valid: true });
+		expect(
+			await verifySignature({
+				signerSpkiDer: await exportSpkiDer(keys.publicKey),
+				signatureAlgorithm: { oid: spelled },
+				publicKeyAlgorithm: publicAlgorithm({ kind: 'ecdsa', curve: 'P-256' }),
+				signature: signed.signature,
+				data,
+			}),
+		).toEqual({ ok: true, valid: true });
+		expect(
+			await verifySignatureWithKey({ ...input, signatureAlgorithm: { oid: 'ecdsa-with-SHA256' } }),
+		).toMatchObject({ ok: false, code: 'unsupported_signature_algorithm_parameters' });
+		expect(
+			await verifySignatureWithKey({
+				...input,
+				signatureAlgorithm: { oid: `1.2.${'9'.repeat(200)}` },
+			}),
+		).toMatchObject({ ok: false, code: 'limit_exceeded' });
+	});
+
 	it('rejects malformed ECDSA DER including trailing bytes', async () => {
 		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const signed = await signData(keys.privateKey, data);

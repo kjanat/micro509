@@ -10,22 +10,41 @@
 
 import { toHex } from '#micro509/internal/asn1/asn1';
 import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
+import { resolveSignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import { createSpkiDistrustCheck } from '#micro509/internal/verify/spki-distrust';
+import type { WorkingPublicKey } from '#micro509/internal/verify/verify-path';
+import {
+	anchorWorkingKey,
+	carriesTrustAnchorKey,
+	certificateWorkingKey,
+	pathWorkingKey,
+	workingParametersAt,
+} from '#micro509/internal/verify/verify-path';
 import type { DecodeFailureCode } from '#micro509/result/result';
 import type {
-	AuthenticatedCrlCheckOutcome,
 	CrlSource,
+	checkCertificateRevocationAgainstCrl,
+	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
 	ParsedRevocationReason,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
+	assertClockSkew,
 	assertCrlMaxAge,
 	authenticateCrl,
-	checkCertificateRevocationAgainstCrl,
-	checkRevocationAgainstAuthenticatedCrl,
+	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
+	DELTA_CRL_ATTEMPTS_PER_CALL,
+	distinctSignedCrls,
 	isCrlApplicableTo,
-	isCurrentDeltaCrl,
 	normalizeCrl,
 	revocationReasonFromCode,
 } from '#micro509/revocation/crl';
@@ -33,17 +52,19 @@ import type {
 	OcspResponderRevocationPolicy,
 	ParsedOcspResponse,
 	ParsedOcspSingleResponse,
+	RevocationSkipReason,
 	ValidateOcspResponseFailure,
 	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
 } from '#micro509/revocation/ocsp';
 import {
-	carriesOcspNoCheck,
 	parseOcspResponseDerOrThrow,
 	parseOcspResponsePemOrThrow,
-	validateOcspResponse,
+	revocationSkipReasonOf,
+	validateOcspResponseBy,
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
+import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
 import { verifyCertificateChain } from '#micro509/verify/verify';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
@@ -105,22 +126,23 @@ export interface RevocationPolicy {
 	/**
 	 * Revocation policy for delegated OCSP responder certificates
 	 * (RFC 6960 §4.2.2.2.1). Supplied CRLs double as responder revocation
-	 * evidence. Defaults to `'honor-nocheck'`.
+	 * evidence. Defaults to `'nocheck-or-evidence'`.
 	 */
 	readonly ocspResponderRevocation?: OcspResponderRevocationPolicy;
 	/**
 	 * Maximum age of a CRL's `thisUpdate` at the evaluation time, in
-	 * milliseconds. An older CRL yields no evidence even when it carries no
-	 * `nextUpdate`. Applies to CRLs for chain certificates, CRL signers and
-	 * delegated OCSP responders. Unbounded by default, in which case a CRL
-	 * without `nextUpdate` yields no evidence. RFC 5280 §3.3 leaves the
-	 * required recency of revocation data to local policy.
+	 * milliseconds. An older CRL, or one without `nextUpdate` when this is
+	 * unset, settles only a revocation other than certificateHold of an
+	 * unexpired certificate (RFC 5280 §5.3.1). Applies to CRLs for chain
+	 * certificates, CRL signers and delegated OCSP responders. Unbounded by
+	 * default. RFC 5280 §3.3 leaves the required recency of revocation data to
+	 * local policy.
 	 */
 	readonly crlMaxAgeMs?: number;
 	/**
 	 * Clock-skew tolerance in milliseconds for CRL and OCSP `thisUpdate`/
 	 * `nextUpdate` checks. It also widens `crlMaxAgeMs` by the same amount.
-	 * Defaults to `0`.
+	 * Defaults to `0`. Throws `RangeError` when negative or not finite.
 	 */
 	readonly clockSkewMs?: number;
 	/**
@@ -139,6 +161,26 @@ export interface RevocationPolicy {
 	 * other evidence. Defaults to `'revoked'`.
 	 */
 	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Whether a CRL that a delegated CRL signer signed may establish that
+	 * signer's own status. RFC 5280 §6.3.3 (f) and X.509 (2019) §9.1.5 leave
+	 * it open.
+	 *
+	 * - `'delegated'`: only when the signer's cRLDistributionPoints names the
+	 *   signer as cRLIssuer, the delegation PKITS 4.14.30 validates (default)
+	 * - `'any'`: any such CRL that covers the signer, such as one under its
+	 *   issuer's name signed with the signer's separate CRL key
+	 *
+	 * A revocation of the signer in such a CRL counts under either value.
+	 */
+	readonly crlSignerSelfEvidence?: 'delegated' | 'any';
+	/**
+	 * Treatment of delta CRLs that the attempt limits leave unread although
+	 * one already read supersedes them, for the chain, its CRL signers and its
+	 * delegated OCSP responders. See {@linkcode SupersededDeltaCrlPolicy}.
+	 * Defaults to `'indeterminate'`.
+	 */
+	readonly unreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy;
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -162,6 +204,67 @@ export interface CheckChainRevocationInput {
 	readonly at?: Date;
 	/** Revocation policy. */
 	readonly policy?: RevocationPolicy;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID, for CRL and OCSP
+	 * signatures and the signer paths checked here. A CRL or OCSP signer inside
+	 * `chain` verifies with the key parameters it inherits along `chain`
+	 * (RFC 5280 §6.1.4 (e)). A key that micro509 verifies natively, a key that is
+	 * no OID, or a value that is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+	/**
+	 * SHA-256 hashes of complete DER SubjectPublicKeyInfo values to distrust in
+	 * the certification paths of CRL signers and delegated OCSP responders
+	 * outside `chain`. Supply 64 hexadecimal characters per hash
+	 * (case-insensitive, no separators). Defaults to an empty list. Malformed
+	 * entries throw RangeError. A signer whose path carries one yields no
+	 * evidence.
+	 */
+	readonly distrustedSpkiSha256?: readonly string[];
+	/**
+	 * The bare trust anchor that issued the last certificate of `chain`, when
+	 * the path ends below one (RFC 5280 §6.1.1 (d)). The last certificate is
+	 * then certificate 1 of the path and is checked too (RFC 5280 §6.1.3
+	 * (a)(3)), with the anchor as its issuer: its key signs CRLs and OCSP
+	 * responses and certifies delegated signers (X.509 (2019) §7.5). Omitted,
+	 * the last certificate of `chain` is the trust anchor and is not checked. A
+	 * chain that ends with the anchor's own certificate, or whose last
+	 * certificate the anchor did not issue, throws `RangeError`.
+	 */
+	readonly trustAnchor?: TrustAnchor;
+}
+
+/**
+ * The issuer of a certificate under check: the next certificate of the chain,
+ * or the bare trust anchor above it.
+ */
+type RevocationIssuer =
+	| { readonly kind: 'certificate'; readonly certificate: ParsedCertificate }
+	| { readonly kind: 'trust_anchor'; readonly trustAnchor: TrustAnchor };
+
+function sameIssuer(a: RevocationIssuer, b: RevocationIssuer): boolean {
+	if (a.kind === 'certificate' && b.kind === 'certificate') {
+		return sameCertificate(a.certificate, b.certificate);
+	}
+	return a.kind === 'trust_anchor' && b.kind === 'trust_anchor' && a.trustAnchor === b.trustAnchor;
+}
+
+/** `certificate` as an issuer: the bare trust anchor when it carries the anchor's name and key. */
+function issuerOf(
+	certificate: ParsedCertificate,
+	trustAnchor: TrustAnchor | undefined,
+): RevocationIssuer {
+	return trustAnchor !== undefined && carriesTrustAnchorKey(certificate, trustAnchor)
+		? { kind: 'trust_anchor', trustAnchor }
+		: { kind: 'certificate', certificate };
+}
+
+/** The certificate that signed CRL or OCSP evidence, for its `source`. */
+function signerCertificateOf(
+	signer: RevocationIssuer,
+): { readonly signerCertificate: ParsedCertificate } | Record<never, never> {
+	return signer.kind === 'certificate' ? { signerCertificate: signer.certificate } : {};
 }
 
 // Output Types
@@ -180,8 +283,9 @@ export interface CheckChainRevocationInput {
  * - **Freshness**: `crl_expired`, `ocsp_response_expired`,
  *   `ocsp_next_update_missing`
  * - **Delta CRL**: `delta_crl_unusable` when an authenticated, current delta
- *   CRL cannot settle the status, `delta_crl_retry_limit_exceeded` when delta
- *   CRL candidates remain after the attempt limit. Either one outranks a
+ *   CRL cannot settle the status, `delta_crl_retry_limit_exceeded` when the
+ *   attempt limits leave a delta CRL candidate unread that counts under
+ *   `unreadSupersededDeltaCrls`. Either one outranks a
  *   `good` verdict from other evidence.
  * - **Reason code**: `crl_reason_code_unrecognized` and
  *   `ocsp_reason_code_unrecognized` when evidence revokes the certificate with
@@ -302,7 +406,7 @@ export type CertificateRevocationStatus =
 			 * The extension that exempts the certificate: `'no_rev_avail'` for
 			 * noRevAvail (RFC 9608 §2) or `'ocsp_nocheck'` for id-pkix-ocsp-nocheck.
 			 */
-			readonly skipReason: 'no_rev_avail' | 'ocsp_nocheck';
+			readonly skipReason: RevocationSkipReason;
 			/** Never present on a `skipped` verdict. */
 			readonly source?: undefined;
 			/** Never present on a `skipped` verdict. */
@@ -461,13 +565,21 @@ function normalizeHex(value: string): string {
  * path check runs without revocation to avoid unbounded recursion.
  */
 async function crlSignerChainsToAnchor(
-	signer: ParsedCertificate,
+	candidate: RevocationIssuer,
 	chain: readonly ParsedCertificate[],
 	extraCertificates: readonly RevocationCertificateSource[],
 	at: Date,
+	ctx: SignerValidationContext,
 ): Promise<boolean> {
+	if (candidate.kind === 'trust_anchor') {
+		return true;
+	}
+	const signer = candidate.certificate;
 	if (chain.some((c) => sameCertificate(c, signer))) {
 		return true;
+	}
+	if (ctx.trustAnchor !== undefined) {
+		return await chainsToBareAnchor(signer, chain, extraCertificates, at, ctx.trustAnchor, ctx);
 	}
 	const trustAnchor = chain[chain.length - 1];
 	if (trustAnchor === undefined) {
@@ -502,8 +614,77 @@ async function crlSignerChainsToAnchor(
 		intermediates: pool.map((certificate) => certificate.der),
 		roots: [trustAnchor.der],
 		at,
+		...signerPathOptions(ctx),
 	});
+	if (result.ok) recordPathKeys(result.value, ctx);
 	return result.ok;
+}
+
+/**
+ * Remembers the working key (RFC 5280 §6.1.4 (e)) and the issuer that a
+ * signer's validated path gives each of its certificates outside the checked
+ * chain.
+ */
+function recordPathKeys(path: CandidatePath, ctx: SignerValidationContext): void {
+	path.chain.forEach((certificate, index) => {
+		if (ctx.chain.some((member) => sameCertificate(member, certificate))) return;
+		const key = certCacheKey(certificate);
+		ctx.pathKeys.set(key, pathWorkingKey(path, index));
+		const issuer = path.chain[index + 1];
+		if (issuer !== undefined) {
+			ctx.pathIssuers.set(key, issuerOf(issuer, ctx.trustAnchor));
+		} else if (!path.anchorCertificateInChain) {
+			ctx.pathIssuers.set(key, { kind: 'trust_anchor', trustAnchor: path.trustAnchor });
+		}
+	});
+}
+
+/**
+ * {@linkcode crlSignerChainsToAnchor} below a bare trust anchor: every chain
+ * certificate is a candidate intermediate, and the anchor ends the path.
+ */
+async function chainsToBareAnchor(
+	signer: ParsedCertificate,
+	chain: readonly ParsedCertificate[],
+	extraCertificates: readonly RevocationCertificateSource[],
+	at: Date,
+	trustAnchor: TrustAnchor,
+	ctx: SignerValidationContext,
+): Promise<boolean> {
+	const pool: ParsedCertificate[] = [];
+	for (const parsed of [...chain, ...extraCertificates.flatMap(parsedOrEmpty)]) {
+		if (!sameCertificate(parsed, signer) && !pool.some((known) => sameCertificate(known, parsed))) {
+			pool.push(parsed);
+		}
+	}
+	const result = await verifyCertificateChain({
+		leaf: signer.der,
+		intermediates: pool.map((certificate) => certificate.der),
+		roots: [],
+		trustAnchors: [trustAnchor],
+		at,
+		...signerPathOptions(ctx),
+	});
+	if (result.ok) recordPathKeys(result.value, ctx);
+	return result.ok;
+}
+
+/** The caller's verifiers and distrust for a signer's certification path. */
+function signerPathOptions(ctx: SignerValidationContext): {
+	readonly signatureVerifiers?: SignatureVerifiers;
+	readonly distrustedSpkiSha256?: readonly string[];
+} {
+	return {
+		...(ctx.signatureVerifiers !== undefined && { signatureVerifiers: ctx.signatureVerifiers }),
+		...(ctx.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: ctx.distrustedSpkiSha256,
+		}),
+	};
+}
+
+function parsedOrEmpty(source: RevocationCertificateSource): readonly ParsedCertificate[] {
+	const parsed = parseCertificateSafe(source);
+	return parsed === undefined ? [] : [parsed];
 }
 
 // CRL Signer Validation (RFC 5280 §6.3.3)
@@ -531,14 +712,64 @@ interface SignerValidationContext {
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
+	readonly crlSignerSelfEvidence: NonNullable<RevocationPolicy['crlSignerSelfEvidence']>;
+	readonly unreadSupersededDeltaCrls: SupersededDeltaCrlPolicy;
+	readonly signatureVerifiers: SignatureVerifiers | undefined;
+	readonly distrustedSpkiSha256: readonly string[] | undefined;
+	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
+	/** Delta CRL checks left for the whole chain. */
+	readonly deltaBudget: DeltaCrlBudget;
+	/** The RFC 5280 §6.1 working key of a CRL or OCSP signer. */
+	readonly workingKeyOf: (certificate: ParsedCertificate) => WorkingPublicKey;
+	/** Working keys of signers outside the chain, from their validated paths. */
+	readonly pathKeys: Map<string, WorkingPublicKey>;
+	/** Issuers of signers outside the chain, from their validated paths. */
+	readonly pathIssuers: Map<string, RevocationIssuer>;
+	/** The bare trust anchor above the chain, when it ends below one. */
+	readonly trustAnchor: TrustAnchor | undefined;
+}
+
+/** Caller verification for a signature by `signer`, with its working key parameters. */
+function signerVerification(
+	ctx: SignerValidationContext,
+	signer: RevocationIssuer,
+): CallerVerification {
+	return {
+		verifiers: ctx.verifiers,
+		workingParameters: {
+			parametersDer:
+				signer.kind === 'trust_anchor'
+					? anchorWorkingKey(signer.trustAnchor).parametersDer
+					: ctx.workingKeyOf(signer.certificate).parametersDer,
+		},
+	};
 }
 
 /**
- * Builds a unique cache key for a certificate.
- * Uses issuer DN + serial number which uniquely identifies a cert.
+ * Working keys along `chain`: a member inherits key parameters from the members
+ * above it (RFC 5280 §6.1.4 (e)); any other certificate keeps its own.
  */
+function chainWorkingKeys(
+	chain: readonly ParsedCertificate[],
+	anchorKey: WorkingPublicKey | undefined,
+): (certificate: ParsedCertificate) => WorkingPublicKey {
+	const top = chain[chain.length - 1];
+	return (certificate) => {
+		const index = chain.findIndex((member) => sameCertificate(member, certificate));
+		if (top === undefined || index < 0) return certificateWorkingKey(certificate);
+		return {
+			algorithmOid: certificate.publicKeyAlgorithmOid,
+			parametersDer:
+				anchorKey === undefined
+					? workingParametersAt(chain, index, chain.length - 2, certificateWorkingKey(top))
+					: workingParametersAt(chain, index, chain.length - 1, anchorKey),
+		};
+	};
+}
+
+/** A cache key for a certificate: its DER, so two certificates never share one. */
 function certCacheKey(cert: ParsedCertificate): string {
-	return `${cert.issuer.derHex}:${cert.serialNumberHex}`;
+	return toHex(cert.der);
 }
 
 /**
@@ -546,10 +777,13 @@ function certCacheKey(cert: ParsedCertificate): string {
  * Uses memoization to avoid redundant checks and detect cycles.
  */
 async function validateCrlSigner(
-	signer: ParsedCertificate,
+	candidate: RevocationIssuer,
 	ctx: SignerValidationContext,
 ): Promise<SignerValidationState> {
-	// Use issuer+serial as cache key (unique per certificate)
+	if (candidate.kind === 'trust_anchor') {
+		return 'resolved-valid';
+	}
+	const signer = candidate.certificate;
 	const key = certCacheKey(signer);
 	const cached = ctx.cache.get(key);
 
@@ -566,13 +800,6 @@ async function validateCrlSigner(
 	// Mark as visiting before recursive checks
 	ctx.cache.set(key, 'visiting');
 
-	// Trust anchor (last in chain) is trusted by definition
-	const trustAnchor = ctx.chain[ctx.chain.length - 1];
-	if (trustAnchor !== undefined && sameCertificate(signer, trustAnchor)) {
-		ctx.cache.set(key, 'resolved-valid');
-		return 'resolved-valid';
-	}
-
 	// If signer is in the validated chain, it's trusted
 	// (Chain was already validated before revocation checking)
 	const isInChain = ctx.chain.some((c) => sameCertificate(c, signer));
@@ -581,56 +808,32 @@ async function validateCrlSigner(
 		return 'resolved-valid';
 	}
 
-	// Signer is not in chain — need to check its revocation status
-	// Find signer's issuer to perform revocation check
-	const signerIssuer = findSignerIssuer(signer, ctx);
+	const signerIssuer = ctx.pathIssuers.get(key);
 	if (signerIssuer === undefined) {
 		ctx.cache.set(key, 'resolved-indeterminate');
 		return 'resolved-indeterminate';
 	}
 
-	// Check signer's revocation status (recursive)
-	const signerRevocation = await checkSignerRevocation(signer, signerIssuer, ctx);
-	ctx.cache.set(key, signerRevocation);
-	return signerRevocation;
+	const signerRevocation =
+		revocationSkipReason(signer) === undefined
+			? await checkSignerRevocation(signer, signerIssuer, ctx)
+			: 'resolved-valid';
+	const status =
+		signerRevocation === 'resolved-valid'
+			? statusBelow(await validateCrlSigner(signerIssuer, ctx))
+			: signerRevocation;
+	ctx.cache.set(key, status);
+	return status;
 }
 
 /**
- * Finds the issuer certificate for a CRL signer.
- * Searches the chain and extraCertificates by AKI/SKI or DN matching.
+ * A good or exempt signer's status once its issuer's is known: RFC 5280
+ * §6.3.3 (f) validates the whole path of a CRL issuer, so an issuer that is
+ * not known good leaves the signer indeterminate. RFC 9608 §4 exempts only the
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck.
  */
-function findSignerIssuer(
-	signer: ParsedCertificate,
-	ctx: SignerValidationContext,
-): ParsedCertificate | undefined {
-	// Parse extra certificates
-	const parsedExtras: ParsedCertificate[] = [];
-	for (const source of ctx.extraCertificates) {
-		const parsed = parseCertificateSafe(source);
-		if (parsed !== undefined) {
-			parsedExtras.push(parsed);
-		}
-	}
-
-	const candidates = [...ctx.chain, ...parsedExtras];
-
-	for (const candidate of candidates) {
-		// Match by AKI → SKI (preferred, more specific)
-		if (
-			signer.authorityKeyIdentifier !== undefined &&
-			candidate.subjectKeyIdentifier !== undefined &&
-			normalizeHex(signer.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
-		) {
-			return candidate;
-		}
-
-		// Match by issuer DN → subject DN
-		if (signer.issuer.derHex === candidate.subject.derHex) {
-			return candidate;
-		}
-	}
-
-	return undefined;
+function statusBelow(issuerStatus: SignerValidationState): SignerValidationState {
+	return issuerStatus === 'resolved-valid' ? 'resolved-valid' : 'resolved-indeterminate';
 }
 
 /**
@@ -639,51 +842,54 @@ function findSignerIssuer(
  */
 async function checkSignerRevocation(
 	signer: ParsedCertificate,
-	issuer: ParsedCertificate,
+	issuer: RevocationIssuer,
 	ctx: SignerValidationContext,
 ): Promise<SignerValidationState> {
-	// If the signer's issuer is in the validated chain, the signer is trusted
-	// by virtue of being issued by a trusted CA. We only need to check if
-	// it's explicitly revoked, not prove "good" status.
-	const issuerInChain = ctx.chain.some((c) => sameCertificate(c, issuer));
-
 	// A `good` from one CRL does not end the search: a later CRL may report the
 	// signer revoked, and a revoked verdict from any CRL wins.
 	const coveredReasons = new Set<string>();
-	let sawUnrecognizedReason = false;
-	for (const crlSource of ctx.crls) {
-		const outcome = await checkSignerAgainstCrl(signer, issuer, crlSource, ctx);
+	let sawUnsettledEvidence = false;
+	const crls = distinctSignedCrls(
+		ctx.crls.flatMap((source) => {
+			try {
+				return [normalizeCrl(source)];
+			} catch {
+				return [];
+			}
+		}),
+	);
+	const deltaCrls = crls.filter((crl) => crl.baseCrlNumber !== undefined);
+	for (const crl of crls) {
+		if (crl.baseCrlNumber !== undefined) continue;
+		const outcome = await checkSignerAgainstCrlAuthorities(signer, issuer, crl, deltaCrls, ctx);
 		if (outcome.kind === 'revoked') {
 			return 'resolved-revoked';
 		}
-		if (outcome.kind === 'unrecognized_reason') {
-			sawUnrecognizedReason = true;
+		if (outcome.kind === 'unrecognized_reason' || outcome.kind === 'unsettled_delta') {
+			sawUnsettledEvidence = true;
 			continue;
 		}
 		for (const reason of outcome.reasons) {
 			coveredReasons.add(reason);
 		}
 	}
-	if (sawUnrecognizedReason) {
+	if (sawUnsettledEvidence) {
 		return 'resolved-indeterminate';
 	}
-	if (coversAllDistributionPointReasons(coveredReasons)) {
-		return 'resolved-valid';
-	}
-
-	// If the signer's issuer is in the chain and we found no revocation,
-	// trust the signer (issued by trusted CA, no evidence of revocation)
-	if (issuerInChain) {
-		return 'resolved-valid';
-	}
-
-	return 'resolved-indeterminate';
+	return coversAllDistributionPointReasons(coveredReasons)
+		? 'resolved-valid'
+		: 'resolved-indeterminate';
 }
 
-/** What one CRL settles about a signer: a revoked verdict, an entry `unrecognizedReasonCode: 'reject'` refuses, or the reasons it covers. */
+/**
+ * What one CRL settles about a signer: a revoked verdict, an entry
+ * `unrecognizedReasonCode: 'reject'` refuses, a delta CRL that cannot settle
+ * the status, or the reasons it covers.
+ */
 type SignerCrlOutcome =
 	| { readonly kind: 'revoked' }
 	| { readonly kind: 'unrecognized_reason' }
+	| { readonly kind: 'unsettled_delta' }
 	| { readonly kind: 'reasons'; readonly reasons: readonly DistributionPointReason[] };
 
 const SIGNER_CRL_NO_EVIDENCE = {
@@ -692,49 +898,105 @@ const SIGNER_CRL_NO_EVIDENCE = {
 } as const satisfies SignerCrlOutcome;
 
 /**
- * Evaluates one CRL against a signer. A CRL that does not parse, does not
- * apply, or is itself signed by a signer that is not known good yields no
- * evidence rather than a verdict.
+ * Evaluates one CRL against a signer with each key that may have signed it:
+ * the signer's issuer, then an indirect CRL issuer whose path validates, the
+ * signer itself included. The first key whose check yields evidence settles
+ * the CRL.
+ */
+async function checkSignerAgainstCrlAuthorities(
+	signer: ParsedCertificate,
+	issuer: RevocationIssuer,
+	crl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+	ctx: SignerValidationContext,
+): Promise<SignerCrlOutcome> {
+	for (const authority of collectCrlSignerCandidates(
+		crl,
+		issuer,
+		ctx.extraCertificates,
+		ctx.chain,
+		ctx.trustAnchor,
+	)) {
+		if (
+			!sameIssuer(authority, issuer) &&
+			!(await crlSignerChainsToAnchor(authority, ctx.chain, ctx.extraCertificates, ctx.at, ctx))
+		) {
+			continue;
+		}
+		const outcome = await checkSignerAgainstCrl(signer, authority, crl, deltaCrls, ctx, [
+			ctx.deltaBudget,
+		]);
+		if (outcome.kind !== 'reasons' || outcome.reasons.length > 0) return outcome;
+	}
+	return SIGNER_CRL_NO_EVIDENCE;
+}
+
+/**
+ * Evaluates one CRL against a signer. A CRL that does not parse or does not
+ * apply yields no evidence. Its `good` needs a CRL signer known good, and its
+ * revocation one not known revoked. A CRL the signer itself signed vouches
+ * for it as `crlSignerSelfEvidence` allows.
  */
 async function checkSignerAgainstCrl(
 	signer: ParsedCertificate,
-	issuer: ParsedCertificate,
-	crlSource: CrlSource,
+	issuer: RevocationIssuer,
+	crl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
 	ctx: SignerValidationContext,
+	budgets: readonly DeltaCrlBudget[],
 ): Promise<SignerCrlOutcome> {
-	let crl: ParsedCertificateRevocationList;
-	try {
-		crl = normalizeCrl(crlSource);
-	} catch {
-		return SIGNER_CRL_NO_EVIDENCE;
-	}
-	const result = await checkCertificateRevocationAgainstCrl({
-		certificate: signer,
-		issuerCertificate: issuer,
+	const outcome = await checkCertificateRevocationAgainstCrlsBy(
+		signer,
 		crl,
-		at: ctx.at,
-		...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
-		...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
-		unrecognizedReasonCode: ctx.unrecognizedReasonCode,
-	});
+		deltaCrls,
+		issuer,
+		{
+			at: ctx.at,
+			...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
+			...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
+			unrecognizedReasonCode: ctx.unrecognizedReasonCode,
+			unreadSupersededDeltaCrls: ctx.unreadSupersededDeltaCrls,
+		},
+		signerVerification(ctx, issuer),
+		budgets,
+	);
+	if (outcome.kind === 'unsettled') {
+		return { kind: 'unsettled_delta' };
+	}
+	const result = outcome.result;
 	if (!result.ok) {
 		return result.code === 'reason_code_unrecognized'
 			? { kind: 'unrecognized_reason' }
 			: SIGNER_CRL_NO_EVIDENCE;
 	}
-	if (result.value.status === 'revoked') {
-		return { kind: 'revoked' };
+	const selfSigned = issuer.kind === 'certificate' && sameCertificate(issuer.certificate, signer);
+	if (selfSigned && ctx.crlSignerSelfEvidence === 'delegated' && !delegatesOwnStatus(signer)) {
+		return result.value.status === 'revoked' ? { kind: 'revoked' } : SIGNER_CRL_NO_EVIDENCE;
 	}
-	// The CRL's signer is the issuer just used, and it must itself be good.
-	return (await validateCrlSigner(issuer, ctx)) === 'resolved-valid'
+	const issuerStatus = selfSigned ? 'resolved-valid' : await validateCrlSigner(issuer, ctx);
+	if (result.value.status === 'revoked') {
+		return issuerStatus === 'resolved-revoked' ? SIGNER_CRL_NO_EVIDENCE : { kind: 'revoked' };
+	}
+	return issuerStatus === 'resolved-valid'
 		? { kind: 'reasons', reasons: result.value.coveredReasons }
 		: SIGNER_CRL_NO_EVIDENCE;
+}
+
+/** Whether `signer`'s cRLDistributionPoints names `signer` itself as cRLIssuer. */
+function delegatesOwnStatus(signer: ParsedCertificate): boolean {
+	const subject = signer.subject.derHex.toLowerCase();
+	return (signer.crlDistributionPoints ?? []).some(
+		(point) =>
+			point.crlIssuer?.some(
+				(name) => name.type === 'directoryName' && name.derHex.toLowerCase() === subject,
+			) === true,
+	);
 }
 
 /** Builds the `revoked` CertificateRevocationStatus for a CRL hit. */
 function buildCrlRevokedStatus(
 	cert: ParsedCertificate,
-	signer: ParsedCertificate,
+	signer: RevocationIssuer,
 	thisUpdate: Date,
 	revocationDate: Date,
 	reasonCode?: ParsedRevocationReason,
@@ -742,7 +1004,7 @@ function buildCrlRevokedStatus(
 	return {
 		certificate: cert,
 		status: 'revoked',
-		source: { kind: 'crl', signerCertificate: signer, thisUpdate },
+		source: { kind: 'crl', ...signerCertificateOf(signer), thisUpdate },
 		revocationInfo: {
 			revocationDate,
 			...(reasonCode !== undefined ? { reason: reasonCode } : {}),
@@ -904,6 +1166,7 @@ function ocspIndeterminateReasonFromFailure(
 			return 'ocsp_responder_revoked';
 		case 'signature_invalid':
 		case 'responder_revocation_unknown':
+		case 'malformed':
 		case 'unsupported':
 		case 'limit_exceeded':
 			return 'ocsp_responder_indeterminate';
@@ -925,9 +1188,30 @@ const OCSP_RESPONDER_FAILURE_CODES: ReadonlySet<ValidateOcspResponseFailure['cod
 	'responder_id_mismatch',
 	'responder_chain_invalid',
 	'ocsp_signing_missing',
+	'malformed',
 	'unsupported',
 	'limit_exceeded',
 ]);
+
+/** The {@linkcode validateOcspResponse} options that a chain's `policy` sets. */
+function ocspPolicyOptions(policy: RevocationPolicy | undefined) {
+	return {
+		...(policy?.ocspResponderRevocation !== undefined
+			? { responderRevocationPolicy: policy.ocspResponderRevocation }
+			: {}),
+		...(policy?.crlMaxAgeMs !== undefined
+			? { responderRevocationCrlMaxAgeMs: policy.crlMaxAgeMs }
+			: {}),
+		...(policy?.clockSkewMs !== undefined ? { clockSkewMs: policy.clockSkewMs } : {}),
+		...(policy?.ocspProfile !== undefined ? { profile: policy.ocspProfile } : {}),
+		...(policy?.unrecognizedReasonCode !== undefined
+			? { responderRevocationUnrecognizedReasonCode: policy.unrecognizedReasonCode }
+			: {}),
+		...(policy?.unreadSupersededDeltaCrls !== undefined
+			? { responderRevocationUnreadSupersededDeltaCrls: policy.unreadSupersededDeltaCrls }
+			: {}),
+	};
+}
 
 /**
  * Validates an OCSP response, retrying with caller-provided extra certificates
@@ -935,35 +1219,45 @@ const OCSP_RESPONDER_FAILURE_CODES: ReadonlySet<ValidateOcspResponseFailure['cod
  */
 async function validateOcspResponseWithResponderFallback(
 	response: ParsedOcspResponse,
-	issuer: ParsedCertificate,
+	cert: ParsedCertificate,
+	issuer: RevocationIssuer,
 	input: CheckChainRevocationInput,
 	at: Date,
+	signerCtx: SignerValidationContext,
 ): Promise<ValidateOcspResponseResult> {
+	const context = {
+		verifiers: signerCtx.verifiers,
+		issuerWorkingKey:
+			issuer.kind === 'certificate'
+				? signerCtx.workingKeyOf(issuer.certificate)
+				: anchorWorkingKey(issuer.trustAnchor),
+		deltaBudget: signerCtx.deltaBudget,
+		...(signerCtx.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: signerCtx.distrustedSpkiSha256,
+		}),
+	};
 	const trustedOcspResponders = input.trustedOcspResponders
 		?.filter((trusted) => {
 			const trustedIssuer = parseCertificateSafe(trusted.issuerCertificate);
-			return trustedIssuer !== undefined && sameCertificate(trustedIssuer, issuer);
+			if (trustedIssuer === undefined) return false;
+			return issuer.kind === 'certificate'
+				? sameCertificate(trustedIssuer, issuer.certificate)
+				: carriesTrustAnchorKey(trustedIssuer, issuer.trustAnchor);
 		})
 		.map((trusted) => trusted.responderCertificate);
+	const ocspIssuer =
+		issuer.kind === 'certificate' ? issuer : { ...issuer, certificateIssuer: cert.issuer };
 	const shared = {
-		issuerCertificate: issuer,
 		at,
 		...(trustedOcspResponders !== undefined ? { trustedOcspResponders } : {}),
-		...(input.policy?.ocspResponderRevocation !== undefined
-			? { responderRevocationPolicy: input.policy.ocspResponderRevocation }
-			: {}),
+		...ocspPolicyOptions(input.policy),
 		// Chain-level CRLs double as responder revocation evidence
 		...(input.crls !== undefined ? { responderRevocationCrls: input.crls } : {}),
-		...(input.policy?.crlMaxAgeMs !== undefined
-			? { responderRevocationCrlMaxAgeMs: input.policy.crlMaxAgeMs }
-			: {}),
-		...(input.policy?.clockSkewMs !== undefined ? { clockSkewMs: input.policy.clockSkewMs } : {}),
-		...(input.policy?.ocspProfile !== undefined ? { profile: input.policy.ocspProfile } : {}),
-		...(input.policy?.unrecognizedReasonCode !== undefined
-			? { responderRevocationUnrecognizedReasonCode: input.policy.unrecognizedReasonCode }
+		...(input.signatureVerifiers !== undefined
+			? { signatureVerifiers: input.signatureVerifiers }
 			: {}),
 	};
-	const primary = await validateOcspResponse({ response, ...shared });
+	const primary = await validateOcspResponseBy({ response, ...shared }, ocspIssuer, context);
 	if (primary.ok || !OCSP_RESPONDER_FAILURE_CODES.has(primary.code)) {
 		return primary;
 	}
@@ -972,12 +1266,12 @@ async function validateOcspResponseWithResponderFallback(
 		if (responder === undefined) {
 			continue;
 		}
-		const retry = await validateOcspResponse({
-			response,
-			...shared,
-			responderCertificate: responder,
-		});
-		if (retry.ok) {
+		const retry = await validateOcspResponseBy(
+			{ response, ...shared, responderCertificate: responder },
+			ocspIssuer,
+			context,
+		);
+		if (retry.ok || !OCSP_RESPONDER_FAILURE_CODES.has(retry.code)) {
 			return retry;
 		}
 	}
@@ -995,8 +1289,9 @@ async function validateOcspResponseWithResponderFallback(
  */
 async function evaluateOcspEvidence(
 	cert: ParsedCertificate,
-	issuer: ParsedCertificate,
+	issuer: RevocationIssuer,
 	input: CheckChainRevocationInput,
+	signerCtx: SignerValidationContext,
 ): Promise<EvidenceEvaluation> {
 	const { ocspResponses = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
@@ -1014,9 +1309,11 @@ async function evaluateOcspEvidence(
 
 		const validation = await validateOcspResponseWithResponderFallback(
 			applicable.parsed,
+			cert,
 			issuer,
 			input,
 			at,
+			signerCtx,
 		);
 		if (!validation.ok) {
 			state.reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
@@ -1117,15 +1414,15 @@ interface CrlEvidenceState {
 	sawDeltaCrlRetryLimit: boolean;
 	sawUnrecognizedReasonCode: boolean;
 	sawGood: boolean;
-	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
+	freshestGood?: { readonly signer: RevocationIssuer; readonly thisUpdate: Date };
 }
 
 /** Inputs for resolving one base CRL against its candidate signers. */
 interface BaseCrlResolution {
 	readonly cert: ParsedCertificate;
 	readonly baseCrl: ParsedCertificateRevocationList;
-	readonly deltaCandidates: readonly ParsedCertificateRevocationList[];
-	readonly issuer: ParsedCertificate;
+	readonly deltaCrls: readonly ParsedCertificateRevocationList[];
+	readonly issuer: RevocationIssuer;
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly chain: readonly ParsedCertificate[];
 	readonly at: Date;
@@ -1141,9 +1438,10 @@ interface BaseCrlResolution {
  * Runs each candidate signer through the full pipeline for one base CRL:
  * signature/applicability, RFC 5280 §6.3.3(f) path to the anchor, then signer
  * revocation. A candidate that verifies the signature but fails a later step
- * does not shadow a subsequent usable signer, so the search continues. Returns
- * a revoked status when one is found; otherwise records good or diagnostic
- * evidence into `state`.
+ * does not shadow a subsequent usable signer, so the search continues. A
+ * revocation stands from a signer whose own status is indeterminate, while
+ * `good` needs a signer known good. Returns a revoked status when one is
+ * found; otherwise records good or diagnostic evidence into `state`.
  */
 async function resolveBaseCrlAgainstSigners(
 	params: BaseCrlResolution,
@@ -1151,7 +1449,7 @@ async function resolveBaseCrlAgainstSigners(
 	const {
 		cert,
 		baseCrl,
-		deltaCandidates,
+		deltaCrls,
 		issuer,
 		extraCertificates,
 		chain,
@@ -1163,67 +1461,121 @@ async function resolveBaseCrlAgainstSigners(
 		deltaBudget,
 		state,
 	} = params;
-	const baseBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE };
-	for (const candidate of collectCrlSignerCandidates(baseCrl, issuer, extraCertificates, chain)) {
+	for (const candidate of collectCrlSignerCandidates(
+		baseCrl,
+		issuer,
+		extraCertificates,
+		chain,
+		signerCtx.trustAnchor,
+	)) {
+		const authorized = await crlSignerChainsToAnchor(
+			candidate,
+			chain,
+			extraCertificates,
+			at,
+			signerCtx,
+		);
+		const verification = signerVerification(signerCtx, candidate);
+		if (!authorized) {
+			state.sawCrlSignerNotAuthorized ||= (
+				await authenticateCrl(baseCrl, candidate, verification)
+			).ok;
+			continue;
+		}
 		const resolved = await checkCrlAgainstDeltaCandidates({
 			cert,
 			baseCrl,
-			deltaCandidates,
+			deltaCrls,
 			candidate,
 			at,
 			crlMaxAgeMs,
 			clockSkewMs,
 			unrecognizedReasonCode,
-			budgets: [baseBudget, deltaBudget],
+			unreadSupersededDeltaCrls: signerCtx.unreadSupersededDeltaCrls,
+			budgets: [deltaBudget],
 			state,
+			verification,
 		});
 		if (resolved.kind === 'unusable_base') {
 			continue;
 		}
-		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
-			state.sawCrlSignerNotAuthorized = true;
-			continue;
-		}
-		const signerStatus = await validateCrlSigner(candidate, signerCtx);
-		if (signerStatus === 'resolved-revoked') {
-			state.sawCrlSignerRevoked = true;
-			continue;
-		}
-		if (signerStatus === 'resolved-indeterminate') {
-			state.sawCrlSignerIndeterminate = true;
-			continue;
-		}
-		if (resolved.kind === 'reason_code_unrecognized') {
-			state.sawUnrecognizedReasonCode = true;
-			return undefined;
-		}
-		if (resolved.kind === 'delta_unusable') {
-			state.sawDeltaCrlUnusable = true;
-			return undefined;
-		}
-		if (resolved.kind === 'retry_limit') {
-			state.sawDeltaCrlRetryLimit = true;
-			return undefined;
-		}
-		const { checked, crlThisUpdate } = resolved;
-		if (checked.value.status === 'revoked') {
-			return buildCrlRevokedStatus(
-				cert,
-				candidate,
-				crlThisUpdate,
-				checked.value.revocationDate,
-				checked.value.reasonCode,
-			);
-		}
-		recordGoodCrlEvidence(state, candidate, crlThisUpdate, checked.value.coveredReasons);
-		return undefined;
+		const verdict = settleCrlSignerCandidate(
+			cert,
+			candidate,
+			resolved,
+			await validateCrlSigner(candidate, signerCtx),
+			state,
+		);
+		if (verdict.kind === 'done') return verdict.status;
 	}
 	return undefined;
 }
 
+/** Whether a base CRL's search ends with one signer candidate, and the revoked status it found. */
+type CrlSignerCandidateVerdict =
+	| { readonly kind: 'next' }
+	| { readonly kind: 'done'; readonly status: CertificateRevocationStatus | undefined };
+
+const NEXT_CRL_SIGNER_CANDIDATE = { kind: 'next' } as const satisfies CrlSignerCandidateVerdict;
+
+/**
+ * Settles one authorized signer candidate's outcome for a base CRL by the
+ * signer's own status. A revocation stands from a signer whose status is
+ * indeterminate, while `good` needs a signer known good.
+ */
+function settleCrlSignerCandidate(
+	cert: ParsedCertificate,
+	candidate: RevocationIssuer,
+	resolved: Exclude<DeltaCandidateOutcome, { readonly kind: 'unusable_base' }>,
+	signerStatus: SignerValidationState,
+	state: CrlEvidenceState,
+): CrlSignerCandidateVerdict {
+	if (signerStatus === 'resolved-revoked') {
+		state.sawCrlSignerRevoked = true;
+		return NEXT_CRL_SIGNER_CANDIDATE;
+	}
+	const revoked = revokedCrlStatus(cert, candidate, resolved);
+	if (signerStatus === 'resolved-indeterminate') {
+		state.sawCrlSignerIndeterminate = true;
+		return revoked === undefined ? NEXT_CRL_SIGNER_CANDIDATE : { kind: 'done', status: revoked };
+	}
+	if (resolved.kind === 'reason_code_unrecognized') {
+		state.sawUnrecognizedReasonCode = true;
+	} else if (resolved.kind === 'delta_unusable') {
+		state.sawDeltaCrlUnusable = true;
+	} else if (resolved.kind === 'retry_limit') {
+		state.sawDeltaCrlRetryLimit = true;
+	} else if (resolved.checked.value.status === 'good') {
+		recordGoodCrlEvidence(
+			state,
+			candidate,
+			resolved.crlThisUpdate,
+			resolved.checked.value.coveredReasons,
+		);
+	}
+	return { kind: 'done', status: revoked };
+}
+
+/** The revoked status `resolved` reports for `cert`, signed by `signer`. */
+function revokedCrlStatus(
+	cert: ParsedCertificate,
+	signer: RevocationIssuer,
+	resolved: DeltaCandidateOutcome,
+): CertificateRevocationStatus | undefined {
+	return resolved.kind === 'checked' && resolved.checked.value.status === 'revoked'
+		? buildCrlRevokedStatus(
+				cert,
+				signer,
+				resolved.crlThisUpdate,
+				resolved.checked.value.revocationDate,
+				resolved.checked.value.reasonCode,
+			)
+		: undefined;
+}
+
 async function evaluateCrlEvidence(
 	cert: ParsedCertificate,
-	issuer: ParsedCertificate,
+	issuer: RevocationIssuer,
 	input: CheckChainRevocationInput,
 	signerCtx: SignerValidationContext,
 	deltaBudget: DeltaCrlBudget,
@@ -1257,13 +1609,7 @@ async function evaluateCrlEvidence(
 		const revoked = await resolveBaseCrlAgainstSigners({
 			cert,
 			baseCrl,
-			deltaCandidates: rankApplicableDeltaCrls(
-				baseCrl,
-				deltaCrls,
-				at,
-				clockSkewMs ?? 0,
-				crlMaxAgeMs,
-			),
+			deltaCrls,
 			issuer,
 			extraCertificates,
 			chain,
@@ -1298,7 +1644,7 @@ async function evaluateCrlEvidence(
 					status: 'good',
 					source: {
 						kind: 'crl',
-						signerCertificate: state.freshestGood.signer,
+						...signerCertificateOf(state.freshestGood.signer),
 						thisUpdate: state.freshestGood.thisUpdate,
 					},
 				},
@@ -1370,73 +1716,19 @@ function parseCrlEvidenceSources(
 	return parsedCrls;
 }
 
-/** `crls` without repeats of the same signed content and signature. */
-function distinctSignedCrls(
-	crls: readonly ParsedCertificateRevocationList[],
-): readonly ParsedCertificateRevocationList[] {
-	const seen = new Set<string>();
-	return crls.filter((crl) => {
-		const key = [
-			crl.signatureAlgorithmOid,
-			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
-			toHex(crl.signatureValue),
-			toHex(crl.tbsCertListDer),
-		].join(':');
-		if (seen.has(key)) {
-			return false;
-		}
-		seen.add(key);
-		return true;
-	});
-}
-
-/** Every delta CRL that can update `baseCrl`, newest first, in the order to try authenticating them. */
-function rankApplicableDeltaCrls(
-	baseCrl: ParsedCertificateRevocationList,
-	deltaCrls: readonly ParsedCertificateRevocationList[],
-	at: Date,
-	clockSkewMs: number,
-	crlMaxAgeMs: number | undefined,
-): readonly ParsedCertificateRevocationList[] {
-	const baseCrlNumber = baseCrl.crlNumber;
-	if (baseCrlNumber === undefined) {
-		return [];
-	}
-	return deltaCrls
-		.filter(
-			(deltaCrl) =>
-				deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
-				deltaCrl.baseCrlNumber !== undefined &&
-				deltaCrl.baseCrlNumber <= baseCrlNumber &&
-				deltaCrl.crlNumber !== undefined &&
-				deltaCrl.crlNumber > baseCrlNumber &&
-				deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
-				isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs),
-		)
-		.sort((left, right) =>
-			isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0,
-		);
-}
-
-/** Delta CRL checks left to spend. */
-interface DeltaCrlBudget {
-	remaining: number;
-}
-
-const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
-const DELTA_CRL_ATTEMPTS_PER_CHAIN = 32;
-
 interface DeltaCandidateCheck {
 	readonly cert: ParsedCertificate;
 	readonly baseCrl: ParsedCertificateRevocationList;
-	readonly deltaCandidates: readonly ParsedCertificateRevocationList[];
-	readonly candidate: ParsedCertificate;
+	readonly deltaCrls: readonly ParsedCertificateRevocationList[];
+	readonly candidate: RevocationIssuer;
 	readonly at: Date;
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
 	readonly unrecognizedReasonCode: UnrecognizedReasonCodePolicy;
+	readonly unreadSupersededDeltaCrls: SupersededDeltaCrlPolicy;
 	readonly budgets: readonly DeltaCrlBudget[];
 	readonly state: CrlEvidenceState;
+	readonly verification: CallerVerification;
 }
 
 type DeltaCandidateOutcome =
@@ -1450,17 +1742,13 @@ type DeltaCandidateOutcome =
 	  }
 	| { readonly kind: 'unusable_base' }
 	| { readonly kind: 'reason_code_unrecognized' }
-	| {
-			readonly kind: 'delta_unusable';
-			readonly complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>;
-	  }
+	| { readonly kind: 'delta_unusable' }
 	| { readonly kind: 'retry_limit' };
 
 /**
- * Authenticates `baseCrl` with `candidate` once, then checks it with each
- * ranked delta CRL while the budgets last, and alone once every delta CRL is
- * rejected. A delta CRL that passes authentication, freshness, compatibility
- * and applicability ends the search.
+ * Checks `baseCrl`, signed by `candidate`, and its delta CRLs through
+ * {@linkcode checkCertificateRevocationAgainstCrlsBy}, which every CRL
+ * consumer shares, and maps the outcome to the chain's evidence.
  */
 async function checkCrlAgainstDeltaCandidates(
 	params: DeltaCandidateCheck,
@@ -1468,150 +1756,78 @@ async function checkCrlAgainstDeltaCandidates(
 	const {
 		cert,
 		baseCrl,
-		deltaCandidates,
+		deltaCrls,
 		candidate,
 		at,
 		crlMaxAgeMs,
 		clockSkewMs,
 		unrecognizedReasonCode,
+		unreadSupersededDeltaCrls,
 		budgets,
 		state,
+		verification,
 	} = params;
-	const authenticated = await authenticateCrl(baseCrl, candidate);
-	if (!authenticated.ok) {
-		return { kind: 'unusable_base' };
-	}
-	const input = {
-		certificate: cert,
-		issuerCertificate: candidate,
-		crl: authenticated.value,
-		at,
-		...(crlMaxAgeMs === undefined ? {} : { maxAgeMs: crlMaxAgeMs }),
-		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
-		unrecognizedReasonCode,
-	};
-	for (const deltaCrl of deltaCandidates) {
-		const settled = takeDeltaCrlAttempt(budgets)
-			? settleAuthenticatedCrlOutcome(
-					await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, {
-						...input,
-						deltaCrl,
-					}),
-					laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
-					state,
-				)
-			: ({ kind: 'retry_limit' } as const);
-		if (settled === undefined) {
-			continue;
-		}
-		if (settled.kind === 'delta_unusable') {
-			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
-		}
-		if (settled.kind === 'retry_limit') {
-			const alone = await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input);
-			return (
-				(alone.kind === 'checked'
-					? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
-					: undefined) ?? settled
-			);
-		}
-		return settled;
-	}
-	return (
-		settleAuthenticatedCrlOutcome(
-			await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input),
-			baseCrl.thisUpdate,
-			state,
-		) ?? { kind: 'unusable_base' }
+	const outcome = await checkCertificateRevocationAgainstCrlsBy(
+		cert,
+		baseCrl,
+		deltaCrls,
+		candidate,
+		{
+			at,
+			...(crlMaxAgeMs === undefined ? {} : { maxAgeMs: crlMaxAgeMs }),
+			...(clockSkewMs === undefined ? {} : { clockSkewMs }),
+			unrecognizedReasonCode,
+			unreadSupersededDeltaCrls,
+		},
+		verification,
+		budgets,
 	);
-}
-
-/**
- * The base CRL's revocation of `cert` in `complete` when no delta CRL could
- * remove it at `at`. RFC 5280 §5.3.1 lets removeFromCRL clear only a
- * certificateHold entry or a certificate that has expired.
- */
-function irremovableRevocation(
-	cert: ParsedCertificate,
-	complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>,
-	at: Date,
-	crlThisUpdate: Date,
-): DeltaCandidateOutcome | undefined {
-	if (
-		cert.notAfter.getTime() < at.getTime() ||
-		!complete.ok ||
-		complete.value.status !== 'revoked' ||
-		complete.value.reasonCode === 'certificateHold'
-	) {
-		return undefined;
+	if (outcome.kind === 'unsettled') {
+		return outcome.reason === 'retry_limit' ? { kind: 'retry_limit' } : { kind: 'delta_unusable' };
 	}
-	return { kind: 'checked', checked: complete, crlThisUpdate };
-}
-
-/** Spends one delta CRL check from every budget, or none when any is empty. */
-function takeDeltaCrlAttempt(budgets: readonly DeltaCrlBudget[]): boolean {
-	if (budgets.some((budget) => budget.remaining <= 0)) {
-		return false;
+	const result = outcome.result;
+	if (!result.ok) {
+		if (result.code === 'stale_crl') state.sawStaleCrl = true;
+		return result.code === 'reason_code_unrecognized'
+			? { kind: 'reason_code_unrecognized' }
+			: { kind: 'unusable_base' };
 	}
-	for (const budget of budgets) {
-		budget.remaining -= 1;
-	}
-	return true;
-}
-
-/** Maps one staged CRL check to the search outcome, or `undefined` to try the next delta CRL. */
-function settleAuthenticatedCrlOutcome(
-	outcome: AuthenticatedCrlCheckOutcome,
-	crlThisUpdate: Date,
-	state: CrlEvidenceState,
-): DeltaCandidateOutcome | undefined {
-	if (outcome.kind === 'delta_unresolved') {
-		return { kind: 'delta_unusable', complete: outcome.complete };
-	}
-	const result = outcome.kind === 'checked' ? outcome.result : outcome.failure;
-	if (!result.ok && result.code === 'stale_crl') {
-		state.sawStaleCrl = true;
-	}
-	if (!result.ok && result.code === 'reason_code_unrecognized') {
-		return { kind: 'reason_code_unrecognized' };
-	}
-	if (outcome.kind === 'delta_rejected') {
-		return undefined;
-	}
-	return result.ok
-		? { kind: 'checked', checked: result, crlThisUpdate }
-		: { kind: 'unusable_base' };
-}
-
-function isNewerDeltaCrl(
-	candidate: ParsedCertificateRevocationList,
-	current: ParsedCertificateRevocationList,
-): boolean {
-	const candidateTime = candidate.thisUpdate.getTime();
-	const currentTime = current.thisUpdate.getTime();
-	if (candidateTime !== currentTime) return candidateTime > currentTime;
-	return (candidate.crlNumber ?? 0n) > (current.crlNumber ?? 0n);
+	return {
+		kind: 'checked',
+		checked: result,
+		crlThisUpdate:
+			outcome.deltaCrl === undefined
+				? baseCrl.thisUpdate
+				: laterEvidenceDate(baseCrl.thisUpdate, outcome.deltaCrl.thisUpdate),
+	};
 }
 
 /** The direct issuer first, then deduplicated indirect CRL-issuer candidates. */
 function collectCrlSignerCandidates(
 	baseCrl: ParsedCertificateRevocationList,
-	issuer: ParsedCertificate,
+	issuer: RevocationIssuer,
 	extraCertificates: readonly RevocationCertificateSource[],
 	chain: readonly ParsedCertificate[],
-): readonly ParsedCertificate[] {
-	const candidates: ParsedCertificate[] = [issuer];
-	for (const indirect of findIndirectCrlIssuers(baseCrl, extraCertificates, chain)) {
-		if (!candidates.some((existing) => sameCertificate(existing, indirect))) {
-			candidates.push(indirect);
+	trustAnchor: TrustAnchor | undefined,
+): readonly RevocationIssuer[] {
+	const candidates: RevocationIssuer[] = [issuer];
+	const push = (candidate: RevocationIssuer): void => {
+		if (!candidates.some((existing) => sameIssuer(existing, candidate))) {
+			candidates.push(candidate);
 		}
+	};
+	for (const indirect of findIndirectCrlIssuers(baseCrl, extraCertificates, chain)) {
+		push(issuerOf(indirect, trustAnchor));
+	}
+	if (trustAnchor !== undefined && compareDistinguishedNames(baseCrl.issuer, trustAnchor.subject)) {
+		push({ kind: 'trust_anchor', trustAnchor });
 	}
 	return candidates;
 }
 
 function recordGoodCrlEvidence(
 	state: CrlEvidenceState,
-	signer: ParsedCertificate,
+	signer: RevocationIssuer,
 	thisUpdate: Date,
 	coveredReasons: readonly DistributionPointReason[],
 ): void {
@@ -1650,13 +1866,13 @@ const GOOD_BLOCKING_REASONS: ReadonlySet<RevocationIndeterminateReason> = new Se
  */
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
-	issuer: ParsedCertificate,
+	issuer: RevocationIssuer,
 	input: CheckChainRevocationInput,
 	signerCtx: SignerValidationContext,
 	deltaBudget: DeltaCrlBudget,
 ): Promise<EvidenceEvaluation> {
 	const prefer = input.policy?.prefer ?? 'best-available';
-	const ocsp = await evaluateOcspEvidence(cert, issuer, input);
+	const ocsp = await evaluateOcspEvidence(cert, issuer, input, signerCtx);
 	const crl = await evaluateCrlEvidence(cert, issuer, input, signerCtx, deltaBudget);
 	const executionErrors = [...ocsp.executionErrors, ...crl.executionErrors];
 
@@ -1701,17 +1917,56 @@ async function evaluateCertificateRevocation(
 }
 
 /**
+ * @throws RangeError when `trustAnchor` did not issue the last certificate of
+ * `chain`, or that certificate is the anchor's own.
+ */
+function assertIssuedByTrustAnchor(
+	chain: readonly ParsedCertificate[],
+	trustAnchor: TrustAnchor | undefined,
+): void {
+	const top = chain[chain.length - 1];
+	if (trustAnchor === undefined || top === undefined) return;
+	if (carriesTrustAnchorKey(top, trustAnchor)) {
+		throw new RangeError('chain ends with the trust anchor certificate; omit it or trustAnchor');
+	}
+	if (!compareDistinguishedNames(top.issuer, trustAnchor.subject)) {
+		throw new RangeError('trustAnchor does not name the issuer of the last chain certificate');
+	}
+}
+
+/** The issuer of `chain[index]`: the next chain certificate, or the bare anchor above the last. */
+function issuerAt(
+	chain: readonly ParsedCertificate[],
+	index: number,
+	trustAnchor: TrustAnchor | undefined,
+): RevocationIssuer | undefined {
+	const next = chain[index + 1];
+	if (next !== undefined) return { kind: 'certificate', certificate: next };
+	return trustAnchor === undefined ? undefined : { kind: 'trust_anchor', trustAnchor };
+}
+
+/**
+ * Each certificate of `chain` that has an issuer, with that issuer. Without
+ * `trustAnchor` the last certificate is the anchor and has none.
+ */
+function certificatesWithIssuers(
+	chain: readonly ParsedCertificate[],
+	trustAnchor: TrustAnchor | undefined,
+): readonly { readonly cert: ParsedCertificate; readonly issuer: RevocationIssuer }[] {
+	return chain.flatMap((cert, index) => {
+		const issuer = issuerAt(chain, index, trustAnchor);
+		return issuer === undefined ? [] : [{ cert, issuer }];
+	});
+}
+
+/**
  * RFC 9608 §4: path validation skips RFC 5280 §6.1.3 step (a)(3) for a
  * certificate carrying noRevAvail or id-pkix-ocsp-nocheck, read from its
  * signed DER.
  */
-function revocationSkipReason(
-	certificate: ParsedCertificate,
-): 'no_rev_avail' | 'ocsp_nocheck' | undefined {
+function revocationSkipReason(certificate: ParsedCertificate): RevocationSkipReason | undefined {
 	const signed = parseCertificateDer(certificate.der);
-	if (!signed.ok) return undefined;
-	if (signed.value.noRevAvail === true) return 'no_rev_avail';
-	return carriesOcspNoCheck(signed.value) ? 'ocsp_nocheck' : undefined;
+	return signed.ok ? revocationSkipReasonOf(signed.value) : undefined;
 }
 
 // Function
@@ -1720,7 +1975,8 @@ function revocationSkipReason(
  * Checks revocation status for all certificates in a validated chain.
  *
  * Evaluates CRL and OCSP evidence against each certificate (except the trust
- * anchor), applies the revocation policy, and returns a unified decision. A
+ * anchor at the end of `chain`; with `trustAnchor`, every certificate), applies
+ * the revocation policy, and returns a unified decision. A
  * certificate carrying noRevAvail or id-pkix-ocsp-nocheck is reported as
  * `skipped` without consulting evidence (RFC 9608 §4).
  *
@@ -1740,8 +1996,58 @@ function revocationSkipReason(
 export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
-	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
+	return await checkChainRevocationAt({ ...input, at: input.at ?? new Date() });
+}
+
+/**
+ * The signer validation state shared by every certificate check of one
+ * {@linkcode checkChainRevocation} call, with its delta CRL budget and the
+ * caller's distrust list as it stood when the call began.
+ */
+function signerValidationContext(
+	input: CheckChainRevocationInput & { readonly at: Date },
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+): SignerValidationContext {
+	const { chain, policy } = input;
+	const pathKeys = new Map<string, WorkingPublicKey>();
+	const chainKeys = chainWorkingKeys(
+		chain,
+		input.trustAnchor === undefined ? undefined : anchorWorkingKey(input.trustAnchor),
+	);
+	return {
+		cache: new Map(),
+		chain,
+		crls: input.crls ?? [],
+		extraCertificates: input.extraCertificates ?? [],
+		at: input.at,
+		crlMaxAgeMs: policy?.crlMaxAgeMs,
+		clockSkewMs: policy?.clockSkewMs,
+		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
+		crlSignerSelfEvidence: policy?.crlSignerSelfEvidence ?? 'delegated',
+		unreadSupersededDeltaCrls: policy?.unreadSupersededDeltaCrls ?? 'indeterminate',
+		signatureVerifiers: input.signatureVerifiers,
+		distrustedSpkiSha256:
+			input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256],
+		verifiers,
+		deltaBudget: { remaining: DELTA_CRL_ATTEMPTS_PER_CALL },
+		workingKeyOf: (certificate) =>
+			pathKeys.get(certCacheKey(certificate)) ?? chainKeys(certificate),
+		pathKeys,
+		pathIssuers: new Map(),
+		trustAnchor: input.trustAnchor,
+	};
+}
+
+/** {@linkcode checkChainRevocation} with its evaluation time resolved once for every check. */
+async function checkChainRevocationAt(
+	input: CheckChainRevocationInput & { readonly at: Date },
+): Promise<CheckChainRevocationResult> {
+	const { chain, policy } = input;
 	assertCrlMaxAge(policy?.crlMaxAgeMs);
+	assertClockSkew(policy?.clockSkewMs);
+	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
+	createSpkiDistrustCheck(input.distrustedSpkiSha256);
+	assertIssuedByTrustAnchor(chain, input.trustAnchor);
 	const mode = policy?.mode ?? 'hard-fail';
 
 	// Empty chain → allow
@@ -1756,34 +2062,15 @@ export async function checkChainRevocation(
 		};
 	}
 
-	// Create signer validation context with memoization cache
-	// This cache is shared across all certificate checks in this chain evaluation
-	const signerCtx: SignerValidationContext = {
-		cache: new Map(),
-		chain,
-		crls,
-		extraCertificates,
-		at,
-		crlMaxAgeMs: policy?.crlMaxAgeMs,
-		clockSkewMs: policy?.clockSkewMs,
-		unrecognizedReasonCode: policy?.unrecognizedReasonCode ?? 'revoked',
-	};
-	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
+	const signerCtx = signerValidationContext(input, verifiers);
+	const deltaBudget = signerCtx.deltaBudget;
 
-	// Skip trust anchor (last cert) — it's the trust base
-	const certsToCheck = chain.slice(0, -1);
 	const certificates: CertificateRevocationStatus[] = [];
 	const revokedCertificates: ParsedCertificate[] = [];
 	const indeterminateCertificates: ParsedCertificate[] = [];
 	const allExecutionErrors: RevocationExecutionError[] = [];
 
-	for (let i = 0; i < certsToCheck.length; i++) {
-		const cert = certsToCheck[i];
-		const issuer = chain[i + 1]; // Next cert in chain is the issuer
-		if (cert === undefined || issuer === undefined) {
-			continue; // Should never happen given loop bounds
-		}
-
+	for (const { cert, issuer } of certificatesWithIssuers(chain, input.trustAnchor)) {
 		const skipReason = revocationSkipReason(cert);
 		if (skipReason !== undefined) {
 			certificates.push({ certificate: cert, status: 'skipped', skipReason });

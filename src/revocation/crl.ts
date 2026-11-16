@@ -15,10 +15,10 @@ import {
 	decodeNonNegativeIntegerBigInt,
 	decodeObjectIdentifier,
 	decodeString,
-	extractBitStringValue,
 	hexToBytes,
 	parseTime,
 	requireElement,
+	signatureBits,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
@@ -48,7 +48,12 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import type { CallerVerification, SignatureVerifiers } from '#micro509/internal/crypto/sig-verify';
+import {
+	callerVerification,
+	NO_CALLER_VERIFICATION,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
@@ -67,18 +72,14 @@ import {
 import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type {
-	DecodeFailureCode,
-	DecodeRefusalCode,
-	ErrorResult,
-	Micro509Error,
-} from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
 	successResult,
 	throwMicro509Error,
 } from '#micro509/result/result';
+import type { TrustAnchor } from '#micro509/verify/verify';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -167,6 +168,22 @@ export type ParsedRevocationReason = RevocationReason | UnrecognizedRevocationRe
 export type UnrecognizedReasonCodePolicy = 'revoked' | 'reject';
 
 /**
+ * Treatment of delta CRLs that the attempt limits leave unread when a delta
+ * CRL already read supersedes them by both `thisUpdate` and CRL number. RFC
+ * 5280 §5.2.4 has a relying party use the most recent delta CRL, and §3.3 and
+ * §5.3.1 keep a lasting revocation listed in every later CRL, so reading the
+ * older ones is a check on the issuer's consistency.
+ *
+ * - `'indeterminate'`: any unread candidate leaves the status
+ *   `delta_crl_retry_limit_exceeded`, unless a revocation no delta CRL can
+ *   remove already settled it (default).
+ * - `'ignore'`: an unread candidate does not count when the delta CRL that
+ *   settled the status as good supersedes it, or, without a good status, when
+ *   it is not current and a delta CRL read supersedes it.
+ */
+export type SupersededDeltaCrlPolicy = 'indeterminate' | 'ignore';
+
+/**
  * Input for {@linkcode createCertificateRevocationList}.
  */
 export interface CreateCertificateRevocationListInput {
@@ -239,8 +256,10 @@ export interface ParsedCertificateRevocationList {
 	readonly version: number;
 	/** DER-encoded TBSCertList — the signed payload for signature verification. */
 	readonly tbsCertListDer: Uint8Array;
-	/** Raw signature bytes from the CRL outer wrapper. */
+	/** Signature bytes: the `signatureValue` BIT STRING content after its unused-bit count. */
 	readonly signatureValue: Uint8Array;
+	/** Unused bits in the final octet of {@linkcode signatureValue}, 0 through 7. */
+	readonly signatureValueUnusedBits: number;
 	/** CRL issuer distinguished name. */
 	readonly issuer: ParsedName;
 	/** Issue date of this CRL. */
@@ -296,7 +315,7 @@ export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
  * (see {@linkcode ParseCertificateRevocationListErrorCode}).
  */
 export interface VerifyCertificateRevocationListSignatureFailure
-	extends Micro509Error<'signature_invalid' | DecodeRefusalCode> {
+	extends Micro509Error<'signature_invalid' | DecodeFailureCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -313,10 +332,23 @@ export type VerifyCertificateRevocationListSignatureResult =
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| ErrorResult<
-			'signature_invalid' | DecodeRefusalCode,
+			'signature_invalid' | DecodeFailureCode,
 			Record<never, never>,
 			VerifyCertificateRevocationListSignatureFailure
 	  >;
+
+/** Options for {@linkcode verifyCertificateRevocationListSignature}. */
+export interface VerifyCertificateRevocationListSignatureOptions {
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the CRL signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the issuer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
 
 /**
  * Input for {@linkcode validateCertificateRevocationList}.
@@ -330,7 +362,8 @@ export interface ValidateCertificateRevocationListInput {
 	readonly at?: Date;
 	/**
 	 * Tolerance in milliseconds for clock skew when checking `thisUpdate` and
-	 * `nextUpdate`. It also widens `maxAgeMs` by the same amount.
+	 * `nextUpdate`. It also widens `maxAgeMs` by the same amount. Throws
+	 * `RangeError` when negative or not finite.
 	 */
 	readonly clockSkewMs?: number;
 	/**
@@ -338,9 +371,20 @@ export interface ValidateCertificateRevocationListInput {
 	 * this fails with `stale_crl` even when `nextUpdate` is absent or later.
 	 * Unbounded by default, in which case a CRL without `nextUpdate` fails with
 	 * `stale_crl`. RFC 5280 §3.3 leaves the required recency of revocation data
-	 * to local policy.
+	 * to local policy. {@linkcode checkCertificateRevocationAgainstCrl} still
+	 * reports a revocation such a CRL lists with a reason other than
+	 * certificateHold, for a certificate that has not expired (RFC 5280 §5.3.1).
 	 */
 	readonly maxAgeMs?: number;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the CRL signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the issuer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /**
@@ -355,7 +399,7 @@ export interface ValidateCertificateRevocationListFailure
 		| 'issuer_mismatch'
 		| 'stale_crl'
 		| 'crl_sign_not_permitted'
-		| DecodeRefusalCode
+		| DecodeFailureCode
 	> {
 	/** Always `false` for failures. */
 	readonly ok: false;
@@ -377,7 +421,7 @@ export type ValidateCertificateRevocationListResult =
 			| 'issuer_mismatch'
 			| 'stale_crl'
 			| 'crl_sign_not_permitted'
-			| DecodeRefusalCode,
+			| DecodeFailureCode,
 			Record<never, never>,
 			ValidateCertificateRevocationListFailure
 	  >;
@@ -402,7 +446,10 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly deltaCrl?: CrlSource;
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds for freshness checks. It also widens `maxAgeMs`. */
+	/**
+	 * Clock-skew tolerance in milliseconds for freshness checks. It also widens
+	 * `maxAgeMs`. Throws `RangeError` when negative or not finite.
+	 */
 	readonly clockSkewMs?: number;
 	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly maxAgeMs?: number;
@@ -411,6 +458,15 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	 * fails the check with `reason_code_unrecognized`. Defaults to `'revoked'`.
 	 */
 	readonly unrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the CRL signature would otherwise use unsupported algorithm
+	 * parameters, with the parameters in the issuer certificate. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocationAgainstCrl} may return. */
@@ -421,7 +477,7 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'crl_sign_not_permitted'
 	| 'non_applicable'
 	| 'reason_code_unrecognized'
-	| DecodeRefusalCode;
+	| DecodeFailureCode;
 
 /** Structured reason why a CRL was deemed non-applicable to a given certificate. */
 export type CrlApplicabilityFailureReason =
@@ -736,7 +792,7 @@ export function parseCertificateRevocationListDerOrThrow(
 		der: new Uint8Array(der),
 		version: signedFields.version,
 		tbsCertListDer: der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
-		signatureValue: extractBitStringValue(signatureValue),
+		...signatureBits(signatureValue),
 		issuer: signedFields.issuer,
 		thisUpdate: signedFields.thisUpdate,
 		...(signedFields.nextUpdate === undefined ? {} : { nextUpdate: signedFields.nextUpdate }),
@@ -827,7 +883,9 @@ export function parseCertificateRevocationListPem(
 export async function verifyCertificateRevocationListSignature(
 	crl: string | Uint8Array,
 	issuerCertificate: string | Uint8Array,
+	options: VerifyCertificateRevocationListSignatureOptions = {},
 ): Promise<VerifyCertificateRevocationListSignatureResult> {
+	const verification = callerVerification(options.signatureVerifiers);
 	let parsedCrl: ParsedCertificateRevocationList;
 	let issuer: ParsedCertificate;
 	try {
@@ -843,7 +901,7 @@ export async function verifyCertificateRevocationListSignature(
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? verifyCertificateRevocationListFailureResult(
-					'signature_invalid',
+					'malformed',
 					'certificate revocation list or issuer certificate input is malformed',
 				)
 			: verifyCertificateRevocationListFailureResult(refusal.code, refusal.message);
@@ -857,7 +915,9 @@ export async function verifyCertificateRevocationListSignature(
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
 			parsedCrl.signatureValue,
+			parsedCrl.signatureValueUnusedBits,
 			parsedCrl.tbsCertListDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
@@ -899,8 +959,30 @@ export async function verifyCertificateRevocationListSignature(
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
 ): Promise<ValidateCertificateRevocationListResult> {
+	return await validateCrlWith(input, callerVerification(input.signatureVerifiers));
+}
+
+/** {@linkcode validateCertificateRevocationList} with resolved caller verification. */
+async function validateCrlWith(
+	input: ValidateCertificateRevocationListInput,
+	verification: CallerVerification,
+): Promise<ValidateCertificateRevocationListResult> {
+	return await validateCrlBy(
+		input,
+		{ kind: 'certificate', certificate: input.issuerCertificate },
+		verification,
+	);
+}
+
+/** {@linkcode validateCertificateRevocationList} for a CRL that `authority` signs. */
+async function validateCrlBy(
+	input: Omit<ValidateCertificateRevocationListInput, 'issuerCertificate'>,
+	authority: CrlAuthority,
+	verification: CallerVerification,
+): Promise<ValidateCertificateRevocationListResult> {
 	assertCrlMaxAge(input.maxAgeMs);
-	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
+	assertClockSkew(input.clockSkewMs);
+	const authenticated = await authenticateCrl(input.crl, authority, verification);
 	if (!authenticated.ok) {
 		return authenticated;
 	}
@@ -916,14 +998,36 @@ export async function validateCertificateRevocationList(
 }
 
 /**
+ * The key that signs a CRL: a CA certificate, or a bare trust anchor, which
+ * X.509 (2019) §7.5 lets issue CRLs that its own key verifies.
+ *
+ * @internal
+ */
+export type CrlAuthority =
+	| { readonly kind: 'certificate'; readonly certificate: CrlCertificateSource }
+	| { readonly kind: 'trust_anchor'; readonly trustAnchor: TrustAnchor };
+
+/** The signing key of a resolved {@linkcode CrlAuthority}. */
+type CrlSigningKey = Pick<
+	TrustAnchor,
+	| 'subject'
+	| 'subjectKeyIdentifier'
+	| 'subjectPublicKeyInfoDer'
+	| 'publicKeyAlgorithmOid'
+	| 'publicKeyParametersOid'
+>;
+
+/**
  * Verifies the issuer binding, cRLSign permission and signature of `crl`
- * against `issuerCertificate`, without freshness checks.
+ * against `authority`, without freshness checks. A trust anchor carries no
+ * certificate, so the RFC 10007 §4 key usage check applies to certificates only.
  *
  * @internal
  */
 export async function authenticateCrl(
 	crl: CrlSource,
-	issuerCertificate: CrlCertificateSource,
+	authority: CrlAuthority,
+	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<ValidateCertificateRevocationListResult> {
 	let parsedCrl: ParsedCertificateRevocationList;
 	try {
@@ -932,23 +1036,14 @@ export async function authenticateCrl(
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? validateCertificateRevocationListFailureResult(
-					'signature_invalid',
+					'malformed',
 					'certificate revocation list signed content is malformed',
 				)
 			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
-	let issuer: ParsedCertificate;
-	try {
-		issuer = normalizeCrlCertificate(issuerCertificate);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		return refusal === undefined
-			? validateCertificateRevocationListFailureResult(
-					'signature_invalid',
-					'issuer certificate input is malformed',
-				)
-			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
-	}
+	const resolved = resolveCrlSigningKey(authority);
+	if (!resolved.ok) return resolved;
+	const { issuer, issuerCertificate } = resolved;
 	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
 			'issuer_mismatch',
@@ -965,18 +1060,9 @@ export async function authenticateCrl(
 			'CRL authority key identifier does not match issuer subject key identifier',
 		);
 	}
-	if (issuer.keyUsage === undefined && issuer.version === 3) {
-		return validateCertificateRevocationListFailureResult(
-			'crl_sign_not_permitted',
-			'v3 issuer certificate has no key usage extension',
-		);
-	}
-	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('cRLSign')) {
-		return validateCertificateRevocationListFailureResult(
-			'crl_sign_not_permitted',
-			'issuer certificate key usage does not permit CRL signing',
-		);
-	}
+	const keyUsageFailure =
+		issuerCertificate === undefined ? undefined : crlSignFailure(issuerCertificate);
+	if (keyUsageFailure !== undefined) return keyUsageFailure;
 	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
 	try {
 		verifiedResult = await verifySignedDataDetailed(
@@ -986,7 +1072,9 @@ export async function authenticateCrl(
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
 			parsedCrl.signatureValue,
+			parsedCrl.signatureValueUnusedBits,
 			parsedCrl.tbsCertListDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
@@ -1018,9 +1106,59 @@ export async function authenticateCrl(
 	return { ok: true, value: parsedCrl };
 }
 
+/** The signing key `authority` names, with its certificate when it has one. */
+function resolveCrlSigningKey(authority: CrlAuthority):
+	| {
+			readonly ok: true;
+			readonly issuer: CrlSigningKey;
+			readonly issuerCertificate: ParsedCertificate | undefined;
+	  }
+	| Extract<ValidateCertificateRevocationListResult, { readonly ok: false }> {
+	if (authority.kind === 'trust_anchor') {
+		return { ok: true, issuer: authority.trustAnchor, issuerCertificate: undefined };
+	}
+	try {
+		const issuerCertificate = normalizeCrlCertificate(authority.certificate);
+		return { ok: true, issuer: issuerCertificate, issuerCertificate };
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'malformed',
+					'issuer certificate input is malformed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
+	}
+}
+
+/** RFC 10007 §4: a v3 CRL issuer certificate must carry key usage asserting cRLSign. */
+function crlSignFailure(
+	issuer: ParsedCertificate,
+): Extract<ValidateCertificateRevocationListResult, { readonly ok: false }> | undefined {
+	if (issuer.keyUsage === undefined && issuer.version === 3) {
+		return validateCertificateRevocationListFailureResult(
+			'crl_sign_not_permitted',
+			'v3 issuer certificate has no key usage extension',
+		);
+	}
+	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('cRLSign')) {
+		return validateCertificateRevocationListFailureResult(
+			'crl_sign_not_permitted',
+			'issuer certificate key usage does not permit CRL signing',
+		);
+	}
+	return undefined;
+}
+
 export function assertCrlMaxAge(maxAgeMs: number | undefined): void {
 	if (maxAgeMs !== undefined && (!Number.isFinite(maxAgeMs) || maxAgeMs < 0)) {
 		throw new RangeError(`Invalid maxAgeMs: must be a non-negative number, got ${maxAgeMs}`);
+	}
+}
+
+export function assertClockSkew(clockSkewMs: number | undefined): void {
+	if (clockSkewMs !== undefined && (!Number.isFinite(clockSkewMs) || clockSkewMs < 0)) {
+		throw new RangeError(`Invalid clockSkewMs: must be a non-negative number, got ${clockSkewMs}`);
 	}
 }
 
@@ -1045,16 +1183,20 @@ function crlFreshnessFailure(
 	return undefined;
 }
 
-export function isCurrentDeltaCrl(
+function deltaCrlFreshnessFailure(
 	deltaCrl: ParsedCertificateRevocationList,
 	at: Date,
 	skew: number,
 	maxAgeMs: number | undefined,
-): boolean {
-	return (
-		deltaCrl.nextUpdate !== undefined &&
-		crlFreshnessFailure(deltaCrl, at, skew, maxAgeMs) === undefined
-	);
+): string | undefined {
+	return deltaCrl.nextUpdate === undefined
+		? 'delta CRL has no nextUpdate'
+		: crlFreshnessFailure(deltaCrl, at, skew, maxAgeMs);
+}
+
+/** Whether `crl` was issued by `at`, so its entries record revocations known then. */
+function isIssuedCrl(crl: ParsedCertificateRevocationList, at: Date, skew: number): boolean {
+	return crl.thisUpdate.getTime() - skew <= at.getTime();
 }
 
 /**
@@ -1082,7 +1224,24 @@ export function isCurrentDeltaCrl(
 export async function checkCertificateRevocationAgainstCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
 ): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	return await checkCertificateRevocationAgainstCrlWith(
+		input,
+		callerVerification(input.signatureVerifiers),
+	);
+}
+
+/**
+ * {@linkcode checkCertificateRevocationAgainstCrl} with resolved caller
+ * verification, which can carry the issuer's inherited key parameters.
+ *
+ * @internal
+ */
+export async function checkCertificateRevocationAgainstCrlWith(
+	input: CheckCertificateRevocationAgainstCrlInput,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
 	assertCrlMaxAge(input.maxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	let certificate: ParsedCertificate;
 	try {
 		certificate = normalizeCrlCertificate(input.certificate);
@@ -1090,12 +1249,34 @@ export async function checkCertificateRevocationAgainstCrl(
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? checkCertificateRevocationAgainstCrlFailureResult(
-					'non_applicable',
+					'malformed',
 					'certificate input is malformed',
 				)
 			: checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 	}
-	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
+	return await checkCertificateRevocationAgainstCrlBy(
+		certificate,
+		input.crl,
+		{ kind: 'certificate', certificate: input.issuerCertificate },
+		input,
+		verification,
+	);
+}
+
+/**
+ * {@linkcode checkCertificateRevocationAgainstCrl} for a CRL that `authority`
+ * signs, which may be a bare trust anchor.
+ *
+ * @internal
+ */
+export async function checkCertificateRevocationAgainstCrlBy(
+	certificate: ParsedCertificate,
+	crl: CrlSource,
+	authority: CrlAuthority,
+	options: CrlCheckOptions,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	const authenticated = await authenticateCrl(crl, authority, verification);
 	if (!authenticated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(
 			authenticated.code,
@@ -1105,24 +1286,60 @@ export async function checkCertificateRevocationAgainstCrl(
 	const outcome = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
 		authenticated.value,
-		input,
+		authority,
+		options,
+		verification,
 	);
-	return outcome.kind === 'checked' ? outcome.result : outcome.failure;
+	if (outcome.kind === 'checked') return outcome.result;
+	const complete =
+		outcome.kind === 'delta_unresolved'
+			? outcome.complete
+			: await checkCompleteCrlAlone(
+					certificate,
+					authenticated.value,
+					authority,
+					options,
+					verification,
+				);
+	if (outcome.kind === 'delta_stale') return complete;
+	return (
+		irremovableCrlRevocation(certificate, complete, options.at ?? new Date()) ?? outcome.failure
+	);
+}
+
+/** {@linkcode checkRevocationAgainstAuthenticatedCrl} on `completeCrl` without its delta CRL. */
+async function checkCompleteCrlAlone(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	authority: CrlAuthority,
+	options: CrlCheckOptions,
+	verification: CallerVerification,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	const { deltaCrl: _deltaCrl, ...completeOnly } = options;
+	const alone = await checkRevocationAgainstAuthenticatedCrl(
+		certificate,
+		completeCrl,
+		authority,
+		completeOnly,
+		verification,
+	);
+	return alone.kind === 'checked' ? alone.result : alone.failure;
 }
 
 /**
  * Result of {@linkcode checkRevocationAgainstAuthenticatedCrl}, keyed by the
  * stage that settled it. `delta_rejected` means the delta CRL failed
  * authentication, freshness, compatibility or applicability;
+ * `delta_stale` means it passed them except freshness and records no
+ * revocation that stands, so it settles nothing;
  * `delta_unresolved` means it passed them and its revoked entries could not
  * settle the certificate's status; `complete` is then the complete CRL's own
  * result, without its freshness check.
- *
- * @internal
  */
-export type AuthenticatedCrlCheckOutcome =
+type AuthenticatedCrlCheckOutcome =
 	| { readonly kind: 'checked'; readonly result: CheckCertificateRevocationAgainstCrlResult }
 	| { readonly kind: 'delta_rejected'; readonly failure: CrlApplicabilityFailure }
+	| { readonly kind: 'delta_stale'; readonly failure: CrlApplicabilityFailure }
 	| {
 			readonly kind: 'delta_unresolved';
 			readonly failure: CrlApplicabilityFailure;
@@ -1130,15 +1347,25 @@ export type AuthenticatedCrlCheckOutcome =
 	  };
 
 /**
- * Checks `certificate` against a complete CRL that {@linkcode authenticateCrl}
- * accepted for `input.issuerCertificate`, updated by `input.deltaCrl` when given.
- *
- * @internal
+ * The options of a CRL check once its certificate, CRL and authority are
+ * resolved. `unreadSupersededDeltaCrls` applies when
+ * {@linkcode checkCertificateRevocationAgainstCrlsBy} runs out of attempts.
  */
-export async function checkRevocationAgainstAuthenticatedCrl(
+export type CrlCheckOptions = Omit<
+	CheckCertificateRevocationAgainstCrlInput,
+	'certificate' | 'issuerCertificate' | 'crl'
+> & { readonly unreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy };
+
+/**
+ * Checks `certificate` against a complete CRL that {@linkcode authenticateCrl}
+ * accepted for `authority`, updated by `input.deltaCrl` when given.
+ */
+async function checkRevocationAgainstAuthenticatedCrl(
 	certificate: ParsedCertificate,
 	completeCrl: ParsedCertificateRevocationList,
-	input: CheckCertificateRevocationAgainstCrlInput,
+	authority: CrlAuthority,
+	input: CrlCheckOptions,
+	verification: CallerVerification = callerVerification(input.signatureVerifiers),
 ): Promise<AuthenticatedCrlCheckOutcome> {
 	if (input.deltaCrl === undefined) {
 		const freshnessFailure = crlFreshnessFailure(
@@ -1150,12 +1377,26 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 		if (freshnessFailure !== undefined) {
 			return {
 				kind: 'checked',
-				result: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+				result: staleCompleteCrlResult(
+					certificate,
+					completeCrl,
+					checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+					input,
+				),
 			};
 		}
 	}
-	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl);
+	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl, authority, verification);
 	if (!deltaResult.ok) return { kind: 'delta_rejected', failure: deltaResult };
+	if (deltaResult.value !== undefined && deltaResult.stale !== undefined) {
+		return staleDeltaCrlOutcome(
+			certificate,
+			completeCrl,
+			deltaResult.value,
+			deltaResult.stale,
+			input,
+		);
+	}
 	const deltaCrl = deltaResult.value;
 	const applicability = checkCrlApplicability(certificate, completeCrl);
 	if (!applicability.ok) return { kind: 'checked', result: applicability.failure };
@@ -1201,6 +1442,357 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 	};
 }
 
+/**
+ * A key equal for two CRLs exactly when their signed content and signature
+ * are equal.
+ *
+ * @internal
+ */
+export function signedCrlKey(crl: ParsedCertificateRevocationList): string {
+	return [
+		crl.signatureAlgorithmOid,
+		toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
+		toHex(crl.signatureValue),
+		crl.signatureValueUnusedBits,
+		toHex(crl.tbsCertListDer),
+	].join(':');
+}
+
+/**
+ * `crls` with each signed content and signature kept once.
+ *
+ * @internal
+ */
+export function distinctSignedCrls(
+	crls: readonly ParsedCertificateRevocationList[],
+): readonly ParsedCertificateRevocationList[] {
+	const seen = new Set<string>();
+	return crls.filter((crl) => {
+		const key = signedCrlKey(crl);
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
+}
+
+/** Delta CRLs micro509 tries per complete CRL, an implementation limit. */
+export const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
+
+/** Delta CRLs micro509 tries in one revocation check, an implementation limit. */
+export const DELTA_CRL_ATTEMPTS_PER_CALL = 32;
+
+/**
+ * Delta CRL checks left to spend across one revocation check, an
+ * implementation limit shared by every complete CRL it reads.
+ *
+ * @internal
+ */
+export interface DeltaCrlBudget {
+	remaining: number;
+}
+
+/**
+ * Every delta CRL that can update `baseCrl` and was issued by `at`, newest
+ * first. A delta CRL that is no longer current still settles a revocation no
+ * later CRL could remove (RFC 5280 §5.3.1), so currency does not move it
+ * behind older ones.
+ */
+function rankApplicableDeltaCrls(
+	baseCrl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+	at: Date,
+	clockSkewMs: number,
+): readonly ParsedCertificateRevocationList[] {
+	return deltaCrls
+		.filter(
+			(deltaCrl) =>
+				isCompatibleDeltaCrl(baseCrl, deltaCrl) && isIssuedCrl(deltaCrl, at, clockSkewMs),
+		)
+		.sort(compareDeltaCrlRecency);
+}
+
+/** Whether {@linkcode checkDeltaCrlCompatibility} accepts `deltaCrl` for `completeCrl`. */
+function isCompatibleDeltaCrl(
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList,
+): boolean {
+	try {
+		return checkDeltaCrlCompatibility(completeCrl, deltaCrl) === undefined;
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return false;
+	}
+}
+
+/**
+ * Orders delta CRLs newest first by `thisUpdate`, the key RFC 5280 §5.2.4
+ * names for the most current one, then by CRL number.
+ */
+function compareDeltaCrlRecency(
+	left: ParsedCertificateRevocationList,
+	right: ParsedCertificateRevocationList,
+): number {
+	const byTime = right.thisUpdate.getTime() - left.thisUpdate.getTime();
+	if (byTime !== 0) return byTime;
+	const leftNumber = left.crlNumber ?? 0n;
+	const rightNumber = right.crlNumber ?? 0n;
+	return leftNumber === rightNumber ? 0 : leftNumber < rightNumber ? 1 : -1;
+}
+
+/**
+ * Whether `newer` supersedes `older` by both its `thisUpdate` and its CRL
+ * number (RFC 5280 §5.2.3, §5.1.2.4). RFC 5280 leaves a pair whose keys
+ * disagree unspecified, and micro509 ranks such a pair alike.
+ */
+function supersedesDeltaCrl(
+	newer: ParsedCertificateRevocationList,
+	older: ParsedCertificateRevocationList,
+): boolean {
+	return (
+		newer.thisUpdate.getTime() > older.thisUpdate.getTime() &&
+		newer.crlNumber !== undefined &&
+		older.crlNumber !== undefined &&
+		newer.crlNumber > older.crlNumber
+	);
+}
+
+/**
+ * Result of {@linkcode checkCertificateRevocationAgainstCrlsBy}. `checked`
+ * names the delta CRL its result came from, if any. `unsettled` means an
+ * applicable delta CRL could not settle the status (`delta_unusable`), or the
+ * {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} limit or a shared
+ * {@linkcode DeltaCrlBudget} left a delta CRL unread that counts under
+ * `unreadSupersededDeltaCrls` (`retry_limit`). An unread delta CRL may then
+ * revoke the certificate, so the complete CRL's good is no evidence.
+ *
+ * @internal
+ */
+export type CrlsCheckOutcome =
+	| {
+			readonly kind: 'checked';
+			readonly result: CheckCertificateRevocationAgainstCrlResult;
+			readonly deltaCrl?: ParsedCertificateRevocationList;
+	  }
+	| { readonly kind: 'unsettled'; readonly reason: 'delta_unusable' | 'retry_limit' };
+
+/**
+ * Checks `certificate` against `completeCrl`, which `authority` signs, and
+ * the delta CRLs in `deltaCrls` that update it, newest first. A rejected
+ * delta CRL, or one past its `nextUpdate` that records no lasting revocation,
+ * passes the search to the next. The first current delta CRL settles the
+ * status, and one past its `nextUpdate` settles a revocation no later CRL
+ * could remove (RFC 5280 §5.3.1, §3.3). After a good status, older delta CRLs
+ * are still read for such a revocation the newer one omits. Each delta CRL
+ * check spends one from {@linkcode DELTA_CRL_ATTEMPTS_PER_BASE} and from every
+ * budget in `budgets`. When they leave a delta CRL unread, the outcome is
+ * `retry_limit` unless the complete CRL holds such a revocation. Under
+ * `unreadSupersededDeltaCrls: 'ignore'`, only an unread delta CRL that
+ * {@linkcode mayChangeSettledStatus} finds could change the status counts. A
+ * complete CRL that does not cover `certificate` spends none.
+ *
+ * @internal
+ */
+export async function checkCertificateRevocationAgainstCrlsBy(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+	authority: CrlAuthority,
+	options: CrlCheckOptions,
+	verification: CallerVerification,
+	budgets: readonly DeltaCrlBudget[] = [],
+): Promise<CrlsCheckOutcome> {
+	const authenticated = await authenticateCrl(completeCrl, authority, verification);
+	if (!authenticated.ok) {
+		return {
+			kind: 'checked',
+			result: checkCertificateRevocationAgainstCrlFailureResult(
+				authenticated.code,
+				authenticated.message,
+			),
+		};
+	}
+	const at = options.at ?? new Date();
+	const candidates = checkCrlApplicability(certificate, authenticated.value).ok
+		? rankApplicableDeltaCrls(authenticated.value, deltaCrls, at, options.clockSkewMs ?? 0)
+		: [];
+	const search: DeltaCrlSearch = { attempts: 0, unread: [] };
+	for (const [index, deltaCrl] of candidates.entries()) {
+		if (!spendDeltaCrlAttempt(search, budgets)) {
+			search.unread = candidates.slice(index);
+			break;
+		}
+		recordDeltaCrlOutcome(
+			search,
+			certificate,
+			deltaCrl,
+			await checkRevocationAgainstAuthenticatedCrl(
+				certificate,
+				authenticated.value,
+				authority,
+				{ ...options, deltaCrl },
+				verification,
+			),
+			at,
+		);
+		if (search.result !== undefined) return search.result;
+	}
+	const unreadMaySettle =
+		options.unreadSupersededDeltaCrls === 'ignore'
+			? search.unread.some((deltaCrl) => mayChangeSettledStatus(search, deltaCrl, at, options))
+			: search.unread.length > 0;
+	if (!unreadMaySettle && search.good !== undefined) return search.good;
+	const alone = await checkRevocationAgainstAuthenticatedCrl(
+		certificate,
+		authenticated.value,
+		authority,
+		options,
+		verification,
+	);
+	const aloneResult = alone.kind === 'checked' ? alone.result : alone.failure;
+	return unreadMaySettle
+		? settledOrUnsettled(irremovableCrlRevocation(certificate, aloneResult, at), 'retry_limit')
+		: { kind: 'checked', result: aloneResult };
+}
+
+/**
+ * Where {@linkcode checkCertificateRevocationAgainstCrlsBy} stands in its
+ * delta CRL candidates: `newest` is the first one examined that was not
+ * rejected, and `unread` the ones the limits left unread.
+ */
+interface DeltaCrlSearch {
+	attempts: number;
+	newest?: ParsedCertificateRevocationList;
+	unread: readonly ParsedCertificateRevocationList[];
+	good?: {
+		readonly kind: 'checked';
+		readonly result: CheckCertificateRevocationAgainstCrlResult;
+		readonly deltaCrl: ParsedCertificateRevocationList;
+	};
+	result?: CrlsCheckOutcome;
+}
+
+/**
+ * Whether reading the unread `deltaCrl` could change the status `search`
+ * reached by more than an older entry its newer delta CRLs omit. After a good
+ * status, only a delta CRL that the one settling it supersedes cannot.
+ * Otherwise only one that is not current and that a delta CRL examined
+ * supersedes cannot, since a current one settles the status.
+ */
+function mayChangeSettledStatus(
+	search: DeltaCrlSearch,
+	deltaCrl: ParsedCertificateRevocationList,
+	at: Date,
+	options: CrlCheckOptions,
+): boolean {
+	if (search.good !== undefined) return !supersedesDeltaCrl(search.good.deltaCrl, deltaCrl);
+	const current =
+		deltaCrlFreshnessFailure(deltaCrl, at, options.clockSkewMs ?? 0, options.maxAgeMs) ===
+		undefined;
+	return current || search.newest === undefined || !supersedesDeltaCrl(search.newest, deltaCrl);
+}
+
+/** Spends one delta CRL check from the per-base limit and every budget, or none when any is spent. */
+function spendDeltaCrlAttempt(search: DeltaCrlSearch, budgets: readonly DeltaCrlBudget[]): boolean {
+	if (
+		search.attempts >= DELTA_CRL_ATTEMPTS_PER_BASE ||
+		budgets.some((budget) => budget.remaining <= 0)
+	) {
+		return false;
+	}
+	search.attempts += 1;
+	for (const budget of budgets) budget.remaining -= 1;
+	return true;
+}
+
+/**
+ * Folds the outcome of `deltaCrl` into `search`. A delta CRL that the one
+ * settling the status as good supersedes only adds what
+ * {@linkcode olderDeltaRevocation} finds. Any other settles like the first,
+ * so two delta CRLs ranked alike that disagree yield the stricter result.
+ */
+function recordDeltaCrlOutcome(
+	search: DeltaCrlSearch,
+	certificate: ParsedCertificate,
+	deltaCrl: ParsedCertificateRevocationList,
+	outcome: AuthenticatedCrlCheckOutcome,
+	at: Date,
+): void {
+	if (outcome.kind === 'delta_rejected') return;
+	search.newest ??= deltaCrl;
+	if (search.good !== undefined && supersedesDeltaCrl(search.good.deltaCrl, deltaCrl)) {
+		search.result = olderDeltaRevocation(certificate, deltaCrl, outcome, at);
+		return;
+	}
+	if (outcome.kind === 'checked') {
+		if (!isGoodResult(outcome.result)) {
+			search.result = { kind: 'checked', result: outcome.result, deltaCrl };
+		} else {
+			search.good ??= { kind: 'checked', result: outcome.result, deltaCrl };
+		}
+	} else if (outcome.kind === 'delta_unresolved') {
+		search.result = settledOrUnsettled(
+			irremovableCrlRevocation(certificate, outcome.complete, at),
+			'delta_unusable',
+		);
+	}
+}
+
+function isGoodResult(result: CheckCertificateRevocationAgainstCrlResult): boolean {
+	return result.ok && result.value.status === 'good';
+}
+
+/**
+ * What an older delta CRL changes after a newer one settled the status as
+ * good: a revocation no later CRL may drop (RFC 5280 §5.3.1, §3.3), a
+ * failure such as an entry `unrecognizedReasonCode: 'reject'` refuses, or
+ * entries that cannot settle the status. A newer delta CRL that omits such an
+ * entry contradicts its issuer.
+ */
+function olderDeltaRevocation(
+	certificate: ParsedCertificate,
+	deltaCrl: ParsedCertificateRevocationList,
+	outcome: AuthenticatedCrlCheckOutcome,
+	at: Date,
+): CrlsCheckOutcome | undefined {
+	if (outcome.kind === 'delta_unresolved') {
+		return settledOrUnsettled(
+			irremovableCrlRevocation(certificate, outcome.complete, at),
+			'delta_unusable',
+		);
+	}
+	if (outcome.kind !== 'checked') return undefined;
+	if (!outcome.result.ok) return { kind: 'checked', result: outcome.result, deltaCrl };
+	const revoked = irremovableCrlRevocation(certificate, outcome.result, at);
+	return revoked === undefined ? undefined : { kind: 'checked', result: revoked, deltaCrl };
+}
+
+function settledOrUnsettled(
+	result: CheckCertificateRevocationAgainstCrlResult | undefined,
+	reason: Extract<CrlsCheckOutcome, { readonly kind: 'unsettled' }>['reason'],
+): CrlsCheckOutcome {
+	return result === undefined ? { kind: 'unsettled', reason } : { kind: 'checked', result };
+}
+
+/**
+ * `result` when it revokes `certificate` in a way no delta CRL could undo at
+ * `at`. RFC 5280 §5.3.1 lets removeFromCRL clear only a certificateHold entry
+ * or a certificate that has expired.
+ */
+function irremovableCrlRevocation(
+	certificate: ParsedCertificate,
+	result: CheckCertificateRevocationAgainstCrlResult,
+	at: Date,
+): Extract<CheckCertificateRevocationAgainstCrlResult, { readonly ok: true }> | undefined {
+	return certificate.notAfter.getTime() >= at.getTime() &&
+		result.ok &&
+		result.value.status === 'revoked' &&
+		result.value.reasonCode !== 'certificateHold'
+		? result
+		: undefined;
+}
+
 /** RFC 5280 §6.3.3 (d): interim_reasons_mask from the matched DP and the CRL's IDP. */
 function interimReasonsMask(
 	distributionPoint: ParsedDistributionPoint | undefined,
@@ -1220,48 +1812,134 @@ function interimReasonsMask(
 	return ALL_DISTRIBUTION_POINT_REASONS;
 }
 
-/** Validates an optional delta CRL and checks compatibility with its complete CRL. */
+/**
+ * Authenticates an optional delta CRL and checks compatibility with its
+ * complete CRL. A delta CRL issued by `input.at` but not current there comes
+ * back with the freshness failure as `stale`.
+ */
 async function validateOptionalDeltaCrl(
-	input: CheckCertificateRevocationAgainstCrlInput,
+	input: CrlCheckOptions,
 	completeCrl: ParsedCertificateRevocationList,
+	authority: CrlAuthority,
+	verification: CallerVerification,
 ): Promise<
-	{ readonly ok: true; readonly value?: ParsedCertificateRevocationList } | CrlApplicabilityFailure
+	| {
+			readonly ok: true;
+			readonly value?: ParsedCertificateRevocationList;
+			readonly stale?: CrlApplicabilityFailure;
+	  }
+	| CrlApplicabilityFailure
 > {
 	if (input.deltaCrl === undefined) return { ok: true };
-	const deltaValidation = await validateCertificateRevocationList({
-		crl: input.deltaCrl,
-		issuerCertificate: input.issuerCertificate,
-		...(input.at === undefined ? {} : { at: input.at }),
-		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-		...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
-	});
-	if (!deltaValidation.ok) {
+	assertCrlMaxAge(input.maxAgeMs);
+	assertClockSkew(input.clockSkewMs);
+	const authenticated = await authenticateCrl(input.deltaCrl, authority, verification);
+	if (!authenticated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(
-			deltaValidation.code,
-			deltaValidation.message,
+			authenticated.code,
+			authenticated.message,
 		);
 	}
-	if (deltaValidation.value.nextUpdate === undefined) {
-		return checkCertificateRevocationAgainstCrlFailureResult(
-			'stale_crl',
-			'delta CRL has no nextUpdate',
-		);
+	const at = input.at ?? new Date();
+	const skew = input.clockSkewMs ?? 0;
+	const freshnessFailure = deltaCrlFreshnessFailure(authenticated.value, at, skew, input.maxAgeMs);
+	if (freshnessFailure !== undefined && !isIssuedCrl(authenticated.value, at, skew)) {
+		return checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure);
 	}
 	let compatibilityFailure: CrlApplicabilityFailure | undefined;
 	try {
-		compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+		compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, authenticated.value);
 	} catch (error) {
 		return crlNameRefusalFailure(error);
 	}
-	return compatibilityFailure ?? { ok: true, value: deltaValidation.value };
+	if (compatibilityFailure !== undefined) {
+		return freshnessFailure === undefined
+			? compatibilityFailure
+			: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure);
+	}
+	return {
+		ok: true,
+		value: authenticated.value,
+		...(freshnessFailure === undefined
+			? {}
+			: {
+					stale: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+				}),
+	};
+}
+
+/**
+ * The result of `completeCrl`, which is not current at `input.at`: its
+ * revocation of `certificate` when no later CRL could remove it (RFC 5280
+ * §5.3.1, §3.3), otherwise `stale`. A CRL issued after `input.at` yields
+ * `stale`.
+ */
+function staleCompleteCrlResult(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	stale: CheckCertificateRevocationAgainstCrlResult,
+	input: CrlCheckOptions,
+): CheckCertificateRevocationAgainstCrlResult {
+	const at = input.at ?? new Date();
+	if (
+		!isIssuedCrl(completeCrl, at, input.clockSkewMs ?? 0) ||
+		!checkCrlApplicability(certificate, completeCrl).ok
+	) {
+		return stale;
+	}
+	const lookup = findRevokedCertificateEntry(certificate, completeCrl);
+	if (!lookup.ok || lookup.entry === undefined) return stale;
+	const result = revokedEntryResult(
+		completeCrl,
+		lookup.entry,
+		input.unrecognizedReasonCode ?? 'revoked',
+	);
+	if (!result.ok) return result;
+	return irremovableCrlRevocation(certificate, result, at) ?? stale;
+}
+
+/**
+ * The outcome of `deltaCrl`, which updates `completeCrl` but is not current at
+ * `input.at`. Its revocation of `certificate` settles the status when no later
+ * CRL could remove it (RFC 5280 §5.3.1). Otherwise it is `delta_stale` when it
+ * applies to `certificate`, and settles nothing. A delta CRL that does not
+ * apply is rejected with `stale`.
+ */
+function staleDeltaCrlOutcome(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList,
+	stale: CrlApplicabilityFailure,
+	input: CrlCheckOptions,
+): AuthenticatedCrlCheckOutcome {
+	const rejected = { kind: 'delta_rejected', failure: stale } as const;
+	if (
+		!checkCrlApplicability(certificate, completeCrl).ok ||
+		!checkCrlApplicability(certificate, deltaCrl, true).ok
+	) {
+		return rejected;
+	}
+	const lookup = findRevokedCertificateEntry(certificate, deltaCrl);
+	if (!lookup.ok) return rejected;
+	const settled = { kind: 'delta_stale', failure: stale } as const;
+	if (lookup.entry === undefined || lookup.entry.reasonCode === 'removeFromCRL') return settled;
+	const result = revokedEntryResult(
+		completeCrl,
+		lookup.entry,
+		input.unrecognizedReasonCode ?? 'revoked',
+	);
+	if (!result.ok) return { kind: 'checked', result };
+	return irremovableCrlRevocation(certificate, result, input.at ?? new Date()) === undefined
+		? settled
+		: { kind: 'checked', result };
 }
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
 function verifyCertificateRevocationListFailureResult(
-	code: 'signature_invalid' | DecodeRefusalCode,
+	code: 'signature_invalid' | DecodeFailureCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid' | DecodeRefusalCode,
+	'signature_invalid' | DecodeFailureCode,
 	Record<never, never>,
 	VerifyCertificateRevocationListSignatureFailure
 > {
@@ -1275,14 +1953,14 @@ function validateCertificateRevocationListFailureResult(
 		| 'issuer_mismatch'
 		| 'stale_crl'
 		| 'crl_sign_not_permitted'
-		| DecodeRefusalCode,
+		| DecodeFailureCode,
 	message: string,
 ): ErrorResult<
 	| 'signature_invalid'
 	| 'issuer_mismatch'
 	| 'stale_crl'
 	| 'crl_sign_not_permitted'
-	| DecodeRefusalCode,
+	| DecodeFailureCode,
 	Record<never, never>,
 	ValidateCertificateRevocationListFailure
 > {

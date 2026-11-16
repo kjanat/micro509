@@ -10,10 +10,21 @@
 
 import { toHex } from '#micro509/internal/asn1/asn1';
 import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
-import type { VerifySignedDataResult } from '#micro509/internal/crypto/sig-verify';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import { readSequenceChildren, sequence } from '#micro509/internal/asn1/der';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	VerifySignedDataResult,
+} from '#micro509/internal/crypto/sig-verify';
+import {
+	explicitParameters,
+	NO_CALLER_VERIFICATION,
+	spkiAlgorithmParametersDer,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import type {
+	CandidatePath,
 	CertificateSource,
 	TrustAnchor,
 	VerifyChainFailure,
@@ -55,15 +66,14 @@ export interface InternalBuildResult {
 	readonly failure?: VerifyChainFailure;
 }
 
-/** Result of attempting to match a certificate against bare trust anchors. */
-interface TrustAnchorMatchResult {
-	/** `true` if a trust anchor verified the certificate's signature. */
-	readonly matched: boolean;
-	/** Selected bare trust anchor on success. */
-	readonly anchor?: TrustAnchor;
-	/** Failure to report when matching was attempted but signature verification failed. */
-	readonly failure?: VerifyChainFailure;
-}
+/**
+ * Result of attempting to match a certificate against bare trust anchors: the
+ * anchor that verified its signature, or the failure to report when matching
+ * was attempted and no anchor verified it.
+ */
+type TrustAnchorMatchResult =
+	| { readonly matched: true; readonly anchor: TrustAnchor }
+	| { readonly matched: false; readonly failure?: VerifyChainFailure };
 
 type IssuerCandidateEvaluation =
 	| { readonly ok: true; readonly nextCaBelowCount: number }
@@ -75,16 +85,29 @@ type IssuerCandidateEvaluation =
  * building costs; replacing a global would leak across concurrent searches.
  */
 export interface VerifyPathSignatureChecks {
-	/** Verifies a certificate against a candidate issuer certificate. */
+	/**
+	 * Verifies a certificate against a candidate issuer certificate.
+	 * `workingParameters` replaces the issuer's own key parameters for a
+	 * caller verifier.
+	 */
 	readonly certificate: (
 		certificate: ParsedCertificate,
 		issuer: ParsedCertificate,
+		workingParameters?: WorkingParameters,
 	) => Promise<VerifyCertificateSignatureResult>;
 	/** Verifies a certificate against a bare trust anchor. */
 	readonly trustAnchor: (
 		certificate: ParsedCertificate,
 		anchor: TrustAnchor,
 	) => Promise<VerifyCertificateSignatureResult>;
+	/**
+	 * Whether a caller verifier checks `certificate` under an `issuer` key whose
+	 * parameters are absent or NULL, so they come from the path above `issuer`.
+	 */
+	readonly inheritsParameters: (
+		certificate: ParsedCertificate,
+		issuer: ParsedCertificate,
+	) => boolean;
 }
 
 /** Default upper bound on issuer candidates and trust anchors one path search may try. */
@@ -180,6 +203,7 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 export function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
+	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<VerifyCertificateSignatureResult> {
 	return signatureCheck(() =>
 		verifySignedDataDetailed(
@@ -189,7 +213,9 @@ export function verifyCertificateSignature(
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
 			certificate.signatureValue,
+			certificate.signatureValueUnusedBits,
 			certificate.tbsCertificateDer,
+			verification,
 		),
 	);
 }
@@ -214,10 +240,141 @@ async function signatureCheck(
 }
 
 /** The real signature checks, used unless a caller injects its own. */
-const DEFAULT_SIGNATURE_CHECKS: VerifyPathSignatureChecks = {
-	certificate: verifyCertificateSignature,
-	trustAnchor: verifyTrustAnchorSignature,
-};
+const DEFAULT_SIGNATURE_CHECKS: VerifyPathSignatureChecks = signatureChecksWith(new Map());
+
+/** The real signature checks, falling back to caller verifiers for algorithms WebCrypto cannot run. */
+export function signatureChecksWith(
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+): VerifyPathSignatureChecks {
+	return {
+		certificate: (certificate, issuer, workingParameters) =>
+			verifyCertificateSignature(certificate, issuer, {
+				verifiers,
+				...(workingParameters !== undefined && { workingParameters }),
+			}),
+		trustAnchor: (certificate, anchor) =>
+			verifyTrustAnchorSignature(certificate, anchor, { verifiers }),
+		inheritsParameters: (certificate, issuer) =>
+			verifiers.has(certificate.signatureAlgorithmOid) &&
+			explicitParameters(issuer.publicKeyAlgorithmParametersDer) === undefined,
+	};
+}
+
+/** RFC 5280 §6.1 `working_public_key_parameters`, absent once the path leaves none. */
+export type WorkingParameters = NonNullable<CallerVerification['workingParameters']>;
+
+/** RFC 5280 §6.1 `working_public_key_algorithm` and `working_public_key_parameters`. */
+export interface WorkingPublicKey {
+	/** Dotted-decimal public key algorithm OID. */
+	readonly algorithmOid: string;
+	/** DER key parameters, absent once the path leaves none. */
+	readonly parametersDer: Uint8Array | undefined;
+}
+
+/** The working key a trust anchor initializes (RFC 5280 §6.1.2 (g)-(i)). */
+export function anchorWorkingKey(anchor: {
+	readonly publicKeyAlgorithmOid: string;
+	readonly subjectPublicKeyInfoDer: Uint8Array;
+}): WorkingPublicKey {
+	return {
+		algorithmOid: anchor.publicKeyAlgorithmOid,
+		parametersDer: explicitParameters(spkiAlgorithmParametersDer(anchor.subjectPublicKeyInfoDer)),
+	};
+}
+
+/** Whether `certificate` carries `anchor`'s name and public key: the anchor's own certificate. */
+export function carriesTrustAnchorKey(
+	certificate: ParsedCertificate,
+	anchor: TrustAnchor,
+): boolean {
+	const key = anchor.subjectPublicKeyInfoDer;
+	return (
+		compareDistinguishedNames(certificate.subject, anchor.subject) &&
+		certificate.subjectPublicKeyInfoDer.length === key.length &&
+		certificate.subjectPublicKeyInfoDer.every((byte, index) => byte === key[index])
+	);
+}
+
+/**
+ * `anchor` with `parametersDer` in its SubjectPublicKeyInfo: the trust anchor
+ * information of RFC 5280 §6.1.1 (d) for a key whose path supplies its
+ * parameters (§6.1.4 (e)).
+ */
+export function withWorkingParameters(anchor: TrustAnchor, parametersDer: Uint8Array): TrustAnchor {
+	const spki = anchor.subjectPublicKeyInfoDer;
+	const [algorithm, subjectPublicKey] = readSequenceChildren(spki);
+	if (algorithm === undefined || subjectPublicKey === undefined) {
+		throw new Error('SubjectPublicKeyInfo lacks its algorithm or key');
+	}
+	const algorithmDer = spki.subarray(algorithm.start - algorithm.headerLength, algorithm.end);
+	const [oid] = readSequenceChildren(algorithmDer);
+	if (oid === undefined) throw new Error('AlgorithmIdentifier lacks its OID');
+	return {
+		...anchor,
+		subjectPublicKeyInfoDer: sequence([
+			sequence([algorithmDer.subarray(oid.start - oid.headerLength, oid.end), parametersDer]),
+			spki.subarray(subjectPublicKey.start - subjectPublicKey.headerLength, subjectPublicKey.end),
+		]),
+	};
+}
+
+/**
+ * The working key of `path.chain[index]` along a validated path: its own key
+ * parameters, or those it inherits from the root or bare anchor above it.
+ */
+export function pathWorkingKey(path: CandidatePath, index: number): WorkingPublicKey {
+	const certificate = path.chain[index];
+	const top = path.chain[path.chain.length - 1];
+	if (certificate === undefined || top === undefined) {
+		throw new Error(`no certificate at path index ${index}`);
+	}
+	return {
+		algorithmOid: certificate.publicKeyAlgorithmOid,
+		parametersDer: path.anchorCertificateInChain
+			? workingParametersAt(path.chain, index, path.chain.length - 2, certificateWorkingKey(top))
+			: workingParametersAt(
+					path.chain,
+					index,
+					path.chain.length - 1,
+					anchorWorkingKey(path.trustAnchor),
+				),
+	};
+}
+
+/** The working key a certificate used as trust anchor initializes. */
+export function certificateWorkingKey(certificate: ParsedCertificate): WorkingPublicKey {
+	return {
+		algorithmOid: certificate.publicKeyAlgorithmOid,
+		parametersDer: explicitParameters(certificate.publicKeyAlgorithmParametersDer),
+	};
+}
+
+/**
+ * RFC 5280 §6.1.4 (e)-(f): the working parameters after processing `path` from
+ * index `firstProcessed` down to `issuerIndex`, starting from `start`. A
+ * certificate with its own parameters sets them. One without keeps the working
+ * parameters when its algorithm matches and clears them when it differs.
+ */
+export function workingParametersAt(
+	path: readonly ParsedCertificate[],
+	issuerIndex: number,
+	firstProcessed: number,
+	start: WorkingPublicKey,
+): Uint8Array | undefined {
+	let { algorithmOid, parametersDer } = start;
+	for (let index = firstProcessed; index >= issuerIndex; index -= 1) {
+		const certificate = path[index];
+		if (certificate === undefined) return undefined;
+		const own = explicitParameters(certificate.publicKeyAlgorithmParametersDer);
+		if (own !== undefined) {
+			parametersDer = own;
+		} else if (certificate.publicKeyAlgorithmOid !== algorithmOid) {
+			parametersDer = undefined;
+		}
+		algorithmOid = certificate.publicKeyAlgorithmOid;
+	}
+	return parametersDer;
+}
 
 export type PathDiagnostic =
 	| { readonly kind: 'none'; readonly path: readonly ParsedCertificate[] }
@@ -342,17 +499,15 @@ export async function buildChainInternal(
 		order.set(fingerprint(candidate), index);
 	});
 
-	const maxDepth = candidates.length + 1;
 	const startFingerprint = fingerprint(leaf);
-	const success = await search(leaf, [leaf], new Set([startFingerprint]), 0);
+	const success = await search(leaf, [leaf], new Set([startFingerprint]), 0, []);
 	if (success !== undefined) {
-		const terminal = success[success.length - 1];
 		return {
 			chain: success,
 			foundTrustedRoot: true,
-			...(selectedAnchor !== undefined && { trustAnchor: selectedAnchor }),
-			anchorCertificateInChain:
-				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
+			...(selectedAnchor === undefined
+				? { anchorCertificateInChain: true }
+				: { anchorCertificateInChain: false, trustAnchor: selectedAnchor }),
 		};
 	}
 	const owner = best.current;
@@ -394,6 +549,7 @@ export async function buildChainInternal(
 		path: readonly ParsedCertificate[],
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
+		pending: readonly number[],
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		if (budget.exhausted) return undefined;
 		const blockedHash = await distrust(current.subjectPublicKeyInfoDer);
@@ -412,31 +568,52 @@ export async function buildChainInternal(
 			);
 			return undefined;
 		}
-		if (rootFingerprints.has(fingerprint(current))) {
+		const terminal = await terminateAtAnchor(current, path, pending);
+		if (terminal !== 'open') return terminal;
+		return await searchIssuers(current, path, visited, caBelowCount, pending);
+	}
+
+	/** Ends the path at a root or a bare trust anchor, or reports `'open'` to keep searching. */
+	async function terminateAtAnchor(
+		current: ParsedCertificate,
+		path: readonly ParsedCertificate[],
+		pending: readonly number[],
+	): Promise<readonly ParsedCertificate[] | undefined | 'open'> {
+		if (
+			rootFingerprints.has(fingerprint(current)) &&
+			(await verifyInheritedLinks(path, pending, certificateWorkingKey(current), path.length - 2))
+		) {
 			return path;
 		}
-		const matchedAnchor = await matchTrustAnchor(
-			current,
-			anchorIndex,
-			callbacks,
-			path.length - 1,
-			verifyAnchorOnce,
-			chargeBudget,
+		const matchedAnchor = await matchTrustAnchor(current, anchorIndex, callbacks, path.length - 1, {
+			verifyAnchor: verifyAnchorOnce,
+			charge: chargeBudget,
 			distrust,
-		);
+			completesPath: (anchor) =>
+				verifyInheritedLinks(path, pending, anchorWorkingKey(anchor), path.length - 1),
+		});
 		if (budget.exhausted) return undefined;
-		if (matchedAnchor.failure !== undefined) {
-			recordFailure(matchedAnchor.failure, path);
+		if (!matchedAnchor.matched) {
+			if (matchedAnchor.failure !== undefined) recordFailure(matchedAnchor.failure, path);
+			return 'open';
 		}
-		if (matchedAnchor.matched) {
-			selectedAnchor = matchedAnchor.anchor;
-			return path;
-		}
-		if (path.length > maxDepth) {
-			return undefined;
-		}
-		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
-		const memoized = deadEnds.get(memoKey);
+		selectedAnchor = matchedAnchor.anchor;
+		return path;
+	}
+
+	/**
+	 * Searches the issuers of `current`. A subtree that carries deferred links
+	 * depends on the path below it, so it skips the dead-end memo.
+	 */
+	async function searchIssuers(
+		current: ParsedCertificate,
+		path: readonly ParsedCertificate[],
+		visited: ReadonlySet<string>,
+		caBelowCount: number,
+		pending: readonly number[],
+	): Promise<readonly ParsedCertificate[] | undefined> {
+		const memoKey = pending.length === 0 ? `${fingerprint(current)}:${caBelowCount}` : undefined;
+		const memoized = memoKey === undefined ? undefined : deadEnds.get(memoKey);
 		if (memoized !== undefined) {
 			consider(rebaseDiagnostic(memoized.diagnostic, memoized.nodeIndex, path));
 			return undefined;
@@ -444,13 +621,52 @@ export async function buildChainInternal(
 		const subtree: { best: PathDiagnostic } = { best: { kind: 'none', path } };
 		subtrees.push(subtree);
 		try {
-			const issuerPath = await searchBelow(current, path, visited, caBelowCount);
+			const issuerPath = await searchBelow(current, path, visited, caBelowCount, pending);
 			if (issuerPath !== undefined) return issuerPath;
 		} finally {
 			subtrees.pop();
 		}
-		deadEnds.set(memoKey, { diagnostic: subtree.best, nodeIndex: path.length - 1 });
+		if (memoKey !== undefined) {
+			deadEnds.set(memoKey, { diagnostic: subtree.best, nodeIndex: path.length - 1 });
+		}
 		return undefined;
+	}
+
+	/**
+	 * Verifies the deferred links of a completed path once its trust anchor fixes
+	 * the working key. `pending` holds the index of each certificate whose issuer
+	 * key inherits its parameters.
+	 */
+	async function verifyInheritedLinks(
+		path: readonly ParsedCertificate[],
+		pending: readonly number[],
+		start: WorkingPublicKey,
+		firstProcessed: number,
+	): Promise<boolean> {
+		for (const index of pending) {
+			const certificate = path[index];
+			const issuer = path[index + 1];
+			if (certificate === undefined || issuer === undefined) return false;
+			const parametersDer = workingParametersAt(path, index + 1, firstProcessed, start);
+			const result = await verifyOnce(
+				`c:${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}:${
+					parametersDer === undefined ? '-' : toHex(parametersDer)
+				}`,
+				() => signatureChecks.certificate(certificate, issuer, { parametersDer }),
+			);
+			const signatureFailure = signatureResultFailure(
+				result,
+				certificate,
+				issuer,
+				index,
+				callbacks,
+			);
+			if (signatureFailure !== undefined) {
+				recordFailure(signatureFailure, path);
+				return false;
+			}
+		}
+		return true;
 	}
 
 	async function searchBelow(
@@ -458,6 +674,7 @@ export async function buildChainInternal(
 		path: readonly ParsedCertificate[],
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
+		pending: readonly number[],
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		let sawIssuer = false;
 		for (const issuer of issuerCandidates(current)) {
@@ -473,6 +690,7 @@ export async function buildChainInternal(
 				path,
 				visited,
 				caBelowCount,
+				pending,
 			);
 			if (result !== undefined) return result;
 			if (budget.exhausted) return undefined;
@@ -524,7 +742,9 @@ export async function buildChainInternal(
 		path: readonly ParsedCertificate[],
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
+		pending: readonly number[],
 	): Promise<readonly ParsedCertificate[] | undefined> {
+		const inherits = signatureChecks.inheritsParameters(current, issuer);
 		const candidate = await evaluateIssuerCandidate(
 			current,
 			issuer,
@@ -532,7 +752,7 @@ export async function buildChainInternal(
 			caBelowCount,
 			at,
 			callbacks,
-			verifySignatureOnce,
+			inherits ? deferSignature : verifySignatureOnce,
 		);
 		if (!candidate.ok) {
 			recordFailure(candidate.failure, path);
@@ -540,7 +760,17 @@ export async function buildChainInternal(
 		}
 		const nextVisited = new Set(visited);
 		nextVisited.add(issuerFingerprint);
-		return await search(issuer, [...path, issuer], nextVisited, candidate.nextCaBelowCount);
+		return await search(
+			issuer,
+			[...path, issuer],
+			nextVisited,
+			candidate.nextCaBelowCount,
+			inherits ? [...pending, path.length - 1] : pending,
+		);
+	}
+
+	function deferSignature(): Promise<VerifyCertificateSignatureResult> {
+		return Promise.resolve({ ok: true, valid: true });
 	}
 
 	function chargeBudget(): boolean {
@@ -628,36 +858,50 @@ async function evaluateIssuerCandidate(
 		return issuerConstraints;
 	}
 	const signatureResult = await verifySignature(current, issuer);
+	const signatureFailure = signatureResultFailure(
+		signatureResult,
+		current,
+		issuer,
+		path.length - 1,
+		callbacks,
+	);
+	return signatureFailure === undefined
+		? issuerConstraints
+		: { ok: false, failure: signatureFailure };
+}
+
+/** The path failure for a signature check of `current` under `issuer`, if it did not pass. */
+function signatureResultFailure(
+	signatureResult: VerifyCertificateSignatureResult,
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+	index: number,
+	callbacks: VerifyPathCallbacks,
+): VerifyChainFailure | undefined {
 	if (!signatureResult.ok) {
-		return {
-			ok: false,
-			failure: callbacks.failure(
-				signatureResult.code,
-				signatureResult.reason,
-				path.length - 1,
-				callbacks.detail({
-					subjectCommonName: current.subject.values.commonName,
-					issuerCommonName: issuer.subject.values.commonName,
-					actual: signatureResult.reason,
-				}),
-			),
-		};
+		return callbacks.failure(
+			signatureResult.code,
+			signatureResult.reason,
+			index,
+			callbacks.detail({
+				subjectCommonName: current.subject.values.commonName,
+				issuerCommonName: issuer.subject.values.commonName,
+				actual: signatureResult.reason,
+			}),
+		);
 	}
 	if (!signatureResult.valid) {
-		return {
-			ok: false,
-			failure: callbacks.failure(
-				'signature_invalid',
-				'certificate signature does not verify',
-				path.length - 1,
-				callbacks.detail({
-					subjectCommonName: current.subject.values.commonName,
-					issuerCommonName: issuer.subject.values.commonName,
-				}),
-			),
-		};
+		return callbacks.failure(
+			'signature_invalid',
+			'certificate signature does not verify',
+			index,
+			callbacks.detail({
+				subjectCommonName: current.subject.values.commonName,
+				issuerCommonName: issuer.subject.values.commonName,
+			}),
+		);
 	}
-	return issuerConstraints;
+	return undefined;
 }
 
 function evaluateIssuerConstraints(
@@ -820,14 +1064,24 @@ function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolea
 }
 
 /** Attempts to verify `certificate` against each bare trust anchor whose subject DN matches. */
+/**
+ * What {@linkcode matchTrustAnchor} runs for each candidate anchor:
+ * `completesPath` verifies the links below that wait on the parameters the
+ * anchor passes down (RFC 5280 §6.1.4 (e)).
+ */
+interface TrustAnchorChecks {
+	readonly verifyAnchor: typeof verifyTrustAnchorSignature;
+	readonly charge: () => boolean;
+	readonly distrust: (spki: Uint8Array) => Promise<string | undefined>;
+	readonly completesPath: (anchor: TrustAnchor) => Promise<boolean>;
+}
+
 async function matchTrustAnchor(
 	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
 	callbacks: VerifyPathCallbacks,
 	index: number,
-	verifyAnchor: typeof verifyTrustAnchorSignature,
-	charge: () => boolean,
-	distrust: (spki: Uint8Array) => Promise<string | undefined>,
+	{ verifyAnchor, charge, distrust, completesPath }: TrustAnchorChecks,
 ): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
@@ -879,6 +1133,7 @@ async function matchTrustAnchor(
 			}
 			continue;
 		}
+		if (!(await completesPath(anchor))) continue;
 		return { matched: true, anchor };
 	}
 	return firstFailure !== undefined
@@ -898,6 +1153,7 @@ function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnc
 export function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
+	verification: CallerVerification = NO_CALLER_VERIFICATION,
 ): Promise<VerifyCertificateSignatureResult> {
 	return signatureCheck(() =>
 		verifySignedDataDetailed(
@@ -907,7 +1163,9 @@ export function verifyTrustAnchorSignature(
 			anchor.publicKeyParametersOid,
 			anchor.subjectPublicKeyInfoDer,
 			certificate.signatureValue,
+			certificate.signatureValueUnusedBits,
 			certificate.tbsCertificateDer,
+			verification,
 		),
 	);
 }

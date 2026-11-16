@@ -17,6 +17,7 @@ import {
 	setOf,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import { callUntyped } from '#test/helpers';
 
 function required(element: DerElement | undefined): DerElement {
 	if (element === undefined) throw new Error('Missing CMS element');
@@ -157,6 +158,9 @@ describe('CMS application verification policy', () => {
 		).toMatchObject({ ok: true });
 		expect(
 			await verifyPkcs7SignedData(cms.der, { expectedContentTypeOid: 'invalid' }),
+		).toMatchObject({ ok: false, code: 'invalid_options' });
+		expect(
+			await callUntyped(verifyPkcs7SignedData, cms.der, { signedAttributes: 'sometimes' }),
 		).toMatchObject({ ok: false, code: 'invalid_options' });
 	});
 });

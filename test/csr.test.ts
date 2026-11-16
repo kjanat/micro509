@@ -382,7 +382,7 @@ describe('csr', () => {
 
 		expect(await verifyCertificateSigningRequest(malformedCsrDer)).toMatchObject({
 			ok: false,
-			code: 'signature_invalid',
+			code: 'malformed',
 			details: { actual: 'DER child exceeds parent length' },
 		});
 	});

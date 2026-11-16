@@ -7,7 +7,7 @@ forward-work backlog for the PKIX-facing surface.
 
 | Area                                                                                    | Status     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [RFC 5280][rfc5280] path validation                                                     | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, [RFC 9618][rfc9618] policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| [RFC 5280][rfc5280] path validation                                                     | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, [RFC 9618][rfc9618] policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary and validate with a caller `signatureVerifiers` DSA verifier). Revocation is a separate API by design                                                                                                                                                                                                                                                                                                                                                                                             |
 | [RFC 6960][rfc6960] + [9919][rfc9919] OCSP                                              | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; CertID hashing defaults to SHA-256 per [RFC 9919 §3.1.1][rfc9919-section-3.1.1] with explicit SHA-1 interop; the [RFC 9919][rfc9919] client rule is opt-in, and `profile: 'rfc9919'` on `validateOcspResponse` (`ocspProfile: 'rfc9919'` on `checkCertificateRevocation` and the chain `RevocationPolicy`) rejects a response without `nextUpdate` ([RFC 9919 §5][rfc9919-section-5]), and the default `'rfc6960'` profile accepts it ([RFC 6960 §4.2.2.1][rfc6960-section-4.2.2.1]); HTTP transport is caller-provided by design |
 | [RFC 9525][rfc9525] service identity                                                    | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every [RFC 9525][rfc9525] identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in [RFC 6125][rfc6125] CN-compat checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | [RFC 9618][rfc9618] policy validation                                                   | `complete` | [RFC 9618][rfc9618]-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -433,10 +433,17 @@ Focused [RFC 9525][rfc9525] identity fixtures live in [`test/identity-fixtures.t
   - [x] Add positive and negative fixtures for locally authorized signer scope.
 - [x] Accept it if the signer is the issuing CA certificate itself.
 - [x] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
+  - [x] With `allowChainedResponderCertificate`, check every CA certificate
+        between that CA and the responder under the same
+        `responderRevocationPolicy` as the responder. Under the default policy
+        each one needs CRL evidence from its own issuer.
+  - [x] Apply the chain's `distrustedSpkiSha256` to the delegated
+        responder's path in `checkChainRevocation` and
+        `verifyCertificateChain({ revocation })`.
 - [x] Reject the response if the signer certificate meets none of those conditions.
 - [x] Decide and document responder-certificate revocation policy ([RFC 6960 §4.2.2.2.1][rfc6960-section-4.2.2.2.1]).
   - [x] Parse and expose `id-pkix-ocsp-nocheck` (`hasOcspNoCheckExtension()`).
-  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'honor-nocheck'` (default) / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedOcspResponders` as the caller-local override.
+  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'nocheck-or-evidence'` (default) / `'honor-nocheck'` / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedOcspResponders` as the caller-local override. The default and `'honor-nocheck'` exempt a responder carrying `id-pkix-ocsp-nocheck` or `noRevAvail` ([RFC 9608 §4][rfc9608-section-4]); `'require-evidence'` rejects a `noRevAvail` responder, which no CRL lists ([RFC 9608 §2][rfc9608-section-2]).
   - [x] Add fixtures for each policy branch.
   - [x] Pass caller evaluation time through delegated responder chain validation.
 
@@ -447,10 +454,27 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Treat CRL validation as a separate revocation subsystem.
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
-- [x] Skip chain-level revocation checking for a certificate carrying
-      `noRevAvail` or `id-pkix-ocsp-nocheck`, and reject a certificate pairing
+- [x] Skip chain-level revocation checking for a certificate or delegated CRL
+      signer carrying `noRevAvail` or `id-pkix-ocsp-nocheck`, report a
+      `noRevAvail` certificate as `skipped` from `checkCertificateRevocation`,
+      and reject a certificate pairing
       `noRevAvail` with cA TRUE, cRLDistributionPoints, freshestCRL or an
       `id-ad-ocsp` authorityInfoAccess entry ([RFC 9608 §3][rfc9608-section-3], [§4][rfc9608-section-4]).
+- [x] Require revocation evidence for a delegated CRL signer outside the
+      chain that carries neither `noRevAvail` nor `id-pkix-ocsp-nocheck`:
+      CRLs from its issuer, or from an authorized indirect CRL issuer, must
+      cover every reason, also when that issuer is a chain certificate or the
+      trust anchor. Every CA on the signer's validated path outside the chain
+      needs the same evidence ([RFC 5280 §6.3.3][rfc5280-section-6.3.3] step (f) validates the CRL
+      issuer's path, revocation included). A
+      revocation in a CRL from a signer whose own status stays indeterminate
+      still counts. Its path also honours the chain's `distrustedSpkiSha256`.
+      A CRL the signer signed counts as evidence of its own status only as
+      `crlSignerSelfEvidence` allows: `'delegated'` (default) when the
+      signer's cRLDistributionPoints names it as cRLIssuer, as [PKITS](./rfc/pkits.txt)
+      4.14.30 requires, or `'any'`. [RFC 5280 §6.3.3][rfc5280-section-6.3.3] step (f) and X.509
+      (2019) §9.1.5 leave the choice open. A revocation of the signer in such a
+      CRL counts under either value.
 - [x] Require keyUsage with `cRLSign` on a v3 CRL issuer certificate, and skip
       the check for v1 and v2 issuers ([RFC 10007 §4][rfc10007-section-4], updating [RFC 5280 §6.3.3][rfc5280-section-6.3.3]
       step (f)).
@@ -462,7 +486,12 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `responderRevocationCrlMaxAgeMs` (`validateOcspResponse`), which then
       governs it. [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify client behaviour for
       such a CRL, and [§3.3][rfc5280-section-3.3] leaves the required recency of revocation data to
-      local policy.
+      local policy. A CRL that is not current but was issued by the
+      evaluation time still settles an entry for a certificate that has not
+      expired whose reason is not `certificateHold`, and in a delta CRL not
+      `removeFromCRL`. Every later CRL must keep listing it ([RFC 5280 §5.3.1][rfc5280-section-5.3.1],
+      [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is micro509
+      policy.
 - [x] Always encode `nextUpdate` in generated CRLs ([RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5]).
       `createCertificateRevocationList` also requires it at least one second
       after `thisUpdate`. This is a micro509 builder invariant. [RFC 5280][rfc5280] and
@@ -491,18 +520,61 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. [RFC 5280][rfc5280] defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
-      Chain evaluation uses only a current delta CRL whose CRL number exceeds
-      the base CRL's ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), and it tries candidates from the
-      latest `thisUpdate` down ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). A candidate that fails
+      Chain evaluation updates a base CRL with a current delta CRL whose CRL
+      number exceeds the base CRL's ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]). It reads the candidates
+      issued by the evaluation time newest first, by `thisUpdate` and then by
+      CRL number ([RFC 5280 §5.2.4][rfc5280-section-5.2.4]), and the first current one that
+      authenticates and applies settles the status. A candidate that is no
+      longer current or carries no `nextUpdate` settles only an entry for a
+      certificate that has not expired whose reason is neither
+      `certificateHold` nor `removeFromCRL`. Every later CRL must keep listing it ([RFC 5280
+      §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]). [RFC 5280][rfc5280] is silent on such entries, and this is
+      micro509 policy. Without such an entry it settles nothing, and the
+      next candidate is read. A delta CRL supersedes another when both its
+      `thisUpdate` and its CRL number are later ([RFC 5280 §5.2.3][rfc5280-section-5.2.3], [§5.1.2.4][rfc5280-section-5.1.2.4]).
+      [RFC 5280][rfc5280] leaves a pair whose two keys disagree unspecified, and
+      micro509 ranks such a pair alike, so the stricter of their results
+      stands. After a delta CRL settles the status as good, the candidates it
+      supersedes are still read within the same limits for such an entry it
+      omits. An omitted entry makes the certificate revoked, and an older
+      entry `unrecognizedReasonCode: 'reject'` refuses, or one that cannot
+      settle the status, keeps the good verdict from standing. When the
+      limits end the search with a candidate unread, the result is
+      indeterminate with `delta_crl_retry_limit_exceeded` unless the base CRL
+      holds a revocation no delta CRL can remove. The
+      `unreadSupersededDeltaCrls: 'ignore'` option
+      (`responderRevocationUnreadSupersededDeltaCrls` in
+      `validateOcspResponse`) lets a good verdict stand when the delta CRL
+      that settled it supersedes every unread candidate, and without a good
+      verdict lets the base CRL decide alone when every unread candidate is
+      no longer current (past its `nextUpdate`, without one, or older than
+      the age bound) and superseded by a delta CRL read. It relies on the
+      issuer listing each lasting revocation in every later CRL ([RFC 5280
+      §5.3.1][rfc5280-section-5.3.1], [§3.3][rfc5280-section-3.3]), and a
+      permanent revocation that only such an unread candidate lists goes
+      unseen. [RFC 5280 §5.2.4][rfc5280-section-5.2.4] has a relying party
+      use the most recent delta CRL. Under the default, excess delta CRLs,
+      forged ones included, can make a status indeterminate, and the caller's
+      hard-fail or soft-fail `mode` decides.
+      `checkCertificateRevocationAgainstCrl` applies these rules to
+      its `deltaCrl`. A candidate that fails
       authentication, freshness, compatibility or applicability is skipped,
       and the base CRL is evaluated alone once every candidate is skipped. A
       candidate that passes those checks is used, and when its revoked entries
       cannot settle the certificate's status the result is indeterminate with
       `delta_crl_unusable`. At most four candidates are checked per base CRL
-      and 32 per `checkChainRevocation` call. A base CRL that does not cover
+      and signing certificate, and 32 per `checkChainRevocation` call, the
+      checks for CRL signers and delegated OCSP responders included.
+      `validateOcspResponse` applies the same limits to the CRLs of a
+      delegated responder. `checkCertificateRevocation` treats each CRL in
+      its evidence as a delta CRL when it carries the delta CRL indicator,
+      whichever field holds it, and pools those under the same limits, which
+      the CRL checks of its delegated OCSP responders share. It reports `delta_crl_unusable` or
+      `delta_crl_retry_limit_exceeded` as evidence that keeps other evidence
+      from settling the status as `good`. A base CRL that does not cover
       the certificate spends none, and repeated copies of one base or delta
       CRL count once. Pre-parsed CRLs are read from their `der`. A candidate
-      left unchecked makes the result indeterminate with
+      left unchecked that counts under that option makes the result indeterminate with
       `delta_crl_retry_limit_exceeded`. Both reasons outrank a `good` verdict from other evidence. Neither
       replaces a base CRL revocation that no delta can remove: one with a
       reason other than `certificateHold`, for a certificate that has not
@@ -537,7 +609,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       variation; manifest expectations verified against the official PKITS
       document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). 4.1.4/4.1.5 (DSA)
       are expected-fail per the WebCrypto algorithm boundary and tracked with
-      `it.failing`. See [`test/pkits.test.ts`](../test/pkits.test.ts).
+      `it.failing`. With a caller DSA verifier in `signatureVerifiers`,
+      4.1.4–4.1.6 match their expected results, 4.1.5 through RFC 5280 §6.1.4 (e)
+      parameter inheritance and 4.1.6 as `signature_invalid`. See [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [x] Add malformed DER / fuzz tests.
 - [x] Differential-test against at least one mature implementation. See [`test/differential.test.ts`](../test/differential.test.ts).
 - [x] Run the validator against **NIST PKITS** as a gap-report harness, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
@@ -719,6 +793,7 @@ makes no SSH transport, agent, certificate or `authorized_keys` option claim.
 [rfc5280-section-4.2.1.2]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.2
 [rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4
 [rfc5280-section-4.2.1.10]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.10
+[rfc5280-section-5.1.2.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.4
 [rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
 [rfc5280-section-5.2.1]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.1
 [rfc5280-section-5.2.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2.3
@@ -770,6 +845,7 @@ makes no SSH transport, agent, certificate or `authorized_keys` option claim.
 [rfc9549]: https://www.rfc-editor.org/rfc/rfc9549.html
 [rfc9549-section-2.2]: https://www.rfc-editor.org/rfc/rfc9549.html#section-2.2
 [rfc9598-section-6]: https://www.rfc-editor.org/rfc/rfc9598.html#section-6
+[rfc9608-section-2]: https://www.rfc-editor.org/rfc/rfc9608.html#section-2
 [rfc9608-section-3]: https://www.rfc-editor.org/rfc/rfc9608.html#section-3
 [rfc9608-section-4]: https://www.rfc-editor.org/rfc/rfc9608.html#section-4
 [rfc9618]: https://www.rfc-editor.org/rfc/rfc9618.html

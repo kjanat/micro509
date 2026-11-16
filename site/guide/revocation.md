@@ -144,7 +144,9 @@ to local policy. micro509 fails such a CRL with `stale_crl` unless you set a max
 governs it.
 
 Bound the age of `thisUpdate` with these options. A CRL older than the bound
-fails with `stale_crl`, and the chain reports it as `crl_expired`.
+fails with `stale_crl`, and the chain reports it as `crl_expired`. An entry
+it lists for a certificate that has not expired still counts, as it does in a
+CRL past its `nextUpdate`, unless its reason is `certificateHold`.
 
 | Option                           | Where                                                                             |
 | -------------------------------- | --------------------------------------------------------------------------------- |
@@ -153,8 +155,16 @@ fails with `stale_crl`, and the chain reports it as `crl_expired`.
 | `crlMaxAgeMs`                    | `policy` of `checkChainRevocation` and `verifyCertificateChain({ revocation })`   |
 | `responderRevocationCrlMaxAgeMs` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
 
-The chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
-delegated OCSP responders. `clockSkewMs`, on the same input or on the chain
+A delegated CRL signer outside the chain needs CRLs from its issuer, or from an
+authorized indirect CRL issuer, that cover every reason before its CRLs can
+report a certificate `good`, unless it carries `noRevAvail` or
+`id-pkix-ocsp-nocheck`. Every CA on its path outside the chain needs the same. A CRL the signer signed covers
+the signer itself only when its cRLDistributionPoints names it as cRLIssuer;
+`policy.crlSignerSelfEvidence: 'any'` accepts any such CRL. The
+chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
+delegated OCSP responders. In `checkCertificateRevocation`, the CRLs in
+`evidence`, delta CRLs included, also serve as revocation evidence for delegated OCSP responders,
+and `crlMaxAgeMs` and `unrecognizedReasonCode` apply to them. `clockSkewMs`, on the same input or on the chain
 `policy`, widens the bound by the same amount and also applies to the
 `thisUpdate` and `nextUpdate` checks.
 
@@ -187,6 +197,36 @@ good. Codes are `bigint`, so a code of any length is kept exactly.
 A CRL whose entry marks its cRLReason critical and holds an unrecognized code
 is malformed, since [RFC 5280 Appendix B][rfc5280-appendix-B] requires rejecting a critical
 extension with values the implementation does not recognize.
+
+### Delta CRL attempt limits
+
+Delta CRLs for one complete CRL are read newest first. At most four are checked
+per complete CRL and signer, and 32 per `checkChainRevocation`,
+`checkCertificateRevocation` or `validateOcspResponse` call. When those limits
+leave a delta CRL unread, the status is indeterminate with
+`delta_crl_retry_limit_exceeded`, unless the complete CRL holds a revocation
+no delta CRL can remove. `mode` then decides: hard-fail denies and soft-fail
+allows. Anyone who can add CRLs to the evidence, forged ones included, can
+push a certificate into this state.
+
+The `unreadSupersededDeltaCrls` option sets how an unread delta CRL counts
+when a delta CRL already read supersedes it by both `thisUpdate` and CRL
+number.
+
+| Value                       | Effect                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'indeterminate'` (default) | Every unread delta CRL counts                                                                                                                                 |
+| `'ignore'`                  | After `good`, one the delta CRL settling it supersedes does not count; otherwise one past its `nextUpdate`, without one, or over the age bound does not count |
+
+Under `'ignore'`, a permanent revocation that only an older unread delta CRL
+lists goes unseen, since [RFC 5280 §5.3.1][rfc5280-section-5.3.1] and [§3.3][rfc5280-section-3.3] expect every
+later CRL to keep listing it.
+
+| Option                                         | Where                                                                             |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| `unreadSupersededDeltaCrls`                    | `checkCertificateRevocation`                                                      |
+| `unreadSupersededDeltaCrls`                    | `policy` of `checkChainRevocation` and `verifyCertificateChain({ revocation })`   |
+| `responderRevocationUnreadSupersededDeltaCrls` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
 
 ## OCSP
 
@@ -365,6 +405,7 @@ CRL or OCSP evidence. Use `unwrap(result).status` to decide what to do:
 | `good`          | Applicable evidence reports the certificate as not revoked.                                         |
 | `revoked`       | Evidence identifies the certificate as revoked. Inspect the revocation time and reason.             |
 | `indeterminate` | The supplied evidence cannot establish a status. Inspect the reason before deciding how to proceed. |
+| `skipped`       | The certificate carries `noRevAvail`, so no evidence was consulted (RFC 9608 §4).                   |
 
 This API represents unusable evidence as an `indeterminate` status inside an
 `ok` result. An `ok` result alone does not mean the certificate is good. Chain verification applies your revocation policy to that
@@ -482,7 +523,11 @@ reason:     ${reason}`);
 ## Chain-level revocation
 
 `checkChainRevocation()` evaluates CRL **and** OCSP evidence for every
-certificate in a validated chain (the trust anchor is never checked). Each
+certificate in a validated chain (the trust anchor is never checked). When the
+path ends below a bare trust anchor, pass it as `trustAnchor`: the last
+certificate of the chain is then checked too, and the anchor's key signs its
+CRLs and OCSP responses or certifies their signers.
+`verifyCertificateChain()` does this for a path it builds to a bare anchor. Each
 OCSP response is fully validated — signature, responder binding and
 authorization, freshness — before its verdict is trusted, and a validated
 `revoked` verdict from either evidence kind always wins, regardless of

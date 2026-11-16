@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	createCertificate,
+	createCertificateRevocationList,
 	createOcspRequest,
 	createOcspResponse,
 	createSelfSignedCertificate,
@@ -41,7 +42,9 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { expectRejectedErrorCode, hexToBytes } from '#test/helpers';
+import { validateOcspResponseBy } from '#micro509/revocation/ocsp';
+import { trustAnchorFromCertificate } from '#micro509/verify';
+import { expectRejectedErrorCode, hexToBytes, OCSP_NOCHECK_EXTENSION } from '#test/helpers';
 
 describe('ocsp', () => {
 	it.each([
@@ -249,6 +252,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -304,6 +308,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const otherResponder = await createCertificate({
@@ -315,6 +320,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -620,6 +626,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -1302,7 +1309,7 @@ describe('ocsp', () => {
 		});
 		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePemOrThrow(response.pem);
 		const result = await verifyOcspResponseSignature(parsedWithoutDer, issuer.certificate.pem);
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('verifyOcspResponseSignature fails closed for malformed signer certificate input', async () => {
@@ -1325,7 +1332,7 @@ describe('ocsp', () => {
 			],
 		});
 		const result = await verifyOcspResponseSignature(response.der, Uint8Array.of(0xff, 0xff));
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse ignores tampered signed content fields on pre-parsed response input', async () => {
@@ -1389,7 +1396,7 @@ describe('ocsp', () => {
 			response: parsedWithoutDer,
 			issuerCertificate: issuer.certificate.pem,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for malformed issuer certificate input', async () => {
@@ -1415,7 +1422,7 @@ describe('ocsp', () => {
 			response: response.der,
 			issuerCertificate: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for malformed responder certificate input', async () => {
@@ -1442,7 +1449,7 @@ describe('ocsp', () => {
 			issuerCertificate: issuer.certificate.pem,
 			responderCertificate: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for malformed request input', async () => {
@@ -1469,7 +1476,7 @@ describe('ocsp', () => {
 			issuerCertificate: issuer.certificate.pem,
 			request: Uint8Array.of(0xff, 0xff),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for unsupported CertID hash algorithms', async () => {
@@ -1553,6 +1560,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -1998,6 +2006,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -2235,7 +2244,7 @@ describe('ocsp', () => {
 			issuerCertificate: issuer.certificate.pem,
 			request: parsedRequestWithoutDer,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse fails closed for duplicate OCSP response CertIDs', async () => {
@@ -2269,7 +2278,7 @@ describe('ocsp', () => {
 			response: duplicateFirstOcspSingleResponse(response.der),
 			issuerCertificate: issuer.certificate.pem,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('validateOcspResponse rejects multiple status entries for the same certificate across hash algorithms', async () => {
@@ -2386,6 +2395,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -3304,6 +3314,7 @@ describe('ocsp', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['ocspSigning'],
+				customExtensions: [OCSP_NOCHECK_EXTENSION],
 			},
 		});
 		const leafKeys = await generateKeyPair();
@@ -3326,13 +3337,27 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const result = await validateOcspResponse({
-			response: response.der,
-			issuerCertificate: issuer.certificate.pem,
-			responderCertificate: responder.pem,
-			allowChainedResponderCertificate: true,
+		const issuerCrl = await createCertificateRevocationList({
+			crlNumber: 1,
+			issuer: { commonName: 'Allowed Indirect Responder CA' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerCertificate: issuer.certificate.der,
+			thisUpdate: new Date(Date.now() - 60_000),
+			nextUpdate: new Date(Date.now() + 60 * 60_000),
 		});
-		expect(result.ok).toBe(true);
+		const validate = (responderRevocationCrls: readonly Uint8Array[]) =>
+			validateOcspResponse({
+				response: response.der,
+				issuerCertificate: issuer.certificate.pem,
+				responderCertificate: responder.pem,
+				allowChainedResponderCertificate: true,
+				responderRevocationCrls,
+			});
+		expect(await validate([issuerCrl.der])).toMatchObject({ ok: true });
+		expect(await validate([])).toMatchObject({
+			ok: false,
+			code: 'responder_revocation_unknown',
+		});
 	});
 });
 
@@ -3746,6 +3771,56 @@ function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
 	}
 	return bitStringElement.value.slice(1);
 }
+
+describe('validateOcspResponse edge inputs', () => {
+	it('fails a successful response without responseBytes as unsigned', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsigned OCSP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		expect(
+			await validateOcspResponse({
+				response: Uint8Array.of(0x30, 0x03, 0x0a, 0x01, 0x00),
+				issuerCertificate: issuer.certificate.der,
+			}),
+		).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('takes the working key of a bare trust anchor issuer from the anchor', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bare Anchor OCSP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Bare Anchor OCSP CA' },
+			subject: { commonName: 'bare-anchor.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerCertificate: issuer.certificate.der,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem, certStatus: 'good' },
+			],
+		});
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
+		const result = await validateOcspResponseBy(
+			{ response: response.der },
+			{
+				kind: 'trust_anchor',
+				trustAnchor: trustAnchorFromCertificate(
+					unwrap(parseCertificatePem(issuer.certificate.pem)),
+				),
+				certificateIssuer: parsedLeaf.issuer,
+			},
+			{ verifiers: new Map() },
+		);
+		expect(result).toMatchObject({ ok: true });
+	});
+});
 
 describe('ocsp Result forms', () => {
 	it('parseOcspRequestDer and parseOcspResponseDer return typed malformed failures', () => {

@@ -54,7 +54,7 @@ How strict a check is belongs to the caller:
   implement it unconditionally. An option exists only where the standard
   leaves room.
 - Existing examples: `ocspProfile`, `responderRevocationPolicy`,
-  `crlMaxAgeMs`, `unrecognizedReasonCode`.
+  `crlMaxAgeMs`, `unrecognizedReasonCode`, `crlSignerSelfEvidence`.
 
 ## STRUCTURE
 

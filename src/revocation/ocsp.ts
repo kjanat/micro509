@@ -18,6 +18,7 @@ import {
 	hexToBytes,
 	parseTime,
 	requireElement,
+	signatureBits,
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
@@ -49,8 +50,15 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
 import {
+	callerVerification,
 	getVerifySignatureConfigResult,
+	resolveSignatureVerifiers,
 	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify';
 import {
@@ -61,13 +69,17 @@ import {
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import type { WorkingPublicKey } from '#micro509/internal/verify/verify-path';
+import {
+	anchorWorkingKey,
+	carriesTrustAnchorKey,
+	certificateWorkingKey,
+	pathWorkingKey,
+	withWorkingParameters,
+	workingParametersAt,
+} from '#micro509/internal/verify/verify-path';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type {
-	DecodeFailureCode,
-	DecodeRefusalCode,
-	ErrorResult,
-	Micro509Error,
-} from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
@@ -75,19 +87,24 @@ import {
 	throwMicro509Error,
 } from '#micro509/result/result';
 import type {
-	CheckCertificateRevocationAgainstCrlInput,
+	CrlCheckOptions,
 	CrlSource,
+	DeltaCrlBudget,
 	ParsedCertificateRevocationList,
+	SupersededDeltaCrlPolicy,
 	UnrecognizedReasonCodePolicy,
 } from '#micro509/revocation/crl';
 import {
+	assertClockSkew,
 	assertCrlMaxAge,
-	checkCertificateRevocationAgainstCrl,
+	checkCertificateRevocationAgainstCrlsBy,
 	coversAllDistributionPointReasons,
-	parseCertificateRevocationListDerOrThrow,
-	parseCertificateRevocationListPemOrThrow,
+	DELTA_CRL_ATTEMPTS_PER_CALL,
+	distinctSignedCrls,
+	normalizeCrl,
 } from '#micro509/revocation/crl';
-import { verifyCertificateChain } from '#micro509/verify/verify';
+import type { CandidatePath, TrustAnchor } from '#micro509/verify/verify';
+import { trustAnchorFromCertificate, verifyCertificateChain } from '#micro509/verify/verify';
 import type {
 	NameFieldKey,
 	ParsedCertificate,
@@ -261,8 +278,10 @@ export interface ParsedOcspResponse {
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** Human-readable signature algorithm name. */
 	readonly signatureAlgorithmName?: string;
-	/** Raw signature bytes. */
+	/** Signature bytes: the `signature` BIT STRING content after its unused-bit count. */
 	readonly signatureValue?: Uint8Array;
+	/** Unused bits in the final octet of {@linkcode signatureValue}, 0 through 7. */
+	readonly signatureValueUnusedBits?: number;
 	/** Timestamp when the responder produced this response. */
 	readonly producedAt?: Date;
 	/** Per-certificate status entries. */
@@ -383,7 +402,7 @@ export interface OcspResponseMaterial {
  * decode (see {@linkcode ParseOcspResponseErrorCode}).
  */
 export interface VerifyOcspResponseSignatureFailure
-	extends Micro509Error<'signature_invalid' | DecodeRefusalCode> {
+	extends Micro509Error<'signature_invalid' | DecodeFailureCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -400,24 +419,38 @@ export type VerifyOcspResponseSignatureResult =
 			readonly value: ParsedOcspResponse;
 	  }
 	| ErrorResult<
-			'signature_invalid' | DecodeRefusalCode,
+			'signature_invalid' | DecodeFailureCode,
 			Record<never, never>,
 			VerifyOcspResponseSignatureFailure
 	  >;
 
 /**
- * Revocation policy for delegated OCSP responder certificates (RFC 6960 §4.2.2.2.1).
+ * Revocation policy for delegated OCSP responder certificates. RFC 6960
+ * §4.2.2.2.1 leaves the check of a responder without `id-pkix-ocsp-nocheck` to
+ * local policy. CRL evidence comes from
+ * {@linkcode ValidateOcspResponseInput.responderRevocationCrls}.
  *
- * - `'honor-nocheck'` (default): a responder carrying `id-pkix-ocsp-nocheck`
- *   is exempt from revocation checking. Otherwise, CRL evidence from
- *   {@linkcode ValidateOcspResponseInput.responderRevocationCrls} is consulted
- *   when provided — a revoked responder rejects the response; missing or
- *   unusable evidence is tolerated (soft).
- * - `'require-evidence'`: `nocheck` is ignored; CRL evidence must positively
- *   show the responder is not revoked, otherwise the response is rejected.
+ * - `'nocheck-or-evidence'` (default): a responder carrying
+ *   `id-pkix-ocsp-nocheck` or noRevAvail is exempt (RFC 9608 §4). Otherwise
+ *   CRL evidence must show it is not revoked, as RFC 9608 §4 runs the RFC 5280
+ *   §6.1.3 (a)(3) check.
+ * - `'honor-nocheck'`: as `'nocheck-or-evidence'`, but missing or unusable
+ *   evidence is tolerated. A revoked verdict rejects, and so do an entry
+ *   whose reason code `responderRevocationUnrecognizedReasonCode: 'reject'`
+ *   refuses and an applicable delta CRL that cannot settle the status. A
+ *   responder with a critical cRLDistributionPoints extension still needs
+ *   evidence (X.509 (2019) §9.6.2.1).
+ * - `'require-evidence'`: `id-pkix-ocsp-nocheck` is ignored and CRL evidence
+ *   must show the responder is not revoked (RFC 5280 §6.1 lets an application
+ *   further limit the valid paths). A responder carrying noRevAvail is
+ *   rejected, as RFC 9608 §2 keeps it off every CRL.
  * - `'skip'`: no responder revocation checking.
  */
-export type OcspResponderRevocationPolicy = 'honor-nocheck' | 'require-evidence' | 'skip';
+export type OcspResponderRevocationPolicy =
+	| 'nocheck-or-evidence'
+	| 'honor-nocheck'
+	| 'require-evidence'
+	| 'skip';
 
 /**
  * Input for {@linkcode validateOcspResponse}.
@@ -431,7 +464,11 @@ export interface ValidateOcspResponseInput {
 	readonly request?: OcspRequestSource;
 	/** Explicit responder certificate — overrides embedded certificate discovery. */
 	readonly responderCertificate?: OcspCertificateSource;
-	/** When `true`, allows delegated responder chain validation beyond direct issuance. */
+	/**
+	 * When `true`, allows delegated responder chain validation beyond direct
+	 * issuance. `responderRevocationPolicy` then also applies to each CA
+	 * certificate between the issuer and the responder.
+	 */
 	readonly allowChainedResponderCertificate?: boolean;
 	/**
 	 * Explicitly trusted responder certificates for this issuer's scope
@@ -444,15 +481,20 @@ export interface ValidateOcspResponseInput {
 	 * matching certificate.
 	 */
 	readonly trustedOcspResponders?: readonly OcspCertificateSource[];
-	/** Revocation policy for delegated responder certificates. Defaults to `'honor-nocheck'`. */
+	/** Revocation policy for delegated responder certificates. Defaults to `'nocheck-or-evidence'`. */
 	readonly responderRevocationPolicy?: OcspResponderRevocationPolicy;
-	/** CRLs used as revocation evidence for delegated responder certificates. */
+	/**
+	 * CRLs used as revocation evidence for delegated responder certificates. A
+	 * delta CRL in the list updates the complete CRL it applies to (RFC 5280
+	 * §5.2.4).
+	 */
 	readonly responderRevocationCrls?: readonly CrlSource[];
 	/**
 	 * Maximum age of each `responderRevocationCrls` entry's `thisUpdate` at
-	 * `at`, in milliseconds. An older CRL yields no evidence. Unbounded by
-	 * default, in which case a CRL without `nextUpdate` yields no evidence.
-	 * Throws `RangeError` when negative or not finite.
+	 * `at`, in milliseconds. An older CRL, or one without `nextUpdate` when
+	 * this is unset, settles only a revocation other than certificateHold of
+	 * the responder (RFC 5280 §5.3.1). Unbounded by default. Throws
+	 * `RangeError` when negative or not finite.
 	 */
 	readonly responderRevocationCrlMaxAgeMs?: number;
 	/**
@@ -462,12 +504,20 @@ export interface ValidateOcspResponseInput {
 	 * another CRL provides good coverage. Defaults to `'revoked'`.
 	 */
 	readonly responderRevocationUnrecognizedReasonCode?: UnrecognizedReasonCodePolicy;
+	/**
+	 * Treatment of `responderRevocationCrls` delta CRLs that the attempt limits
+	 * leave unread although one already read supersedes them. See
+	 * {@linkcode SupersededDeltaCrlPolicy}. Defaults to `'indeterminate'`, which
+	 * leaves the responder `responder_revocation_unknown`.
+	 */
+	readonly responderRevocationUnreadSupersededDeltaCrls?: SupersededDeltaCrlPolicy;
 	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/**
 	 * Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`,
 	 * including those of `responderRevocationCrls`. It also widens
-	 * `responderRevocationCrlMaxAgeMs`.
+	 * `responderRevocationCrlMaxAgeMs`. Throws `RangeError` when negative or
+	 * not finite.
 	 */
 	readonly clockSkewMs?: number;
 	/**
@@ -477,7 +527,56 @@ export interface ValidateOcspResponseInput {
 	 * single response omits `nextUpdate`.
 	 */
 	readonly profile?: 'rfc6960' | 'rfc9919';
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where a signature would otherwise use unsupported algorithm parameters. A
+	 * key that micro509 verifies natively, a key that is no OID, or a value that
+	 * is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
+
+/** {@linkcode ValidateOcspResponseInput} once its issuer is resolved separately. */
+type OcspValidationOptions = Omit<ValidateOcspResponseInput, 'issuerCertificate'>;
+
+/** Options for {@linkcode verifyOcspResponseSignature}. */
+export interface VerifyOcspResponseSignatureOptions {
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where a signature would otherwise use unsupported algorithm parameters. A
+	 * key that micro509 verifies natively, a key that is no OID, or a value that
+	 * is no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
+
+/**
+ * Caller verifiers for one OCSP validation, with the working key that the
+ * issuer's certification path gives it (RFC 5280 §6.1.4 (e)).
+ *
+ * @internal
+ */
+export interface OcspCallerVerification {
+	/** Resolved caller verifiers. */
+	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
+	/** The issuer's working key; defaults to its own key parameters. */
+	readonly issuerWorkingKey?: WorkingPublicKey;
+	/** SHA-256 SPKI hashes that a delegated responder's certification path must not carry. */
+	readonly distrustedSpkiSha256?: readonly string[];
+	/**
+	 * Delta CRL checks left for the revocation check this validation serves.
+	 * Defaults to {@linkcode DELTA_CRL_ATTEMPTS_PER_CALL} for this validation.
+	 */
+	readonly deltaBudget?: DeltaCrlBudget;
+}
+
+/** {@linkcode OcspCallerVerification} with the issuer's working key resolved. */
+type ResolvedOcspCallerVerification = OcspCallerVerification & {
+	readonly issuerWorkingKey: WorkingPublicKey;
+	readonly deltaBudget: DeltaCrlBudget;
+};
 
 /** Failure codes produced by {@linkcode validateOcspResponse}. */
 export type ValidateOcspResponseErrorCode =
@@ -493,7 +592,7 @@ export type ValidateOcspResponseErrorCode =
 	| 'responder_revoked'
 	| 'responder_revocation_unknown'
 	| 'stale_response'
-	| DecodeRefusalCode;
+	| DecodeFailureCode;
 
 /**
  * Failure detail for {@linkcode validateOcspResponse}.
@@ -528,12 +627,61 @@ type ValidateOcspResponseFailureBranch = Extract<
 	{ readonly ok: false }
 >;
 
+/**
+ * The issuer of the certificate under check: a CA certificate, or a bare trust
+ * anchor, which X.509 (2019) §7.5 lets sign OCSP responses and certify
+ * delegated responders with its own key.
+ *
+ * @internal
+ */
+export type OcspIssuer =
+	| { readonly kind: 'certificate'; readonly certificate: OcspCertificateSource }
+	| {
+			readonly kind: 'trust_anchor';
+			readonly trustAnchor: TrustAnchor;
+			/**
+			 * The issuer field of the certificate under check, which RFC 6960 §4.1.1
+			 * hashes into the CertID in place of an issuer certificate's subject.
+			 */
+			readonly certificateIssuer: ParsedName;
+	  };
+
+/** A name and public key, as an issuer certificate or a trust anchor carries them. */
+type OcspIssuerKey = Pick<
+	TrustAnchor,
+	| 'subject'
+	| 'subjectKeyIdentifier'
+	| 'subjectPublicKeyInfoDer'
+	| 'publicKeyAlgorithmOid'
+	| 'publicKeyParametersOid'
+>;
+
+/** An {@linkcode OcspIssuer} with its certificate parsed; also the shape of a response signer. */
+type ResolvedOcspKey =
+	| { readonly kind: 'certificate'; readonly certificate: ParsedCertificate }
+	| Extract<OcspIssuer, { readonly kind: 'trust_anchor' }>;
+
+function ocspKeyOf(resolved: ResolvedOcspKey): OcspIssuerKey {
+	return resolved.kind === 'certificate' ? resolved.certificate : resolved.trustAnchor;
+}
+
+/** The name and key a CertID for `issuer` hashes (RFC 6960 §4.1.1). */
+function certIdIssuerKey(issuer: ResolvedOcspKey): OcspIssuerKey {
+	return issuer.kind === 'certificate'
+		? issuer.certificate
+		: { ...issuer.trustAnchor, subject: issuer.certificateIssuer };
+}
+
+function ocspCertificateOf(resolved: ResolvedOcspKey): ParsedCertificate | undefined {
+	return resolved.kind === 'certificate' ? resolved.certificate : undefined;
+}
+
 interface NormalizedOcspValidationInput {
 	readonly ok: true;
 	readonly parsedResponse: ParsedOcspResponse;
-	readonly issuer: ParsedCertificate;
+	readonly issuer: ResolvedOcspKey;
 	readonly trustedResponders: readonly ParsedCertificate[];
-	readonly signer: ParsedCertificate;
+	readonly signer: ResolvedOcspKey;
 }
 
 /**
@@ -804,7 +952,7 @@ export function parseOcspResponseDerOrThrow(der: Uint8Array): ParsedOcspResponse
 			signatureAlgorithmOid,
 			signatureAlgorithmParametersDer,
 		),
-		signatureValue: extractBitStringValue(signatureValue),
+		...signatureBits(signatureValue),
 		producedAt: signedResponseData.producedAt,
 		responses: signedResponseData.responses,
 		...(signedResponseData.nonce === undefined ? {} : { nonce: signedResponseData.nonce }),
@@ -987,6 +1135,19 @@ export async function createOcspResponse(
 export async function verifyOcspResponseSignature(
 	response: string | Uint8Array | ParsedOcspResponse,
 	signerCertificate: OcspCertificateSource,
+	options: VerifyOcspResponseSignatureOptions = {},
+): Promise<VerifyOcspResponseSignatureResult> {
+	return await verifyOcspResponseSignatureWith(
+		response,
+		signerCertificate,
+		callerVerification(options.signatureVerifiers),
+	);
+}
+
+async function verifyOcspResponseSignatureWith(
+	response: string | Uint8Array | ParsedOcspResponse,
+	signerCertificate: OcspCertificateSource,
+	verification: CallerVerification,
 ): Promise<VerifyOcspResponseSignatureResult> {
 	let parsed: ParsedOcspResponse;
 	try {
@@ -994,10 +1155,7 @@ export async function verifyOcspResponseSignature(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? verifyOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP response signed content is malformed',
-				)
+			? verifyOcspResponseFailureResult('malformed', 'OCSP response signed content is malformed')
 			: verifyOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	if (
@@ -1013,11 +1171,24 @@ export async function verifyOcspResponseSignature(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? verifyOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP signer certificate input is malformed',
-				)
+			? verifyOcspResponseFailureResult('malformed', 'OCSP signer certificate input is malformed')
 			: verifyOcspResponseFailureResult(refusal.code, refusal.message);
+	}
+	return await verifyOcspResponseSignatureByKey(parsed, signer, verification);
+}
+
+/** Verifies the signature of a parsed OCSP response with `signer`'s public key. */
+async function verifyOcspResponseSignatureByKey(
+	parsed: ParsedOcspResponse,
+	signer: OcspIssuerKey,
+	verification: CallerVerification,
+): Promise<VerifyOcspResponseSignatureResult> {
+	if (
+		parsed.responseDataDer === undefined ||
+		parsed.signatureAlgorithmOid === undefined ||
+		parsed.signatureValue === undefined
+	) {
+		return verifyOcspResponseFailureResult('signature_invalid', 'OCSP response is not signed');
 	}
 	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
 	try {
@@ -1028,7 +1199,9 @@ export async function verifyOcspResponseSignature(
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,
 			parsed.signatureValue,
+			parsed.signatureValueUnusedBits ?? 0,
 			parsed.responseDataDer,
+			verification,
 		);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
@@ -1083,17 +1256,49 @@ export async function verifyOcspResponseSignature(
 export async function validateOcspResponse(
 	input: ValidateOcspResponseInput,
 ): Promise<ValidateOcspResponseResult> {
+	return await validateOcspResponseWith(input, {
+		verifiers: resolveSignatureVerifiers(input.signatureVerifiers),
+	});
+}
+
+/**
+ * {@linkcode validateOcspResponse} with resolved caller verifiers and the
+ * issuer's working key.
+ *
+ * @internal
+ */
+export async function validateOcspResponseWith(
+	input: ValidateOcspResponseInput,
+	context: OcspCallerVerification,
+): Promise<ValidateOcspResponseResult> {
+	return await validateOcspResponseBy(
+		input,
+		{ kind: 'certificate', certificate: input.issuerCertificate },
+		context,
+	);
+}
+
+/**
+ * {@linkcode validateOcspResponse} for a certificate that `issuer` issued,
+ * which may be a bare trust anchor.
+ *
+ * @internal
+ */
+export async function validateOcspResponseBy(
+	callerInput: OcspValidationOptions,
+	issuerInput: OcspIssuer,
+	context: OcspCallerVerification,
+): Promise<ValidateOcspResponseResult> {
+	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	assertCrlMaxAge(input.responderRevocationCrlMaxAgeMs);
+	assertClockSkew(input.clockSkewMs);
 	let parsedResponse: ParsedOcspResponse;
 	try {
 		parsedResponse = normalizeOcspResponse(input.response);
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? validateOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP response signed content is malformed',
-				)
+			? validateOcspResponseFailureResult('malformed', 'OCSP response signed content is malformed')
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	if (parsedResponse.responseStatus !== 'successful') {
@@ -1102,26 +1307,46 @@ export async function validateOcspResponse(
 			`OCSP response status is ${parsedResponse.responseStatus}`,
 		);
 	}
-	const normalized = await normalizeOcspValidationInput(input, parsedResponse);
+	const normalized = await normalizeOcspValidationInput(input, issuerInput, parsedResponse);
 	if (!normalized.ok) {
 		return normalized;
 	}
 	const { issuer, trustedResponders, signer } = normalized;
-	const signature = await verifyOcspResponseSignature(parsedResponse, signer);
+	const issuerWorkingKey =
+		context.issuerWorkingKey ??
+		(issuer.kind === 'certificate'
+			? certificateWorkingKey(issuer.certificate)
+			: anchorWorkingKey(issuer.trustAnchor));
+	const resolvedContext = {
+		...context,
+		issuerWorkingKey,
+		deltaBudget: context.deltaBudget ?? { remaining: DELTA_CRL_ATTEMPTS_PER_CALL },
+	};
+	const responder = await classifyOcspResponder(
+		input,
+		parsedResponse,
+		issuer,
+		signer,
+		trustedResponders,
+		resolvedContext,
+	);
+	const signature = await verifyOcspResponseSignatureByKey(parsedResponse, ocspKeyOf(signer), {
+		verifiers: context.verifiers,
+		workingParameters: { parametersDer: responderWorkingParameters(responder, issuerWorkingKey) },
+	});
 	if (!signature.ok) {
 		return validateOcspResponseFailureResult(signature.code, signature.message);
 	}
 	const responderAuthorization = await validateOcspResponderAuthorization(
 		input,
 		parsedResponse,
-		issuer,
-		signer,
-		trustedResponders,
+		responder,
+		resolvedContext,
 	);
 	if (responderAuthorization !== undefined) return responderAuthorization;
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
-	const freshness = await validateOcspResponseFreshness(parsedResponse, issuer, {
+	const freshness = await validateOcspResponseFreshness(parsedResponse, certIdIssuerKey(issuer), {
 		at,
 		skew,
 		profile: input.profile ?? 'rfc6960',
@@ -1142,25 +1367,27 @@ export async function validateOcspResponse(
 
 /** Re-parses OCSP validation certificates and resolves the response signer. */
 async function normalizeOcspValidationInput(
-	input: ValidateOcspResponseInput,
+	input: OcspValidationOptions,
+	issuerInput: OcspIssuer,
 	parsedResponse: ParsedOcspResponse,
 ): Promise<NormalizedOcspValidationInput | ValidateOcspResponseFailureBranch> {
-	let issuer: ParsedCertificate;
+	let issuer: ResolvedOcspKey;
 	try {
-		issuer = normalizeCertificate(input.issuerCertificate);
+		issuer =
+			issuerInput.kind === 'certificate'
+				? { kind: 'certificate', certificate: normalizeCertificate(issuerInput.certificate) }
+				: issuerInput;
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? validateOcspResponseFailureResult(
-					'signature_invalid',
-					'issuer certificate input is malformed',
-				)
+			? validateOcspResponseFailureResult('malformed', 'issuer certificate input is malformed')
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	try {
 		const trustedResponders = (input.trustedOcspResponders ?? []).map(normalizeCertificate);
 		const resolvedResponder = await resolveOcspResponderCertificate(
 			input,
+			issuerInput,
 			parsedResponse,
 			trustedResponders,
 		);
@@ -1169,82 +1396,193 @@ async function normalizeOcspValidationInput(
 			parsedResponse,
 			issuer,
 			trustedResponders,
-			signer: normalizeCertificate(resolvedResponder),
+			signer:
+				resolvedResponder === undefined
+					? issuer
+					: { kind: 'certificate', certificate: normalizeCertificate(resolvedResponder) },
 		};
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? validateOcspResponseFailureResult(
-					'signature_invalid',
+					'malformed',
 					'OCSP responder certificate input is malformed',
 				)
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 }
 
-/** Selects the responder certificate from explicit, embedded, trusted, or issuer inputs. */
+/**
+ * Selects the responder certificate from explicit, embedded, trusted, or issuer
+ * inputs. `undefined` means the bare trust anchor issuer signed the response
+ * with its own key.
+ */
 async function resolveOcspResponderCertificate(
-	input: ValidateOcspResponseInput,
+	input: OcspValidationOptions,
+	issuer: OcspIssuer,
 	parsedResponse: ParsedOcspResponse,
 	trustedResponders: readonly ParsedCertificate[],
-): Promise<OcspCertificateSource> {
-	return (
+): Promise<OcspCertificateSource | undefined> {
+	const matched =
 		input.responderCertificate ??
 		(await findMatchingOcspResponderCertificate(
 			parsedResponse.certificates,
 			parsedResponse.responderId,
 		)) ??
-		(await findMatchingOcspResponderCertificate(trustedResponders, parsedResponse.responderId)) ??
-		parsedResponse.certificates?.[0] ??
-		input.issuerCertificate
-	);
+		(await findMatchingOcspResponderCertificate(trustedResponders, parsedResponse.responderId));
+	if (matched !== undefined) return matched;
+	if (issuer.kind === 'certificate') {
+		return parsedResponse.certificates?.[0] ?? issuer.certificate;
+	}
+	const responderId = parsedResponse.responderId;
+	return responderId === undefined ||
+		(await matchesOcspResponderId(responderId, issuer.trustAnchor))
+		? undefined
+		: parsedResponse.certificates?.[0];
+}
+
+/**
+ * Who signed an OCSP response: the issuer itself, a locally trusted responder,
+ * or a delegated responder with the outcome of validating its path.
+ */
+type OcspResponder =
+	| { readonly kind: 'issuer'; readonly signer: ResolvedOcspKey }
+	| { readonly kind: 'trusted'; readonly certificate: ParsedCertificate }
+	| {
+			readonly kind: 'delegated';
+			readonly certificate: ParsedCertificate;
+			readonly path: DelegatedResponderPath;
+	  };
+
+/** A certificate of a delegated responder's path with the issuer whose CRLs cover it. */
+interface ResponderPathLink {
+	readonly certificate: ParsedCertificate;
+	readonly issuer: ResolvedOcspKey;
+	readonly issuerWorkingKey: WorkingPublicKey;
+}
+
+/**
+ * A delegated responder's validated path: the parameters it gives the
+ * responder's key, the responder's immediate issuer with its working key,
+ * whose CRLs cover the responder, and each CA certificate between that issuer
+ * and the OCSP issuer. Otherwise why the path does not validate.
+ */
+type DelegatedResponderPath =
+	| {
+			readonly ok: true;
+			readonly parametersDer: Uint8Array | undefined;
+			readonly issuer: ResolvedOcspKey;
+			readonly issuerWorkingKey: WorkingPublicKey;
+			readonly caCertificates: readonly ResponderPathLink[];
+	  }
+	| ValidateOcspResponseFailureBranch;
+
+async function classifyOcspResponder(
+	input: OcspValidationOptions,
+	parsedResponse: ParsedOcspResponse,
+	issuer: ResolvedOcspKey,
+	signer: ResolvedOcspKey,
+	trustedResponders: readonly ParsedCertificate[],
+	context: ResolvedOcspCallerVerification,
+): Promise<OcspResponder> {
+	if (signer.kind === 'trust_anchor' || isOcspIssuer(signer.certificate, issuer)) {
+		return { kind: 'issuer', signer };
+	}
+	const certificate = signer.certificate;
+	if (trustedResponders.some((trusted) => isSameOcspCertificate(certificate, trusted))) {
+		return { kind: 'trusted', certificate };
+	}
+	return {
+		kind: 'delegated',
+		certificate,
+		path: await validateDelegatedResponderPath(input, parsedResponse, issuer, certificate, context),
+	};
+}
+
+/**
+ * The key parameters a responder's signature verifies with: the issuer's
+ * working key, a trusted responder's own or inherited parameters, or those its
+ * delegated path gives it.
+ */
+function responderWorkingParameters(
+	responder: OcspResponder,
+	issuerWorkingKey: WorkingPublicKey,
+): Uint8Array | undefined {
+	if (responder.kind === 'issuer') return issuerWorkingKey.parametersDer;
+	if (responder.kind === 'delegated' && responder.path.ok) return responder.path.parametersDer;
+	return workingParametersAt([responder.certificate], 0, 0, issuerWorkingKey);
 }
 
 async function validateOcspResponderAuthorization(
-	input: ValidateOcspResponseInput,
+	input: OcspValidationOptions,
 	parsedResponse: ParsedOcspResponse,
-	issuer: ParsedCertificate,
-	signer: ParsedCertificate,
-	trustedResponders: readonly ParsedCertificate[],
+	responder: OcspResponder,
+	context: ResolvedOcspCallerVerification,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
-	const responderBinding = await safeValidateOcspResponderIdBinding(parsedResponse, signer);
+	const responderBinding = await validateOcspResponderIdBinding(
+		parsedResponse.responderId,
+		responder.kind === 'issuer' ? ocspKeyOf(responder.signer) : responder.certificate,
+	);
 	if (!responderBinding.ok) {
 		return responderBinding;
 	}
-	const isLocallyTrustedResponder = trustedResponders.some((trusted) =>
-		isSameOcspCertificate(signer, trusted),
-	);
-	if (isSameOcspCertificate(signer, issuer) || isLocallyTrustedResponder) {
+	if (responder.kind !== 'delegated') {
 		return undefined;
 	}
-	return await validateDelegatedOcspResponder(input, parsedResponse, issuer, signer);
-}
-
-async function safeValidateOcspResponderIdBinding(
-	parsedResponse: ParsedOcspResponse,
-	signer: ParsedCertificate,
-): Promise<ValidateOcspResponseFailureBranch | { readonly ok: true }> {
-	try {
-		return await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		return refusal === undefined
-			? validateOcspResponseFailureResult(
-					'signature_invalid',
-					'OCSP responder certificate input is malformed',
-				)
-			: validateOcspResponseFailureResult(refusal.code, refusal.message);
+	if (!responder.path.ok) {
+		return responder.path;
 	}
+	const responderFailure = await validateDelegatedOcspResponder(
+		input,
+		responder.path.issuer,
+		responder.certificate,
+		{ ...context, issuerWorkingKey: responder.path.issuerWorkingKey },
+	);
+	if (responderFailure !== undefined) return responderFailure;
+	for (const link of responder.path.caCertificates) {
+		const revocation = await checkDelegatedResponderRevocation(
+			link.certificate,
+			link.issuer,
+			input,
+			{
+				...context,
+				issuerWorkingKey: link.issuerWorkingKey,
+			},
+		);
+		if (!revocation.ok) return revocation;
+	}
+	return undefined;
 }
 
-async function validateDelegatedOcspResponder(
-	input: ValidateOcspResponseInput,
+/**
+ * Whether `signer` is the issuer itself: the issuer certificate, or a
+ * certificate carrying the bare trust anchor's name and key.
+ */
+function isOcspIssuer(signer: ParsedCertificate, issuer: ResolvedOcspKey): boolean {
+	if (issuer.kind === 'certificate') {
+		return isSameOcspCertificate(signer, issuer.certificate);
+	}
+	return carriesTrustAnchorKey(signer, issuer.trustAnchor);
+}
+
+/**
+ * Validates a delegated responder's certification path below `issuer`, which
+ * starts from the issuer's working key (RFC 5280 §6.1.4 (e)), and returns the
+ * parameters that path gives the responder's key.
+ */
+async function validateDelegatedResponderPath(
+	input: OcspValidationOptions,
 	parsedResponse: ParsedOcspResponse,
-	issuer: ParsedCertificate,
+	issuer: ResolvedOcspKey,
 	signer: ParsedCertificate,
-): Promise<ValidateOcspResponseFailureBranch | undefined> {
+	context: ResolvedOcspCallerVerification,
+): Promise<DelegatedResponderPath> {
+	const issuerWorkingKey = context.issuerWorkingKey;
 	const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
-	if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
+	if (
+		!allowChainedResponderCertificate &&
+		!isDirectlyIssuedByOcspIssuer(signer, ocspKeyOf(issuer))
+	) {
 		return validateOcspResponseFailureResult(
 			'responder_chain_invalid',
 			'Delegated OCSP responder must be directly issued by issuer certificate',
@@ -1253,10 +1591,20 @@ async function validateDelegatedOcspResponder(
 	const chain = await verifyCertificateChain({
 		leaf: signer.der,
 		intermediates: allowChainedResponderCertificate
-			? buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer)
+			? buildOcspResponderIntermediates(
+					parsedResponse.certificates,
+					signer,
+					ocspCertificateOf(issuer),
+				)
 			: [],
-		roots: [issuer.der],
+		...delegatedPathStart(issuer, issuerWorkingKey),
 		...(input.at !== undefined ? { at: input.at } : {}),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
+		}),
+		...(context.distrustedSpkiSha256 !== undefined && {
+			distrustedSpkiSha256: context.distrustedSpkiSha256,
+		}),
 	});
 	if (!chain.ok) {
 		return validateOcspResponseFailureResult(
@@ -1264,13 +1612,91 @@ async function validateDelegatedOcspResponder(
 			'OCSP responder certificate chain does not validate',
 		);
 	}
+	const [responderLink, ...caCertificates] = responderPathLinks(
+		chain.value,
+		issuer,
+		issuerWorkingKey,
+	);
+	return {
+		ok: true,
+		parametersDer: pathWorkingKey(chain.value, 0).parametersDer,
+		issuer: responderLink?.issuer ?? issuer,
+		issuerWorkingKey: responderLink?.issuerWorkingKey ?? issuerWorkingKey,
+		caCertificates,
+	};
+}
+
+/**
+ * Each certificate of a delegated responder's validated path below the OCSP
+ * issuer, with the next certificate as its issuer and the OCSP issuer above
+ * the last.
+ */
+function responderPathLinks(
+	path: CandidatePath,
+	issuer: ResolvedOcspKey,
+	issuerWorkingKey: WorkingPublicKey,
+): readonly ResponderPathLink[] {
+	const below = path.anchorCertificateInChain ? path.chain.slice(0, -1) : path.chain;
+	return below.map((certificate, index) => {
+		const next = path.chain[index + 1];
+		return next === undefined
+			? { certificate, issuer, issuerWorkingKey }
+			: {
+					certificate,
+					issuer: { kind: 'certificate', certificate: next },
+					issuerWorkingKey: pathWorkingKey(path, index + 1),
+				};
+	});
+}
+
+/**
+ * Where a delegated responder's path starts: the issuer certificate as root,
+ * or trust anchor information carrying the issuer's working key when the
+ * issuer inherits its parameters or is a bare anchor.
+ */
+function delegatedPathStart(
+	issuer: ResolvedOcspKey,
+	issuerWorkingKey: WorkingPublicKey,
+):
+	| { readonly roots: readonly Uint8Array[] }
+	| { readonly roots: readonly Uint8Array[]; readonly trustAnchors: readonly TrustAnchor[] } {
+	if (issuer.kind === 'trust_anchor') {
+		return { roots: [], trustAnchors: [issuer.trustAnchor] };
+	}
+	const own = certificateWorkingKey(issuer.certificate).parametersDer;
+	const working = issuerWorkingKey.parametersDer;
+	if (working === undefined || (own !== undefined && sameDer(own, working))) {
+		return { roots: [issuer.certificate.der] };
+	}
+	return {
+		roots: [],
+		trustAnchors: [withWorkingParameters(trustAnchorFromCertificate(issuer.certificate), working)],
+	};
+}
+
+function sameDer(left: Uint8Array, right: Uint8Array): boolean {
+	return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+/** The ocspSigning and revocation checks on a delegated responder whose path validated. */
+async function validateDelegatedOcspResponder(
+	input: OcspValidationOptions,
+	issuer: ResolvedOcspKey,
+	signer: ParsedCertificate,
+	context: ResolvedOcspCallerVerification,
+): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
 		return validateOcspResponseFailureResult(
 			'ocsp_signing_missing',
 			'Delegated OCSP responder lacks ocspSigning EKU',
 		);
 	}
-	const responderRevocation = await checkDelegatedResponderRevocation(signer, issuer, input);
+	const responderRevocation = await checkDelegatedResponderRevocation(
+		signer,
+		issuer,
+		input,
+		context,
+	);
 	return responderRevocation.ok ? undefined : responderRevocation;
 }
 
@@ -1283,7 +1709,7 @@ interface OcspFreshnessContext {
 /** Checks response-level and per-certificate OCSP timestamps against the validation time. */
 async function validateOcspResponseFreshness(
 	parsedResponse: ParsedOcspResponse,
-	issuer: ParsedCertificate,
+	issuer: OcspIssuerKey,
 	context: OcspFreshnessContext,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	if (
@@ -1310,7 +1736,7 @@ async function validateOcspResponseFreshness(
 async function validateOcspSingleResponseFreshness(
 	response: ParsedOcspSingleResponse,
 	producedAt: Date | undefined,
-	issuer: ParsedCertificate,
+	issuer: OcspIssuerKey,
 	context: OcspFreshnessContext,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	let expected: ParsedOcspCertId;
@@ -1381,7 +1807,7 @@ function validateOcspRequestCoverage(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? validateOcspResponseFailureResult('request_mismatch', 'OCSP request input is malformed')
+			? validateOcspResponseFailureResult('malformed', 'OCSP request input is malformed')
 			: validateOcspResponseFailureResult(refusal.code, refusal.message);
 	}
 	if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
@@ -1423,10 +1849,10 @@ function validateOcspRequestIdCoverage(
 
 /** Builds a `VerifyOcspResponseSignatureFailureResult`. */
 function verifyOcspResponseFailureResult(
-	code: 'signature_invalid' | DecodeRefusalCode,
+	code: 'signature_invalid' | DecodeFailureCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid' | DecodeRefusalCode,
+	'signature_invalid' | DecodeFailureCode,
 	Record<never, never>,
 	VerifyOcspResponseSignatureFailure
 > {
@@ -1451,6 +1877,21 @@ export function hasOcspNoCheckExtension(certificate: OcspCertificateSource): boo
 	return carriesOcspNoCheck(normalizeCertificate(certificate));
 }
 
+/**
+ * The extension that exempts a certificate from revocation checking (RFC 9608
+ * §4): `'no_rev_avail'` for noRevAvail (RFC 9608 §2) or `'ocsp_nocheck'` for
+ * id-pkix-ocsp-nocheck.
+ */
+export type RevocationSkipReason = 'no_rev_avail' | 'ocsp_nocheck';
+
+/** The RFC 9608 §4 exemption a certificate parsed from its signed DER carries. */
+export function revocationSkipReasonOf(
+	certificate: ParsedCertificate,
+): RevocationSkipReason | undefined {
+	if (certificate.noRevAvail === true) return 'no_rev_avail';
+	return carriesOcspNoCheck(certificate) ? 'ocsp_nocheck' : undefined;
+}
+
 /** Whether a parsed certificate carries `id-pkix-ocsp-nocheck` with its NULL value. */
 export function carriesOcspNoCheck(certificate: ParsedCertificate): boolean {
 	return certificate.extensions.some(
@@ -1458,25 +1899,27 @@ export function carriesOcspNoCheck(certificate: ParsedCertificate): boolean {
 	);
 }
 
-/** Parses a CRL from PEM string, DER bytes, or an already-parsed CRL. */
-function parseResponderCrlFromSource(source: CrlSource): ParsedCertificateRevocationList {
-	if (typeof source === 'object' && 'issuer' in source) {
-		return source;
+/** The CRLs among `sources` that parse, split into complete and delta CRLs. */
+function partitionResponderCrls(sources: readonly CrlSource[]): {
+	readonly complete: readonly ParsedCertificateRevocationList[];
+	readonly delta: readonly ParsedCertificateRevocationList[];
+} {
+	const complete: ParsedCertificateRevocationList[] = [];
+	const delta: ParsedCertificateRevocationList[] = [];
+	for (const source of sources) {
+		let crl: ParsedCertificateRevocationList;
+		try {
+			crl = normalizeCrl(source);
+		} catch {
+			continue; // Unusable evidence — try remaining CRLs
+		}
+		(crl.baseCrlNumber === undefined ? complete : delta).push(crl);
 	}
-	if (typeof source === 'string') {
-		return parseCertificateRevocationListPemOrThrow(source);
-	}
-	return parseCertificateRevocationListDerOrThrow(source);
+	return { complete: distinctSignedCrls(complete), delta: distinctSignedCrls(delta) };
 }
 
-function responderCrlCheck(
-	signer: ParsedCertificate,
-	issuer: ParsedCertificate,
-	input: ValidateOcspResponseInput,
-): Omit<CheckCertificateRevocationAgainstCrlInput, 'crl'> {
+function responderCrlCheck(input: OcspValidationOptions): CrlCheckOptions {
 	return {
-		certificate: signer,
-		issuerCertificate: issuer,
 		at: input.at ?? new Date(),
 		...(input.responderRevocationCrlMaxAgeMs === undefined
 			? {}
@@ -1485,7 +1928,30 @@ function responderCrlCheck(
 		...(input.responderRevocationUnrecognizedReasonCode === undefined
 			? {}
 			: { unrecognizedReasonCode: input.responderRevocationUnrecognizedReasonCode }),
+		...(input.responderRevocationUnreadSupersededDeltaCrls === undefined
+			? {}
+			: { unreadSupersededDeltaCrls: input.responderRevocationUnreadSupersededDeltaCrls }),
 	};
+}
+
+/** The responder revocation outcome that `policy` and the responder's own extensions settle before any CRL is read. */
+function responderRevocationSettledWithoutCrls(
+	signer: ParsedCertificate,
+	policy: OcspResponderRevocationPolicy,
+): { readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult> | undefined {
+	if (policy === 'skip') {
+		return { ok: true };
+	}
+	const skipReason = revocationSkipReasonOf(signer);
+	if (skipReason === 'no_rev_avail') {
+		return policy === 'require-evidence'
+			? validateOcspResponseFailureResult(
+					'responder_revocation_unknown',
+					'Delegated OCSP responder carries noRevAvail, which no CRL lists',
+				)
+			: { ok: true };
+	}
+	return skipReason === 'ocsp_nocheck' && policy !== 'require-evidence' ? { ok: true } : undefined;
 }
 
 /**
@@ -1494,27 +1960,39 @@ function responderCrlCheck(
  */
 async function checkDelegatedResponderRevocation(
 	signer: ParsedCertificate,
-	issuer: ParsedCertificate,
-	input: ValidateOcspResponseInput,
+	issuer: ResolvedOcspKey,
+	input: OcspValidationOptions,
+	context: ResolvedOcspCallerVerification,
 ): Promise<{ readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult>> {
-	const policy = input.responderRevocationPolicy ?? 'honor-nocheck';
-	if (policy === 'skip') {
-		return { ok: true };
+	const policy = input.responderRevocationPolicy ?? 'nocheck-or-evidence';
+	const settled = responderRevocationSettledWithoutCrls(signer, policy);
+	if (settled !== undefined) {
+		return settled;
 	}
-	if (policy === 'honor-nocheck' && hasOcspNoCheckExtension(signer)) {
-		return { ok: true };
-	}
-	const crlCheck = responderCrlCheck(signer, issuer, input);
+	const crlCheck = responderCrlCheck(input);
+	const verification = {
+		verifiers: context.verifiers,
+		workingParameters: { parametersDer: context.issuerWorkingKey.parametersDer },
+	};
+	const crls = partitionResponderCrls(input.responderRevocationCrls ?? []);
 	const coveredReasons = new Set<string>();
 	let sawUnrecognizedReason = false;
-	for (const source of input.responderRevocationCrls ?? []) {
-		let crl: ParsedCertificateRevocationList;
-		try {
-			crl = parseResponderCrlFromSource(source);
-		} catch {
-			continue; // Unusable evidence — try remaining CRLs
+	let sawUnsettledDelta = false;
+	for (const crl of crls.complete) {
+		const outcome = await checkCertificateRevocationAgainstCrlsBy(
+			signer,
+			crl,
+			crls.delta,
+			issuer,
+			crlCheck,
+			verification,
+			[context.deltaBudget],
+		);
+		if (outcome.kind === 'unsettled') {
+			sawUnsettledDelta = true;
+			continue;
 		}
-		const result = await checkCertificateRevocationAgainstCrl({ ...crlCheck, crl });
+		const result = outcome.result;
 		if (!result.ok) {
 			sawUnrecognizedReason ||= result.code === 'reason_code_unrecognized';
 			continue; // CRL does not apply to the responder certificate
@@ -1535,16 +2013,29 @@ async function checkDelegatedResponderRevocation(
 			'Delegated OCSP responder carries an unrecognized CRL reason code',
 		);
 	}
+	if (sawUnsettledDelta) {
+		return validateOcspResponseFailureResult(
+			'responder_revocation_unknown',
+			'A delta CRL for the delegated OCSP responder could not settle its status',
+		);
+	}
 	// A definitive good requires every revocation reason to be covered; a single
 	// reason-scoped CRL does not prove the responder unrevoked.
-	if (coversAllDistributionPointReasons(coveredReasons) || policy === 'honor-nocheck') {
-		// honor-nocheck tolerates missing evidence (soft) — only a positive
-		// revoked verdict rejects when no usable evidence proves 'good'.
+	if (
+		coversAllDistributionPointReasons(coveredReasons) ||
+		(policy === 'honor-nocheck' && !hasCriticalCrlDistributionPoints(signer))
+	) {
 		return { ok: true };
 	}
 	return validateOcspResponseFailureResult(
 		'responder_revocation_unknown',
 		'Delegated OCSP responder revocation status could not be established',
+	);
+}
+
+function hasCriticalCrlDistributionPoints(certificate: ParsedCertificate): boolean {
+	return certificate.extensions.some(
+		(extension) => extension.oid === OIDS.cRLDistributionPoints && extension.critical,
 	);
 }
 
@@ -1654,7 +2145,7 @@ async function findMatchingOcspResponderCertificate(
 /** Verifies that the signer certificate matches the response's responder ID (byName or byKeyHash). */
 async function validateOcspResponderIdBinding(
 	responderId: ParsedOcspResponderId | undefined,
-	signer: ParsedCertificate,
+	signer: OcspIssuerKey,
 ): Promise<Extract<ValidateOcspResponseResult, { readonly ok: false }> | { readonly ok: true }> {
 	if (responderId === undefined) {
 		return { ok: true };
@@ -1676,7 +2167,7 @@ async function validateOcspResponderIdBinding(
 /** Returns `true` if the certificate matches the responder ID (subject name or key hash). */
 async function matchesOcspResponderId(
 	responderId: ParsedOcspResponderId,
-	certificate: ParsedCertificate,
+	certificate: OcspIssuerKey,
 ): Promise<boolean> {
 	if (responderId.type === 'byName') {
 		return compareOcspResponderNames(responderId.name, certificate.subject);
@@ -1701,10 +2192,7 @@ function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate
 }
 
 /** Returns `true` if `signer` was directly issued by `issuer` (name + AKI match). */
-function isDirectlyIssuedByOcspIssuer(
-	signer: ParsedCertificate,
-	issuer: ParsedCertificate,
-): boolean {
+function isDirectlyIssuedByOcspIssuer(signer: ParsedCertificate, issuer: OcspIssuerKey): boolean {
 	if (!compareDistinguishedNames(signer.issuer, issuer.subject)) {
 		return false;
 	}
@@ -1722,14 +2210,17 @@ function isDirectlyIssuedByOcspIssuer(
 function buildOcspResponderIntermediates(
 	certificates: readonly ParsedCertificate[] | undefined,
 	signer: ParsedCertificate,
-	issuer: ParsedCertificate,
+	issuer: ParsedCertificate | undefined,
 ): readonly Uint8Array[] {
 	if (certificates === undefined) {
 		return [];
 	}
 	const intermediates: Uint8Array[] = [];
 	for (const certificate of certificates) {
-		if (isSameOcspCertificate(certificate, signer) || isSameOcspCertificate(certificate, issuer)) {
+		if (
+			isSameOcspCertificate(certificate, signer) ||
+			(issuer !== undefined && isSameOcspCertificate(certificate, issuer))
+		) {
 			continue;
 		}
 		intermediates.push(certificate.der);
@@ -1756,7 +2247,7 @@ async function encodeOcspCertId(
 /** Computes issuer name/key hashes for a CertID given the hash algorithm OID and issuer certificate. */
 async function buildParsedOcspCertId(
 	hashAlgorithmOid: string,
-	issuer: ParsedCertificate,
+	issuer: OcspIssuerKey,
 	serialNumberHex: string,
 ): Promise<ParsedOcspCertId> {
 	const hashAlgorithm = ocspHashAlgorithmFromOid(hashAlgorithmOid);

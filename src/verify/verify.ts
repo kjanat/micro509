@@ -23,7 +23,16 @@ import {
 	rethrowDecodeRefusal,
 } from '#micro509/internal/asn1/decode-refusal';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import type {
+	CallerVerification,
+	SignatureVerifier,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
+import {
+	callerVerification,
+	resolveSignatureVerifiers,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { asciiLowercase, domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
@@ -40,15 +49,20 @@ import {
 } from '#micro509/internal/verify/policy-engine';
 import { createSpkiDistrustCheck } from '#micro509/internal/verify/spki-distrust';
 import {
+	anchorWorkingKey,
 	assertPathBuildingChecks,
 	authorityKeyIdentifierMismatch,
 	buildChainInternal,
+	carriesTrustAnchorKey,
+	certificateWorkingKey,
 	countCaCertificatesBelowParsed,
 	isSelfIssued,
 	isWithinValidity,
 	loadCertificates,
 	loadSingleCertificate,
+	signatureChecksWith,
 	verifyCertificateSignature,
+	workingParametersAt,
 } from '#micro509/internal/verify/verify-path';
 import {
 	normalizeLabelSeparators,
@@ -57,7 +71,7 @@ import {
 	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
 import type {
-	DecodeRefusalCode,
+	DecodeFailureCode,
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -69,9 +83,14 @@ import {
 	indexedMicro509Error,
 	micro509Error,
 } from '#micro509/result/result';
-import type { CrlSource, RevocationPolicy, TrustedOcspResponder } from '#micro509/revocation/chain';
+import type {
+	CheckChainRevocationValue,
+	CrlSource,
+	RevocationPolicy,
+	TrustedOcspResponder,
+} from '#micro509/revocation/chain';
 import { checkChainRevocation } from '#micro509/revocation/chain';
-import { assertCrlMaxAge } from '#micro509/revocation/crl';
+import { assertClockSkew, assertCrlMaxAge } from '#micro509/revocation/crl';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
@@ -121,14 +140,14 @@ export type EkuCheckResult =
 			readonly value: undefined;
 	  }
 	| IndexedErrorResult<
-			'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
+			'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeFailureCode,
 			Record<never, never>,
 			EkuCheckFailure
 	  >;
 
 /** Failure from {@linkcode checkExtendedKeyUsage} with the chain index of the certificate that failed. */
 export interface EkuCheckFailure
-	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode> {
+	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeFailureCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 	/** Zero-based index into the chain of the certificate that lacks the required EKU. */
@@ -187,6 +206,7 @@ export interface TrustAnchor {
  * - `public_key_distrusted` — a certificate or bare trust anchor uses an explicitly distrusted SHA-256 SPKI.
  * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
  * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
+ * - `malformed` — a certificate source does not decode as a certificate, or the leaf source holds other than exactly one.
  * - `unsupported` — a certificate source holds a construct micro509 does not decode (see `ParseCertificateErrorCode`).
  * - `limit_exceeded` — a certificate source exceeds a micro509 decoding limit (see `ParseCertificateErrorCode`).
  */
@@ -218,6 +238,7 @@ export const VERIFY_ERROR_CODES = [
 	'public_key_distrusted',
 	'certificate_revoked',
 	'revocation_indeterminate',
+	'malformed',
 	'unsupported',
 	'limit_exceeded',
 ] as const;
@@ -293,25 +314,39 @@ export interface BuildCandidatePathInput {
 	 * it stops with `path_building_limit_exceeded`. Defaults to `100_000`.
 	 */
 	readonly maxPathBuildingChecks?: number;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. Path building
+	 * calls one only where the signature algorithm would otherwise fail with
+	 * `unsupported_signature_algorithm_parameters`. Defaults to none. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** A signature-verified certification path from leaf to root, before constraint validation. */
-export interface CandidatePath {
+export type CandidatePath = CandidatePathCertificates & CandidatePathAnchor;
+
+/** The certificates of a {@linkcode CandidatePath}. */
+export interface CandidatePathCertificates {
 	/** Parsed end-entity certificate. */
 	readonly leaf: ParsedCertificate;
 	/** Full chain in leaf-to-root order (includes both leaf and root). */
 	readonly chain: readonly ParsedCertificate[];
 	/** Trusted root that terminates the path. */
 	readonly root: ParsedCertificate;
-	/**
-	 * `true` when {@linkcode CandidatePath.root} is a trusted root certificate
-	 * included in {@linkcode CandidatePath.chain}; `false` when a bare trust
-	 * anchor verified the terminal certificate, which stays a path certificate.
-	 */
-	readonly anchorCertificateInChain: boolean;
-	/** Selected bare trust anchor, when the path terminates without a root certificate. */
-	readonly trustAnchor?: TrustAnchor;
 }
+
+/**
+ * How a {@linkcode CandidatePath} ends: `anchorCertificateInChain: true` when
+ * {@linkcode CandidatePathCertificates.root} is a trusted root certificate
+ * included in the chain; `false` with the selected bare `trustAnchor` when that
+ * anchor verified the terminal certificate, which stays a path certificate.
+ */
+export type CandidatePathAnchor =
+	| { readonly anchorCertificateInChain: true; readonly trustAnchor?: never }
+	| { readonly anchorCertificateInChain: false; readonly trustAnchor: TrustAnchor };
 
 /** Result of {@linkcode buildCandidatePath}. On success, contains the {@linkcode CandidatePath}. */
 export type BuildCandidatePathResult =
@@ -363,6 +398,14 @@ export interface ValidateCandidatePathInput
 	readonly rejectOversizedDisplayText?: boolean;
 	/** Bare anchor returned by buildCandidatePath. Required for distrust checks when anchorCertificateInChain is false. */
 	readonly trustAnchor?: TrustAnchor;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. Pass the same
+	 * verifiers given to {@linkcode buildCandidatePath}. Defaults to none. A key
+	 * that micro509 verifies natively, a key that is no OID, or a value that is
+	 * no function throws `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 }
 
 /** Success payload from {@linkcode validateCandidatePath}. */
@@ -436,6 +479,16 @@ export interface VerifyCertificateChainInput
 	 * it stops with `path_building_limit_exceeded`. Defaults to `100_000`.
 	 */
 	readonly maxPathBuildingChecks?: number;
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. Path building
+	 * calls one only where the signature algorithm would otherwise fail with
+	 * `unsupported_signature_algorithm_parameters`. Defaults to none. A key that
+	 * micro509 verifies natively, a key that is no OID, or a value that is no
+	 * function throws `RangeError`. The same verifiers check CRL and OCSP
+	 * signatures under `revocation`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
 	/** Leaf purpose constraint to enforce during validation. */
 	readonly purpose?: VerifyPurpose;
 	/** DNS/IP/URI/SRV identity to match against the leaf's SAN. */
@@ -454,17 +507,12 @@ export interface VerifyCertificateChainInput
 }
 
 /** Fully verified certificate chain returned on success from {@linkcode verifyCertificateChain}. */
-export interface VerifiedCertificateChain {
-	/** Parsed end-entity certificate. */
-	readonly leaf: ParsedCertificate;
-	/** Full chain in leaf-to-root order. */
-	readonly chain: readonly ParsedCertificate[];
-	/** Trusted root that terminates the path. */
-	readonly root: ParsedCertificate;
+export type VerifiedCertificateChain = CandidatePath & VerifiedPolicyOutcome;
+
+/** The policy outputs of a {@linkcode VerifiedCertificateChain}. */
+export interface VerifiedPolicyOutcome {
 	/** Final RFC 5280 §6 / RFC 9618 constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
-	/** Selected bare trust anchor, when the path terminates without a root certificate. */
-	readonly trustAnchor?: TrustAnchor;
 }
 
 /** Result of {@linkcode verifyCertificateChain}. On success, contains the {@linkcode VerifiedCertificateChain}. */
@@ -480,7 +528,7 @@ export type VerifyChainResult =
 /** Failure from {@linkcode verifyCertificateSigningRequest}. */
 export interface VerifyRequestFailure
 	extends Micro509Error<
-		'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
+		'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeFailureCode,
 		VerifyFailureDetails
 	> {
 	/** Always `false` for failures. */
@@ -494,7 +542,7 @@ export type VerifyRequestResult =
 			readonly value: ParsedCertificateSigningRequest;
 	  }
 	| ErrorResult<
-			'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
+			'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeFailureCode,
 			VerifyFailureDetails,
 			VerifyRequestFailure
 	  >;
@@ -653,7 +701,7 @@ function certificateSourceFailure(
 		return failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message, source }));
 	}
 	return failure(
-		'issuer_not_found',
+		'malformed',
 		'certificate source is malformed or leaf source does not contain exactly one certificate',
 		0,
 		detail({
@@ -678,6 +726,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 > {
 	assertPathBuildingChecks(input.maxPathBuildingChecks);
 	const distrust = createSpkiDistrustCheck(input.distrustedSpkiSha256);
+	const signatureChecks = signatureChecksWith(resolveSignatureVerifiers(input.signatureVerifiers));
 	let leaf: ParsedCertificate;
 	try {
 		leaf = loadSingleCertificate(input.leaf);
@@ -697,7 +746,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 		anchors,
 		at,
 		{ failure, detail },
-		undefined,
+		signatureChecks,
 		input.maxPathBuildingChecks,
 		distrust,
 	);
@@ -738,8 +787,9 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 			leaf,
 			chain,
 			root,
-			anchorCertificateInChain: buildResult.anchorCertificateInChain ?? true,
-			...(buildResult.trustAnchor !== undefined && { trustAnchor: buildResult.trustAnchor }),
+			...(buildResult.trustAnchor === undefined
+				? { anchorCertificateInChain: true }
+				: { anchorCertificateInChain: false, trustAnchor: buildResult.trustAnchor }),
 		},
 	};
 }
@@ -812,12 +862,19 @@ async function validateCandidatePathRaw(
 		return failure('issuer_not_found', 'chain is empty', 0);
 	}
 
-	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input);
+	const verifiers = resolveSignatureVerifiers(input.signatureVerifiers);
+	const workingParameters = pathWorkingParameters(chain, input);
+	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input, {
+		verifiers,
+		workingParameters: { parametersDer: workingParameters(0) },
+	});
 	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
 	const certificateFailure = await validatePathCertificates(
 		chain,
 		at,
 		input.rejectOversizedDisplayText === true,
+		verifiers,
+		workingParameters,
 	);
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
@@ -869,15 +926,20 @@ async function validatePathDistrust(
 	return undefined;
 }
 
-/** RFC 5280 §3.2 makes a self-issued certificate self-signed only when the public key it binds verifies its signature. */
+/**
+ * RFC 5280 §3.2 makes a self-issued certificate self-signed only when the
+ * public key it binds verifies its signature, with the parameters its path
+ * gives that key (RFC 5280 §6.1.4 (e)).
+ */
 async function validateSelfSignedLeafAllowed(
 	leaf: ParsedCertificate,
 	chainLength: number,
 	input: ValidateCandidatePathInput,
+	verification: CallerVerification,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
 		return undefined;
-	const selfSignature = await verifyCertificateSignature(leaf, leaf);
+	const selfSignature = await verifyCertificateSignature(leaf, leaf, verification);
 	if (!selfSignature.ok || !selfSignature.valid) return undefined;
 	return failure(
 		'self_signed_leaf_not_allowed',
@@ -887,11 +949,34 @@ async function validateSelfSignedLeafAllowed(
 	);
 }
 
+/**
+ * RFC 5280 §6.1.2 (g)-(i) and §6.1.4 (e)-(f) along `chain`: the working key
+ * parameters for the issuer at each index. The terminal certificate or the bare
+ * anchor initializes them.
+ */
+function pathWorkingParameters(
+	chain: readonly ParsedCertificate[],
+	input: ValidateCandidatePathInput,
+): (issuerIndex: number) => Uint8Array | undefined {
+	const top = chain[chain.length - 1];
+	if (input.anchorCertificateInChain === false || top === undefined) {
+		const start =
+			input.trustAnchor === undefined
+				? { algorithmOid: '', parametersDer: undefined }
+				: anchorWorkingKey(input.trustAnchor);
+		return (issuerIndex) => workingParametersAt(chain, issuerIndex, chain.length - 1, start);
+	}
+	const start = certificateWorkingKey(top);
+	return (issuerIndex) => workingParametersAt(chain, issuerIndex, chain.length - 2, start);
+}
+
 /** Validates every certificate and issuer relationship in a candidate path. */
 async function validatePathCertificates(
 	chain: readonly ParsedCertificate[],
 	at: Date,
 	rejectOversizedDisplayText: boolean,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	workingParameters: (issuerIndex: number) => Uint8Array | undefined,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
@@ -902,7 +987,13 @@ async function validatePathCertificates(
 			const displayTextValidation = validateDisplayTextAtPathIndex(current, index);
 			if (displayTextValidation !== undefined) return displayTextValidation;
 		}
-		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
+		const issuerValidation = await validatePathIssuerAtIndex(
+			chain,
+			current,
+			index,
+			verifiers,
+			workingParameters,
+		);
 		if (issuerValidation !== undefined) return issuerValidation;
 	}
 	return undefined;
@@ -951,11 +1042,19 @@ async function validatePathIssuerAtIndex(
 	chain: readonly ParsedCertificate[],
 	current: ParsedCertificate,
 	index: number,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	workingParameters: (issuerIndex: number) => Uint8Array | undefined,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (index === chain.length - 1) return undefined;
 	const issuer = chain[index + 1];
 	if (issuer === undefined) return failure('issuer_not_found', 'issuer missing', index);
-	return await validateIssuerAtPathIndex(current, issuer, index);
+	return await validateIssuerAtPathIndex(
+		current,
+		issuer,
+		index,
+		verifiers,
+		workingParameters(index + 1),
+	);
 }
 
 function validatePathLengthConstraints(
@@ -1109,6 +1208,8 @@ async function validateIssuerAtPathIndex(
 	current: ParsedCertificate,
 	issuer: ParsedCertificate,
 	index: number,
+	verifiers: ReadonlyMap<string, SignatureVerifier>,
+	workingParametersDer: Uint8Array | undefined,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	if (!compareDistinguishedNames(current.issuer, issuer.subject)) {
 		return failure(
@@ -1121,7 +1222,10 @@ async function validateIssuerAtPathIndex(
 			}),
 		);
 	}
-	const signatureResult = await verifyCertificateSignature(current, issuer);
+	const signatureResult = await verifyCertificateSignature(current, issuer, {
+		verifiers,
+		workingParameters: { parametersDer: workingParametersDer },
+	});
 	if (!signatureResult.ok) {
 		return failure(
 			signatureResult.code,
@@ -1207,7 +1311,7 @@ export async function validateCandidatePath(
 		}
 		return verifyFailureResult(
 			failure(
-				'signature_invalid',
+				'malformed',
 				'certificate input is malformed',
 				index,
 				detail({
@@ -1254,26 +1358,14 @@ export async function validateCandidatePath(
  * ```
  */
 export async function verifyCertificateChain(
-	input: VerifyCertificateChainInput,
+	callerInput: VerifyCertificateChainInput,
 ): Promise<VerifyChainResult> {
+	const input = { ...callerInput, at: callerInput.at ?? new Date() };
 	const distrustedSpkiSha256 =
 		input.distrustedSpkiSha256 === undefined ? undefined : [...input.distrustedSpkiSha256];
 	assertCrlMaxAge(input.revocation?.policy?.crlMaxAgeMs);
-	const buildResult = await buildCandidatePath({
-		leaf: input.leaf,
-		roots: input.roots,
-		...(input.intermediates !== undefined && {
-			intermediates: input.intermediates,
-		}),
-		...(input.trustAnchors !== undefined && {
-			trustAnchors: input.trustAnchors,
-		}),
-		...(input.at !== undefined && { at: input.at }),
-		...(input.maxPathBuildingChecks !== undefined && {
-			maxPathBuildingChecks: input.maxPathBuildingChecks,
-		}),
-		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
-	});
+	assertClockSkew(input.revocation?.policy?.clockSkewMs);
+	const buildResult = await buildCandidatePath(chainBuildInput(input, distrustedSpkiSha256));
 	if (!buildResult.ok) {
 		return buildResult;
 	}
@@ -1285,6 +1377,9 @@ export async function verifyCertificateChain(
 			trustAnchor: buildResult.value.trustAnchor,
 		}),
 		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
+		}),
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
 		...copyValidationInputs(input),
@@ -1310,7 +1405,11 @@ export async function verifyCertificateChain(
 
 	// Revocation checking (optional)
 	if (input.revocation !== undefined) {
-		const revocationFailure = await validateVerifiedChainRevocation(input, buildResult.value.chain);
+		const revocationFailure = await validateVerifiedChainRevocation(
+			input,
+			buildResult.value,
+			distrustedSpkiSha256,
+		);
 		if (revocationFailure !== undefined) return revocationFailure;
 	}
 
@@ -1323,14 +1422,53 @@ export async function verifyCertificateChain(
 	};
 }
 
+/** The path-building half of a {@linkcode VerifyCertificateChainInput}. */
+function chainBuildInput(
+	input: VerifyCertificateChainInput,
+	distrustedSpkiSha256: readonly string[] | undefined,
+): BuildCandidatePathInput {
+	return {
+		leaf: input.leaf,
+		roots: input.roots,
+		...(input.intermediates !== undefined && {
+			intermediates: input.intermediates,
+		}),
+		...(input.trustAnchors !== undefined && {
+			trustAnchors: input.trustAnchors,
+		}),
+		...(input.at !== undefined && { at: input.at }),
+		...(input.maxPathBuildingChecks !== undefined && {
+			maxPathBuildingChecks: input.maxPathBuildingChecks,
+		}),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
+		}),
+		...(distrustedSpkiSha256 !== undefined && { distrustedSpkiSha256 }),
+	};
+}
+
+/**
+ * The bare anchor that issued the last certificate of `path`. A path that ends
+ * with the anchor's own certificate has none: that certificate is the anchor,
+ * which revocation checking leaves out.
+ */
+function revocationTrustAnchor(path: CandidatePath): TrustAnchor | undefined {
+	const top = path.chain[path.chain.length - 1];
+	if (path.trustAnchor === undefined || top === undefined) return undefined;
+	return carriesTrustAnchorKey(top, path.trustAnchor) ? undefined : path.trustAnchor;
+}
+
 /** Applies optional revocation evidence to an otherwise verified certificate chain. */
 async function validateVerifiedChainRevocation(
 	input: VerifyCertificateChainInput,
-	chain: readonly ParsedCertificate[],
+	path: CandidatePath,
+	distrustedSpkiSha256: readonly string[] | undefined,
 ): Promise<VerifyChainResult | undefined> {
 	if (input.revocation === undefined) return undefined;
+	const trustAnchor = revocationTrustAnchor(path);
 	const revocationResult = await checkChainRevocation({
-		chain,
+		chain: path.chain,
+		...(trustAnchor !== undefined && { trustAnchor }),
 		...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
 		...(input.revocation.ocspResponses !== undefined
 			? { ocspResponses: input.revocation.ocspResponses }
@@ -1343,15 +1481,17 @@ async function validateVerifiedChainRevocation(
 			: {}),
 		...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
 		...(input.at !== undefined ? { at: input.at } : {}),
+		...(input.signatureVerifiers !== undefined
+			? { signatureVerifiers: input.signatureVerifiers }
+			: {}),
+		...(distrustedSpkiSha256 !== undefined ? { distrustedSpkiSha256 } : {}),
 	});
 	return revocationResult.value.decision === 'deny'
 		? revocationFailureResult(revocationResult.value)
 		: undefined;
 }
 
-function revocationFailureResult(
-	value: Awaited<ReturnType<typeof checkChainRevocation>>['value'],
-): VerifyChainResult {
+function revocationFailureResult(value: CheckChainRevocationValue): VerifyChainResult {
 	const firstRevoked = value.summary.revokedCertificates[0];
 	if (firstRevoked !== undefined) {
 		return verifyFailureResult(
@@ -1382,7 +1522,7 @@ function revocationFailureResult(
 
 /** Revocation evaluates each non-anchor chain certificate in path order. */
 function revocationFailureIndex(
-	value: Awaited<ReturnType<typeof checkChainRevocation>>['value'],
+	value: CheckChainRevocationValue,
 	status: 'revoked' | 'indeterminate',
 ): number | undefined {
 	const index = value.certificates.findIndex((certificate) => certificate.status === status);
@@ -1390,6 +1530,19 @@ function revocationFailureIndex(
 }
 
 // verifyCertificateSigningRequest
+
+/** Options for {@linkcode verifyCertificateSigningRequest}. */
+export interface VerifyCertificateSigningRequestOptions {
+	/**
+	 * Caller verifiers for signature algorithms micro509 does not verify through
+	 * WebCrypto, keyed by dotted-decimal signature algorithm OID. One runs only
+	 * where the result would otherwise be
+	 * `unsupported_signature_algorithm_parameters`. A key that micro509 verifies
+	 * natively, a key that is no OID, or a value that is no function throws
+	 * `RangeError`.
+	 */
+	readonly signatureVerifiers?: SignatureVerifiers;
+}
 
 /**
  * Verifies the self-signature of a PKCS#10 certificate signing request.
@@ -1409,7 +1562,9 @@ function revocationFailureIndex(
  */
 export async function verifyCertificateSigningRequest(
 	input: CsrSource,
+	options: VerifyCertificateSigningRequestOptions = {},
 ): Promise<VerifyRequestResult> {
+	const verification = callerVerification(options.signatureVerifiers);
 	let parsed: ParsedCertificateSigningRequest;
 	try {
 		parsed =
@@ -1426,42 +1581,24 @@ export async function verifyCertificateSigningRequest(
 			);
 		}
 		return verifyRequestFailureResult(
-			'signature_invalid',
+			'malformed',
 			'certificate request input is malformed',
 			detail({
 				actual: error instanceof Error ? error.message : 'certificate request input is malformed',
 			}),
 		);
 	}
-	let signatureResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
-	try {
-		signatureResult = await verifySignedDataDetailed(
-			parsed.signatureAlgorithmOid,
-			parsed.signatureAlgorithmParametersDer,
-			parsed.publicKeyAlgorithmOid,
-			parsed.publicKeyParametersOid,
-			parsed.subjectPublicKeyInfoDer,
-			parsed.signatureValue,
-			parsed.certificationRequestInfoDer,
-		);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		if (refusal !== undefined) {
-			return verifyRequestFailureResult(
-				refusal.code,
-				refusal.message,
-				detail({ subjectCommonName: parsed.subject.values.commonName, actual: refusal.message }),
-			);
-		}
-		return verifyRequestFailureResult(
-			'signature_invalid',
-			'certificate request input is malformed',
-			detail({
-				subjectCommonName: parsed.subject.values.commonName,
-				actual: error instanceof Error ? error.message : 'certificate request input is malformed',
-			}),
-		);
-	}
+	const signatureResult = await verifySignedDataDetailed(
+		parsed.signatureAlgorithmOid,
+		parsed.signatureAlgorithmParametersDer,
+		parsed.publicKeyAlgorithmOid,
+		parsed.publicKeyParametersOid,
+		parsed.subjectPublicKeyInfoDer,
+		parsed.signatureValue,
+		parsed.signatureValueUnusedBits,
+		parsed.certificationRequestInfoDer,
+		verification,
+	);
 	if (!signatureResult.ok) {
 		const code =
 			signatureResult.code === 'verification_error' ? 'signature_invalid' : signatureResult.code;
@@ -1509,11 +1646,7 @@ export function checkExtendedKeyUsage(
 	if (!normalized.ok) {
 		const refusal = decodeRefusalOf(normalized.error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? ekuCheckFailureResult(
-					'leaf_eku_missing',
-					'certificate input is malformed',
-					normalized.index,
-				)
+			? ekuCheckFailureResult('malformed', 'certificate input is malformed', normalized.index)
 			: ekuCheckFailureResult(refusal.code, refusal.message, normalized.index);
 	}
 	const normalizedChain = normalized.chain;
@@ -1595,6 +1728,9 @@ function baseChainInput(
 		}),
 		...(input.distrustedSpkiSha256 !== undefined && {
 			distrustedSpkiSha256: input.distrustedSpkiSha256,
+		}),
+		...(input.signatureVerifiers !== undefined && {
+			signatureVerifiers: input.signatureVerifiers,
 		}),
 		...copyValidationInputs(input),
 	};
@@ -1763,6 +1899,7 @@ function validateServiceIdentity(
 	if (
 		error.code !== 'subject_alt_name_mismatch' &&
 		error.code !== 'common_name_fallback_suppressed' &&
+		error.code !== 'malformed' &&
 		error.code !== 'unsupported' &&
 		error.code !== 'limit_exceeded'
 	) {
@@ -1786,7 +1923,7 @@ function validateServiceIdentityInput(
 	serviceIdentity: ServiceIdentityInput,
 ): ValidationCheckResult {
 	if (!isRecord(serviceIdentity)) {
-		return failure('subject_alt_name_mismatch', 'service identity input is malformed', 0);
+		return failure('malformed', 'service identity input is malformed', 0);
 	}
 	if (
 		serviceIdentity.type !== 'dns' &&
@@ -1795,7 +1932,7 @@ function validateServiceIdentityInput(
 		serviceIdentity.type !== 'srv'
 	) {
 		return failure(
-			'subject_alt_name_mismatch',
+			'malformed',
 			'service identity input is malformed',
 			0,
 			detail({ actual: String(serviceIdentity.type) }),
@@ -1803,7 +1940,7 @@ function validateServiceIdentityInput(
 	}
 	if (typeof serviceIdentity.value !== 'string') {
 		return failure(
-			'subject_alt_name_mismatch',
+			'malformed',
 			'service identity input is malformed',
 			0,
 			detail({ actual: serviceIdentity.type }),
@@ -1814,7 +1951,7 @@ function validateServiceIdentityInput(
 			parseIpAddressToBytes(serviceIdentity.value);
 		} catch {
 			return failure(
-				'subject_alt_name_mismatch',
+				'malformed',
 				'service identity input is malformed',
 				0,
 				detail({ expected: serviceIdentity.value, actual: 'ip' }),
@@ -1968,7 +2105,7 @@ function verifyRequestFailureResult(
 	message: string,
 	details?: VerifyFailureDetails,
 ): ErrorResult<
-	'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
+	'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeFailureCode,
 	VerifyFailureDetails,
 	VerifyRequestFailure
 > {
@@ -1985,7 +2122,7 @@ function ekuCheckFailureResult(
 	message: string,
 	index: number,
 ): IndexedErrorResult<
-	'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
+	'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeFailureCode,
 	Record<never, never>,
 	EkuCheckFailure
 > {
@@ -2309,4 +2446,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
 }
 
+export type {
+	SignatureVerifier,
+	SignatureVerifierInput,
+	SignatureVerifiers,
+} from '#micro509/internal/crypto/sig-verify';
 export { isSelfIssued as isSelfIssuedCertificate } from '#micro509/internal/verify/verify-path';

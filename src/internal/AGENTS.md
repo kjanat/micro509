@@ -86,6 +86,15 @@ internal/
   octet in `tag` and its number in `tagNumber`, so compare `tagNumber` when the
   class allows numbers from 31 up.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
+  Caller `signatureVerifiers` are verify-only: `sig-verify.ts` reaches one
+  only after native dispatch refuses the algorithm, and hands it copies made
+  with `new Uint8Array(bytes)`. `Buffer#slice` returns a view of the caller's
+  memory.
+- `verify/verify-path.ts` defers a link whose issuer key inherits DSA
+  parameters (RFC 5280 §6.1.4 (e)) until a root or bare anchor ends the path.
+  A root that leaves a deferred link unverified falls through to the bare
+  anchors. An anchor that does gives way to the next matching anchor, and
+  the search stays open when none completes the path.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.
 - Keep complexity-reduction helpers in the codec or engine that owns their

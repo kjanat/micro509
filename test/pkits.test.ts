@@ -9,16 +9,18 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
+import type { SignatureVerifiers } from '#micro509/crypto';
+import { dsaSignatureVerifiers } from '#test/oracles/dsa';
 import type { PkitsCase } from '#test/pkits/manifest';
 import { PKITS_CASES } from '#test/pkits/manifest';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const REVOCATION_SECTIONS = new Set(['4.4', '4.5', '4.14', '4.15']);
 const REVOCATION_TEST_NUMBERS = new Set(['4.7.4', '4.7.5']);
-// PKITS cases that exercise DSA. micro509 is WebCrypto-native and does not
-// support DSA by design, so these "valid DSA" chains fail with
+// PKITS cases that exercise DSA. WebCrypto has no DSA, so without a caller
+// `signatureVerifiers` entry these "valid DSA" chains fail with
 // `unsupported_signature_algorithm_parameters`. Tracked with `it.failing` so the
-// suite flags us if DSA support ever lands (the test would start passing).
+// suite flags us if built-in DSA support ever lands (the test would start passing).
 const UNSUPPORTED_ALGORITHM_TESTS = new Set(['4.1.4', '4.1.5']);
 // PKITS 4.8.19's explicitText is 310 characters; the application may reject it.
 const OVERSIZED_EXPLICIT_TEXT_TEST = '4.8.19';
@@ -211,6 +213,22 @@ describe('PKITS 4.8.19 oversized explicitText', () => {
 	);
 });
 
+describe('PKITS 4.1 DSA through caller signatureVerifiers', () => {
+	it.each([
+		{ testNumber: '4.1.4', expected: { ok: true } },
+		{ testNumber: '4.1.5', expected: { ok: true } },
+		{ testNumber: '4.1.6', expected: { ok: false, code: 'signature_invalid', index: 0 } },
+	])('$testNumber validates as the manifest expects', async ({ testNumber, expected }) => {
+		const pkitsCase = PKITS_CASES.find((candidate) => candidate.testNumber === testNumber);
+		if (pkitsCase === undefined) throw new Error(`PKITS manifest lacks ${testNumber}`);
+		expect(expected.ok).toBe(pkitsCase.shouldValidate);
+		const result = await verifyPkitsPath(pkitsCase, {
+			signatureVerifiers: dsaSignatureVerifiers,
+		});
+		expect(result).toMatchObject(expected);
+	});
+});
+
 function pkitsLeafName(pkitsCase: PkitsCase): string {
 	const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
 	if (leafName === undefined) {
@@ -221,7 +239,10 @@ function pkitsLeafName(pkitsCase: PkitsCase): string {
 
 async function verifyPkitsPath(
 	pkitsCase: PkitsCase,
-	options: { readonly rejectOversizedDisplayText?: boolean } = {},
+	options: {
+		readonly rejectOversizedDisplayText?: boolean;
+		readonly signatureVerifiers?: SignatureVerifiers;
+	} = {},
 ): Promise<Awaited<ReturnType<typeof verifyCertificateChain>>> {
 	const rootName = pkitsCase.certs[0];
 	if (rootName === undefined) {

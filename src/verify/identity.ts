@@ -15,7 +15,7 @@ import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/share
 import type { UriHost, UriHostSource } from '#micro509/internal/shared/uri-host';
 import { hostportHost, uriAuthorityHost } from '#micro509/internal/shared/uri-host';
 import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
-import type { DecodeRefusalCode, ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
 import type { SubjectAltName } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
@@ -75,7 +75,7 @@ export type MatchServiceIdentityErrorCode =
 	| 'common_name_fallback_suppressed'
 	| 'service_identity_mismatch'
 	| 'unsupported_service_identity_type'
-	| DecodeRefusalCode;
+	| DecodeFailureCode;
 
 /** Diagnostic context attached to an identity-matching failure. */
 export interface MatchServiceIdentityFailureDetails {
@@ -182,7 +182,7 @@ export function matchCertificateServiceIdentity(
 	} catch (error) {
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? failure('subject_alt_name_mismatch', 'certificate input is malformed')
+			? failure('malformed', 'certificate input is malformed')
 			: failure(refusal.code, refusal.message);
 	}
 	switch (serviceIdentity.type) {
@@ -669,7 +669,7 @@ function malformedServiceIdentityFailure(
 ): MatchServiceIdentityResult {
 	const renderedValue = typeof value === 'string' ? value : '<malformed>';
 	return failure(
-		'subject_alt_name_mismatch',
+		'malformed',
 		'service identity input is malformed',
 		details(certificate.subject.values.commonName, `${type}:${renderedValue}`, type),
 	);

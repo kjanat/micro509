@@ -132,7 +132,7 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 		throw new Error('Invalid BIT STRING');
 	}
 	if (unusedBits !== 0) {
-		throw new Error('BIT STRING must have zero unused bits');
+		throw new Error('BIT STRING value is not a whole number of octets');
 	}
 	return element.value.slice(1);
 }
@@ -172,6 +172,15 @@ export function decodeBitString(element: DerElement): DerBitString {
 	const nonZeroPadding =
 		unusedBits > 0 && bytes.length > 0 && ((bytes[bytes.length - 1] ?? 0) & paddingMask) !== 0;
 	return { bytes, unusedBits, nonZeroPadding };
+}
+
+/** A signed object's `signatureValue` BIT STRING as its octets and unused-bit count. */
+export function signatureBits(element: DerElement): {
+	readonly signatureValue: Uint8Array;
+	readonly signatureValueUnusedBits: number;
+} {
+	const { bytes, unusedBits } = decodeBitString(element);
+	return { signatureValue: bytes, signatureValueUnusedBits: unusedBits };
 }
 
 /**
