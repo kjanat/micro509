@@ -420,6 +420,23 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 		).toEqual({ ok: true, valid: false });
 	});
 
+	it('finds the caller verifier for a non-canonical spelling of its OID', async () => {
+		const ca = unwrap(parseCertificateDer(dsaCaCert));
+		const leaf = unwrap(parseCertificateDer(dsaLeaf));
+		const spelled = leaf.signatureAlgorithmOid.replace(/\.(\d+)$/, '.0$1');
+		expect(spelled).not.toBe(leaf.signatureAlgorithmOid);
+		expect(
+			await verifySignature({
+				signerSpkiDer: ca.subjectPublicKeyInfoDer,
+				signatureAlgorithm: { oid: spelled },
+				publicKeyAlgorithm: { oid: ca.publicKeyAlgorithmOid },
+				signature: leaf.signatureValue,
+				data: leaf.tbsCertificateDer,
+				signatureVerifiers: dsaSignatureVerifiers,
+			}),
+		).toEqual({ ok: true, valid: true });
+	});
+
 	it('hands the verifier a copy of the signature algorithm parameters', async () => {
 		const ca = unwrap(parseCertificateDer(dsaCaCert));
 		const leaf = unwrap(parseCertificateDer(dsaLeaf));

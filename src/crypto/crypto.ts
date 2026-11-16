@@ -6,7 +6,12 @@
  * @module
  */
 
-import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import { canonicalizeOid } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_LIMIT_CODES,
+	decodeRefusalOf,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import { derEcdsaSignatureToRaw, rawEcdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
 import type {
 	SignatureVerifiers,
@@ -106,7 +111,7 @@ export async function verifySignatureWithKey(
 	try {
 		return await verifySignedDataWithKeyDetailed(
 			input.publicKey,
-			input.signatureAlgorithm.oid,
+			canonicalSignatureOid(input.signatureAlgorithm.oid),
 			input.signatureAlgorithm.parametersDer,
 			input.signature,
 			input.data,
@@ -116,6 +121,20 @@ export async function verifySignatureWithKey(
 		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
 		if (refusal === undefined) throw error;
 		return { ok: false, code: refusal.code, reason: refusal.message };
+	}
+}
+
+/**
+ * `oid` in its canonical spelling, so dispatch and the caller verifier lookup
+ * compare OIDs canonically. A string that is no OID stays as given, and
+ * dispatch refuses it.
+ */
+function canonicalSignatureOid(oid: string): string {
+	try {
+		return canonicalizeOid(oid);
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
+		return oid;
 	}
 }
 
@@ -143,7 +162,7 @@ export interface SignDataResult {
 export async function verifySignature(input: VerifySignatureInput): Promise<VerifySignatureResult> {
 	try {
 		return await verifySignedDataDetailed(
-			input.signatureAlgorithm.oid,
+			canonicalSignatureOid(input.signatureAlgorithm.oid),
 			input.signatureAlgorithm.parametersDer,
 			input.publicKeyAlgorithm.oid,
 			input.publicKeyAlgorithm.parametersOid,
