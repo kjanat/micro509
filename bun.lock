@@ -15,7 +15,7 @@
         "@kjanat/tsc-bridge": "catalog:typebridge",
         "@kprint/kprint": "catalog:",
         "@micro509/doc-render": "workspace:*",
-        "@tsconfig/node24": "catalog:ts",
+        "@tsconfig/node26": "catalog:ts",
         "@types/bun": "catalog:ts",
         "@types/deno": "catalog:deno",
         "@types/node": "catalog:ts",
@@ -104,7 +104,7 @@
         "@micro509/vitepress-doc-examples": "workspace:*",
         "@micro509/vitepress-github-links": "workspace:*",
         "@micro509/vitepress-versioned-docs": "workspace:*",
-        "@tsconfig/node24": "catalog:ts",
+        "@tsconfig/node26": "catalog:ts",
         "@types/bun": "catalog:ts",
         "@types/node": "catalog:ts",
         "@vue/tsconfig": "catalog:ts",
@@ -172,7 +172,7 @@
     },
     "ts": {
       "@arethetypeswrong/core": "^0.18.4",
-      "@tsconfig/node24": "^24.0.6",
+      "@tsconfig/node26": "^26.0.0",
       "@types/bun": "^1.4.2",
       "@types/deno": "^2.7.0",
       "@types/node": "^26.6.3",
@@ -639,7 +639,7 @@
 
     "@tombi-toml/cli-win32-x64": ["@tombi-toml/cli-win32-x64@1.11.2", "", { "os": "win32", "cpu": "x64" }, "sha512-SAMKKiNqgqakYaAeVBNRF3c6QW7hTyGkhGbV7EBoW5uHE1qhIdTFynXa4Xpn3xub/aQEx4OFcn2uPWT2PZL9dA=="],
 
-    "@tsconfig/node24": ["@tsconfig/node24@24.0.6", "", {}, "sha512-/SK4JuydRQLGSCq7+hbiQ8fdAVR4Suv5EcBvkIAG3zo3GbXQvGoSclz4olL12Ar4OpH8gwGYJ67P4wwQqBRxKw=="],
+    "@tsconfig/node26": ["@tsconfig/node26@26.0.2", "", {}, "sha512-RIBSoNGQxUQ8r4hSrEzS6TrUneoKaCuX6BjL4zF3wqttGq2w06zCea4d8P1gRvM/HZyDT1FQJ8trZSyy/63oMg=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.4", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A=="],
 

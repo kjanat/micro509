@@ -29,7 +29,7 @@
 		"@micro509/vitepress-doc-examples": "workspace:*",
 		"@micro509/vitepress-github-links": "workspace:*",
 		"@micro509/vitepress-versioned-docs": "workspace:*",
-		"@tsconfig/node24": "catalog:ts",
+		"@tsconfig/node26": "catalog:ts",
 		"@types/bun": "catalog:ts",
 		"@types/node": "catalog:ts",
 		"@vue/tsconfig": "catalog:ts",
