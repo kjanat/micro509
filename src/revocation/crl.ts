@@ -1655,7 +1655,7 @@ interface DeltaCrlSearch {
  * Whether reading the unread `deltaCrl` could change the status `search`
  * reached by more than an older entry its newer delta CRLs omit. After a good
  * status, only a delta CRL that the one settling it supersedes cannot.
- * Otherwise only one past its `nextUpdate` that a delta CRL examined
+ * Otherwise only one that is not current and that a delta CRL examined
  * supersedes cannot, since a current one settles the status.
  */
 function mayChangeSettledStatus(

@@ -542,8 +542,11 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       limits end the search, a good verdict stands only if the delta CRL
       that settled it supersedes every unread candidate; withholding a
       superseded delta CRL has the same effect. Without a good verdict, the
-      base CRL alone decides only if every unread candidate is past its
-      `nextUpdate` and superseded by a delta CRL read. Any other unread
+      base CRL alone decides only if every unread candidate is no longer
+      current (past its `nextUpdate`, without one, or older than the age
+      bound) and superseded by a delta CRL read. Read, such a candidate settles
+      only a revocation no later CRL may drop, which the delta CRL superseding
+      it would contradict. Any other unread
       candidate could change the status.
       `checkCertificateRevocationAgainstCrl` applies these rules to
       its `deltaCrl`. A candidate that fails
