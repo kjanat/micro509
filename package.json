@@ -248,7 +248,7 @@
 		},
 		"ts": {
 			"@arethetypeswrong/core": "^0.18.4",
-			"@tsconfig/node24": "^24.0.6",
+			"@tsconfig/node26": "^26.0.0",
 			"@types/bun": "^1.4.2",
 			"@types/deno": "^2.7.0",
 			"@types/node": "^26.6.3",
