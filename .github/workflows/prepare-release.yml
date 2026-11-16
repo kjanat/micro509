@@ -39,8 +39,6 @@ jobs:
           curl -fsSL https://bun.sh/install | bash
           export PATH="$HOME/.bun/bin:$PATH"
           bun install
-          bun run build
-          bun run typecheck
       - uses: kjanat/beepboop/actions/prepare@v1
         with:
           mode: submit

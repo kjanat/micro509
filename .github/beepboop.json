@@ -21,7 +21,7 @@
 				"strategy": "managed",
 				"workflow": {
 					"setup": {
-						"commands": "curl -fsSL https://bun.sh/install | bash\nexport PATH=\"$HOME/.bun/bin:$PATH\"\nbun install\nbun run build\nbun run typecheck"
+						"commands": "curl -fsSL https://bun.sh/install | bash\nexport PATH=\"$HOME/.bun/bin:$PATH\"\nbun install"
 					},
 					"file": "prepare-release.yml",
 					"ref": "master"
