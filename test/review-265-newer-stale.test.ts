@@ -116,8 +116,6 @@ test.each(['chain', 'ocsp'] as const)(
 		};
 		const expected = api === 'ocsp' ? 'responder_revoked' : 'deny';
 		expect(await check(3)).toBe(expected);
-		const result = await check(4);
-		console.log(api, 'with four older current deltas:', result);
-		expect(result).toBe(expected);
+		expect(await check(4)).toBe(expected);
 	},
 );

@@ -236,7 +236,6 @@ interface MeshFixture {
 interface ConfigOutcome {
 	readonly anyOk: boolean;
 	readonly anyFail: boolean;
-	readonly maxLength: number;
 	readonly hasLong: boolean;
 }
 
@@ -352,18 +351,10 @@ async function runOrderings(
 }
 
 function summarizeOrderings(results: readonly OrderingOutcome[]): ConfigOutcome {
-	let maxLength = 0;
-	let hasLong = false;
-	for (const entry of results) {
-		const length = entry.chainLength ?? 0;
-		if (length > maxLength) maxLength = length;
-		if (length >= 4) hasLong = true;
-	}
 	return {
 		anyOk: results.some((entry) => entry.ok),
 		anyFail: results.some((entry) => !entry.ok),
-		maxLength,
-		hasLong,
+		hasLong: results.some((entry) => (entry.chainLength ?? 0) >= 4),
 	};
 }
 
@@ -378,7 +369,6 @@ function describeOrderDependence(leaf: Cert, results: readonly OrderingOutcome[]
 interface ConfigResult {
 	readonly built: boolean;
 	readonly long: boolean;
-	readonly maxLength: number;
 	readonly orderDependent?: string;
 	readonly droppedValid?: string;
 }
@@ -390,7 +380,7 @@ async function evaluateScenario(
 ): Promise<ConfigResult> {
 	const results = await runOrderings(scenario, orderingsPerConfig, rng);
 	const summary = summarizeOrderings(results);
-	const base = { built: summary.anyOk, long: summary.hasLong, maxLength: summary.maxLength };
+	const base = { built: summary.anyOk, long: summary.hasLong };
 	if (summary.anyOk && summary.anyFail) {
 		return { ...base, orderDependent: describeOrderDependence(scenario.leaf, results) };
 	}
@@ -478,27 +468,21 @@ function anchorScenario(
 
 interface CampaignReport {
 	readonly built: number;
+	readonly long: number;
 	readonly orderDependent: readonly string[];
 	readonly droppedValid: readonly string[];
 }
 
-function reportCampaign(label: string, results: readonly ConfigResult[]): CampaignReport {
+function reportCampaign(results: readonly ConfigResult[]): CampaignReport {
 	const built = results.filter((entry) => entry.built).length;
 	const long = results.filter((entry) => entry.long).length;
-	const maxLength = results.reduce((best, entry) => Math.max(best, entry.maxLength), 0);
 	const orderDependent = results
 		.map((entry) => entry.orderDependent)
 		.filter((line): line is string => line !== undefined);
 	const droppedValid = results
 		.map((entry) => entry.droppedValid)
 		.filter((line): line is string => line !== undefined);
-	console.log(
-		`[${label}] configs=${results.length} builtChains=${built} longChains(>=4)=${long} maxChainLength=${maxLength} orderDependentHits=${orderDependent.length} droppedValidHits=${droppedValid.length}`,
-	);
-	for (const line of [...orderDependent, ...droppedValid].slice(0, 10)) {
-		console.log(`  ${line}`);
-	}
-	return { built, orderDependent, droppedValid };
+	return { built, long, orderDependent, droppedValid };
 }
 
 describe('path search soundness exploration', () => {
@@ -514,10 +498,11 @@ describe('path search soundness exploration', () => {
 				results.push(await evaluateScenario(scenario, rng, orderingsPerConfig));
 		}
 
-		const report = reportCampaign('root', results);
+		const report = reportCampaign(results);
 		expect(report.built).toBeGreaterThan(0);
-		expect(report.orderDependent.length).toBe(0);
-		expect(report.droppedValid.length).toBe(0);
+		expect(report.long).toBeGreaterThan(0);
+		expect(report.orderDependent).toEqual([]);
+		expect(report.droppedValid).toEqual([]);
 	}, 120_000);
 
 	it('bare-trust-anchor termination: the yes/no verdict is order-independent', async () => {
@@ -536,11 +521,11 @@ describe('path search soundness exploration', () => {
 			if (scenario.roots.length === 0 && result.built) anchorOnlyBuilt += 1;
 		}
 
-		const report = reportCampaign('anchor', results);
-		console.log(`  anchorOnlyBuilt=${anchorOnlyBuilt}`);
+		const report = reportCampaign(results);
 		expect(report.built).toBeGreaterThan(0);
+		expect(report.long).toBeGreaterThan(0);
 		expect(anchorOnlyBuilt).toBeGreaterThan(0);
-		expect(report.orderDependent.length).toBe(0);
-		expect(report.droppedValid.length).toBe(0);
+		expect(report.orderDependent).toEqual([]);
+		expect(report.droppedValid).toEqual([]);
 	}, 120_000);
 });
