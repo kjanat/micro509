@@ -49,6 +49,7 @@ import type { ParsedNameConstraintForm } from '#micro509/x509/extensions';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
 	appendCertificateExtensions,
+	callUntyped,
 	createCertificateWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
@@ -373,6 +374,17 @@ describe('chain verification', () => {
 				serviceIdentity: { type: 'dns', value: 'wrong.example' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch', index: 0 });
+
+		for (const serviceIdentity of ['service.example', { type: 'dns', value: 42 }]) {
+			expect(
+				await callUntyped(verifyCertificateChain, {
+					leaf: validChain.leaf.pem,
+					intermediates: [validChain.intermediate.pem],
+					roots: [validChain.root.certificate.pem],
+					serviceIdentity,
+				}),
+			).toMatchObject({ ok: false, code: 'malformed', index: 0 });
+		}
 
 		const expiredChain = await issueChain({
 			leafValidity: {

@@ -6,6 +6,7 @@ import {
 	isResultError,
 	parseCertificatePem,
 	parseCertificateRevocationListPemOrThrow,
+	trustAnchorFromCertificate,
 	unwrap,
 } from '#micro509';
 import {
@@ -96,7 +97,11 @@ import {
 	normalizeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
-import { rebaseDiagnostic } from '#micro509/internal/verify/verify-path';
+import {
+	pathWorkingKey,
+	rebaseDiagnostic,
+	withWorkingParameters,
+} from '#micro509/internal/verify/verify-path';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
@@ -3803,5 +3808,28 @@ describe('rebaseDiagnostic', () => {
 				[below, node],
 			),
 		).toEqual({ kind: 'none', path: [below, node] });
+	});
+});
+
+describe('working key invariants', () => {
+	it('withWorkingParameters throws on a SubjectPublicKeyInfo without its key', async () => {
+		const material = await createSelfSignedCertificate({ subject: { commonName: 'Working Key' } });
+		const anchor = trustAnchorFromCertificate(
+			unwrap(parseCertificatePem(material.certificate.pem)),
+		);
+		expect(() =>
+			withWorkingParameters(
+				{ ...anchor, subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x00) },
+				Uint8Array.of(0x05, 0x00),
+			),
+		).toThrow('SubjectPublicKeyInfo lacks its algorithm or key');
+	});
+
+	it('pathWorkingKey throws for an index outside the path', async () => {
+		const material = await createSelfSignedCertificate({ subject: { commonName: 'Working Key' } });
+		const root = unwrap(parseCertificatePem(material.certificate.pem));
+		expect(() =>
+			pathWorkingKey({ leaf: root, chain: [root], root, anchorCertificateInChain: true }, 1),
+		).toThrow('no certificate at path index 1');
 	});
 });

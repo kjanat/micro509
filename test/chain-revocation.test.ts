@@ -701,6 +701,19 @@ describe('checkChainRevocation', () => {
 		expect(full.ok).toBe(true);
 		if (!full.ok) return;
 		expect(full.value.certificates[0]?.status).toBe('good');
+		const withUndecodable = await checkChainRevocation({
+			chain,
+			crls: [
+				leafCrl.der,
+				Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x01),
+				fullSignerCrl.der,
+				rootCrl.der,
+			],
+			extraCertificates,
+			at,
+			policy: { mode: 'soft-fail' },
+		});
+		expect(withUndecodable.value.certificates[0]?.status).toBe('good');
 	});
 
 	it.each([

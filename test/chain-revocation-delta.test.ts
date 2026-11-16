@@ -300,6 +300,7 @@ async function scenario() {
 			options: {
 				readonly nextUpdateHours?: number;
 				readonly reasonCode?: 'keyCompromise' | 'certificateHold';
+				readonly onlyContainsCACerts?: true;
 			} = {},
 		) =>
 			createCertificateRevocationList({
@@ -313,6 +314,9 @@ async function scenario() {
 					options.nextUpdateHours === undefined
 						? nextUpdate
 						: new Date(at.getTime() + options.nextUpdateHours * HOUR_MS),
+				...(options.onlyContainsCACerts === undefined
+					? {}
+					: { issuingDistributionPoint: { onlyContainsCACerts: true } }),
 				...(options.reasonCode === undefined
 					? {}
 					: {
@@ -938,6 +942,20 @@ describe('validateOcspResponse and checkCertificateRevocation delta CRL limits f
 		},
 	);
 
+	it('validateOcspResponse skips a responder CRL that does not decode', async () => {
+		const s = await scenario();
+		const result = await validateOcspResponse({
+			response: await s.delegatedOcspGood(),
+			issuerCertificate: s.caPem,
+			at: s.at,
+			responderRevocationCrls: [
+				Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x01),
+				(await s.baseNumbered(1)).der,
+			],
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
 	it('checkCertificateRevocation shares its 32 delta CRL checks with the responder', async () => {
 		const s = await scenario();
 		const deltas = await s.forgedDeltas(4, 1);
@@ -1052,6 +1070,38 @@ describe('checkCertificateRevocationAgainstCrlsBy with a complete CRL that does 
 			result: { ok: false, code: 'non_applicable' },
 		});
 		expect(budget.remaining).toBe(32);
+	});
+});
+
+describe('checkCertificateRevocationAgainstCrl with a delta CRL it cannot apply', () => {
+	it('fails a delta CRL issued after the evaluation time as stale', async () => {
+		const s = await scenario();
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			crl: (await s.baseNumbered(5)).der,
+			deltaCrl: (await s.deltaAt(9, 1, { reasonCode: 'keyCompromise' })).der,
+			at: s.at,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'stale_crl' });
+	});
+
+	it('fails an expired delta CRL whose scope excludes the certificate instead of taking its revocation', async () => {
+		const s = await scenario();
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: s.leafPem,
+			issuerCertificate: s.caPem,
+			crl: (await s.caOnlyBase(5)).der,
+			deltaCrl: (
+				await s.deltaAt(9, -2, {
+					nextUpdateHours: -1,
+					reasonCode: 'keyCompromise',
+					onlyContainsCACerts: true,
+				})
+			).der,
+			at: s.at,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'stale_crl' });
 	});
 });
 

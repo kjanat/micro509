@@ -38,6 +38,7 @@ import {
 } from '#micro509/x509';
 import {
 	callUntyped,
+	expectRejectedErrorCode,
 	hexToBytes,
 	issueChain,
 	OCSP_NOCHECK_EXTENSION,
@@ -261,6 +262,25 @@ describe('signatureVerifiers', () => {
 		).toMatchObject({ ok: false, code: 'signature_invalid', index: 0 });
 	});
 
+	it('refuses a path whose deferred inherited-parameter link fails at a bare anchor', async () => {
+		const input = {
+			leaf: withFlippedSignatureOctet(test5Leaf),
+			intermediates: [inheritedCa],
+			roots: [],
+			trustAnchors: [trustAnchorFromCertificate(unwrap(parseCertificateDer(dsaCa)))],
+			at,
+			signatureVerifiers: dsaSignatureVerifiers,
+		};
+		expect(await verifyCertificateChain(input)).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+			index: 0,
+		});
+		expect(await verifyCertificateChain({ ...input, leaf: test5Leaf })).toMatchObject({
+			ok: true,
+		});
+	});
+
 	it.each([
 		['an empty SubjectPublicKeyInfo', Uint8Array.of(0x30, 0x00)],
 		['a malformed SubjectPublicKeyInfo', Uint8Array.of(0x30, 0x80, 0x00, 0x00)],
@@ -326,6 +346,18 @@ describe('signatureVerifiers', () => {
 		if (!result.ok) expect(result.message).toBe('signature verifier failed: boom');
 	});
 
+	it('reports signature_invalid when the verifier rejects with a value that is no Error', async () => {
+		const result = await verifyCertificateChain({
+			leaf: test4Leaf,
+			intermediates: [dsaCa],
+			roots: [root],
+			at,
+			signatureVerifiers: { [DSA_WITH_SHA1]: () => Promise.reject('boom') },
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid', index: 0 });
+		if (!result.ok) expect(result.message).toBe('signature verifier failed');
+	});
+
 	it('treats any resolution other than true as an invalid signature', async () => {
 		expect(
 			await callUntyped(verifyCertificateChain, {
@@ -385,6 +417,30 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 				signatureVerifiers: dsaSignatureVerifiers,
 			}),
 		).toEqual({ ok: true, valid: false });
+	});
+
+	it('hands the verifier a copy of the signature algorithm parameters', async () => {
+		const ca = unwrap(parseCertificateDer(dsaCaCert));
+		const leaf = unwrap(parseCertificateDer(dsaLeaf));
+		const parametersDer = Uint8Array.of(0x05, 0x00);
+		const received: SignatureVerifierInput[] = [];
+		expect(
+			await verifySignature({
+				signerSpkiDer: ca.subjectPublicKeyInfoDer,
+				signatureAlgorithm: { oid: leaf.signatureAlgorithmOid, parametersDer },
+				publicKeyAlgorithm: { oid: ca.publicKeyAlgorithmOid },
+				signature: leaf.signatureValue,
+				data: leaf.tbsCertificateDer,
+				signatureVerifiers: {
+					[leaf.signatureAlgorithmOid]: async (verifierInput) => {
+						received.push(verifierInput);
+						return true;
+					},
+				},
+			}),
+		).toEqual({ ok: true, valid: true });
+		expect(received[0]?.signatureAlgorithm.parametersDer).toEqual(parametersDer);
+		expect(received[0]?.signatureAlgorithm.parametersDer).not.toBe(parametersDer);
 	});
 
 	it('hands the verifier copies that leave Buffer inputs untouched', async () => {
@@ -475,6 +531,14 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 		const validated = await validateOcspResponse({ ...input, ...options });
 		expect(validated).toMatchObject({ ok: true });
 		if (validated.ok) expect(validated.value.responses?.[0]?.certStatus).toBe('good');
+		expect(
+			await checkCertificateRevocation({
+				certificate: dsaLeaf,
+				issuerCertificate: dsaCaCert,
+				evidence: [{ kind: 'ocsp', response: dsaOcspResponse, request: dsaOcspRequest }],
+				...options,
+			}),
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it.each([
@@ -548,6 +612,12 @@ describe('signatureVerifiers for CRL, OCSP, CMS, CSR and detached signatures', (
 				signatureVerifiers: { '1.2.840.113549.1.1.11': () => Promise.resolve(true) },
 			}),
 		).toMatchObject({ ok: false, code: 'invalid_options' });
+		await expectRejectedErrorCode(
+			verifyPkcs7SignedData(cms, {
+				signatureVerifiers: { [`1.2.${'9'.repeat(200)}`]: () => Promise.resolve(true) },
+			}),
+			'limit_exceeded',
+		);
 	});
 });
 

@@ -42,6 +42,8 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
+import { validateOcspResponseBy } from '#micro509/revocation/ocsp';
+import { trustAnchorFromCertificate } from '#micro509/verify';
 import { expectRejectedErrorCode, hexToBytes, OCSP_NOCHECK_EXTENSION } from '#test/helpers';
 
 describe('ocsp', () => {
@@ -3769,6 +3771,56 @@ function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
 	}
 	return bitStringElement.value.slice(1);
 }
+
+describe('validateOcspResponse edge inputs', () => {
+	it('fails a successful response without responseBytes as unsigned', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsigned OCSP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		expect(
+			await validateOcspResponse({
+				response: Uint8Array.of(0x30, 0x03, 0x0a, 0x01, 0x00),
+				issuerCertificate: issuer.certificate.der,
+			}),
+		).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('takes the working key of a bare trust anchor issuer from the anchor', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bare Anchor OCSP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Bare Anchor OCSP CA' },
+			subject: { commonName: 'bare-anchor.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerCertificate: issuer.certificate.der,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem, certStatus: 'good' },
+			],
+		});
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
+		const result = await validateOcspResponseBy(
+			{ response: response.der },
+			{
+				kind: 'trust_anchor',
+				trustAnchor: trustAnchorFromCertificate(
+					unwrap(parseCertificatePem(issuer.certificate.pem)),
+				),
+				certificateIssuer: parsedLeaf.issuer,
+			},
+			{ verifiers: new Map() },
+		);
+		expect(result).toMatchObject({ ok: true });
+	});
+});
 
 describe('ocsp Result forms', () => {
 	it('parseOcspRequestDer and parseOcspResponseDer return typed malformed failures', () => {
