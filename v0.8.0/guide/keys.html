@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="ltr">
+  <head>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script type="importmap">{"imports":{"micro509":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/+esm","micro509/keys":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/keys/+esm","micro509/pem":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/pem/+esm","micro509/pkcs":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/pkcs/+esm","micro509/result":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/result/+esm","micro509/revocation":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/revocation/+esm","micro509/verify":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/verify/+esm","micro509/x509":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/x509/+esm"},"scopes":{"/v0.8.0/":{"micro509":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/+esm","micro509/keys":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/keys/+esm","micro509/pem":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/pem/+esm","micro509/pkcs":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/pkcs/+esm","micro509/result":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/result/+esm","micro509/revocation":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/revocation/+esm","micro509/verify":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/verify/+esm","micro509/x509":"https://cdn.jsdelivr.net/npm/micro509@0.8.0/x509/+esm"}}}</script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Keys | micro509</title>
+    <meta name="description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <meta name="generator" content="VitePress v2.0.0-alpha.20">
+    
+    <link rel="preload stylesheet" href="/v0.8.0/assets/style.DyK4KkfZ.css" as="style">
+    <link rel="preload stylesheet" href="/v0.8.0/assets/vp-icons.882fcefa.css" as="style">
+    <script type="module" src="/v0.8.0/assets/chunks/metadata.6cb95a19.js"></script>
+    <script type="module" src="/v0.8.0/assets/app.DgD6q2d_.js"></script>
+    <link rel="preload" href="/v0.8.0/assets/inter-roman-latin.q5rAVC0E.woff2" as="font" type="font/woff2" crossorigin="">
+    <link rel="modulepreload" href="/v0.8.0/assets/chunks/framework.GQZN8auy.js">
+    <link rel="modulepreload" href="/v0.8.0/assets/chunks/theme.ClvxjjDr.js">
+    <link rel="modulepreload" href="/v0.8.0/assets/guide_keys.md.Dm2kOQLa.lean.js">
+    <meta name="theme-color" content="#3c8772">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="micro509">
+    <meta property="og:description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <meta property="og:url" content="https://micro509.kjanat.dev">
+    <meta property="og:image" content="https://micro509.kjanat.dev/icon.svg">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="micro509">
+    <meta name="twitter:description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <script id="check-dark-mode">(()=>{let e=localStorage.getItem(`vitepress-theme-appearance`)||`auto`,t=window.matchMedia(`(prefers-color-scheme: dark)`).matches;(!e||e===`auto`?t:e===`dark`)&&document.documentElement.classList.add(`dark`)})();</script>
+    <script id="check-mac-os">document.documentElement.classList.toggle(`mac`,/Mac|iPhone|iPod|iPad/i.test(navigator.platform));</script>
+    <meta name="robots" content="noindex">
+  </head>
+  <body>
+    <div id="app"><div class="Layout" data-v-7e38a135><!--[--><!--]--><!--[--><span tabindex="-1" data-v-499bdcc5></span><a href="#VPContent" class="VPSkipLink visually-hidden" data-v-499bdcc5>Skip to content</a><!--]--><!----><header class="VPNav" data-v-7e38a135 data-v-21c0505c><div class="VPNavBar has-sidebar top" data-v-21c0505c data-v-8f4848b5><div class="wrapper" data-v-8f4848b5><div class="container" data-v-8f4848b5><div class="title" data-v-8f4848b5><div class="VPNavBarTitle has-sidebar" data-v-8f4848b5 data-v-c8132227><a class="title" href="/v0.8.0/" title="micro509" data-v-c8132227><!--[--><!--]--><!--[--><!--[--><!--[--><img class="VPImage dark logo" src="/v0.8.0/icon-light.svg" alt="micro509" data-v-b7995f32><!--]--><!--[--><img class="VPImage light logo" src="/v0.8.0/icon.svg" alt="micro509" data-v-b7995f32><!--]--><!--]--><!--]--><span data-v-c8132227>micro509</span><!--[--><!--]--></a></div></div><div class="content" data-v-8f4848b5><div class="content-body" data-v-8f4848b5><!--[--><!--]--><div class="VPNavBarSearch search" data-v-8f4848b5 data-v-23cefeba><!--[--><button type="button" class="VPNavBarSearchButton" aria-label="Search" aria-keyshortcuts="/ control+k meta+k" data-v-23cefeba data-v-74241663><span class="vpi-search" aria-hidden="true" data-v-74241663></span><span class="text" data-v-74241663>Search</span><span class="keys" aria-hidden="true" data-v-74241663><kbd class="key-mod" data-v-74241663></kbd><kbd class="key-k" data-v-74241663></kbd></span></button><!----><!--]--></div><nav aria-label="Main Navigation" class="VPNavMenu VPNavBarMenu menu" data-v-8f4848b5 data-v-7c501401><ul class="list" data-v-7c501401><!--[--><li class="" data-v-7c501401><div class="versioned-nav" data-v-7c501401 data-v-752d2563><!--[--><a class="active VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.8.0/guide/getting-started" data-v-752d2563>Guide</a><a class="VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.8.0/api/" data-v-752d2563>API</a><a class="VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.8.0/reference/standards" data-v-752d2563>Reference</a><!--]--></div></li><li class="" data-v-7c501401><div class="version-switcher" data-v-7c501401 data-v-83e6d7a8><button type="button" class="vs-button" aria-haspopup="true" aria-expanded="false" data-v-83e6d7a8>v0.8.0 <!----></button><!----></div></li><!--]--></ul></nav><!----><div class="VPNavAppearance VPNavBarAppearance appearance" data-v-8f4848b5 data-v-0526efd6><!----><button class="VPSwitch VPSwitchAppearance" type="button" role="switch" title aria-label="Appearance" aria-checked="false" data-v-0526efd6 data-v-2d2da833 data-v-a2ada4fc><span class="check" data-v-a2ada4fc><span class="icon" data-v-a2ada4fc><!--[--><span class="vpi-sun sun" aria-hidden="true" data-v-2d2da833></span><span class="vpi-moon moon" aria-hidden="true" data-v-2d2da833></span><!--]--></span></span></button></div><ul class="VPSocialLinks VPNavSocialLinks VPNavBarSocialLinks social-links" data-v-8f4848b5 data-v-07f6e6d5 data-v-c257d51e><!--[--><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://github.com/kjanat/micro509" aria-label="GitHub" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="vpi-simple-icons-github" data-v-b08e7265 data-v-890c5b71></span></a></li><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://npm.im/micro509" aria-label="NPM" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="vpi-simple-icons-npm" data-v-b08e7265 data-v-890c5b71></span></a></li><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://jsr.io/@kjanat/micro509" aria-label="JSR" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="VPIcon" data-v-b08e7265 data-v-890c5b71><svg role="img" viewBox="0 0 24 12.924" xmlns="http://www.w3.org/2000/svg"><title>JSR</title><path fill="#f7df1e" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Z"/><path fill="#083344" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Zm1.846 1.847h1.847v7.384H1.846v-3.692h1.846v1.846h1.846zm3.693 0h5.538V3.692h-3.692v1.846h3.692v5.538H9.231V9.232h3.692v-1.846H9.231Zm7.384 1.846h5.539v3.692h-1.846v-1.846h-1.846v5.538h-1.847z"/></svg></span></a></li><!--]--></ul><!----><!--[--><!--]--><button type="button" class="VPNavBarHamburger hamburger" aria-label="Menu" aria-expanded="false" data-v-8f4848b5 data-v-32c75667><span class="container" aria-hidden="true" data-v-32c75667><span class="top" data-v-32c75667></span><span class="middle" data-v-32c75667></span><span class="bottom" data-v-32c75667></span></span></button></div></div></div></div><div class="divider" data-v-8f4848b5><div class="divider-line" data-v-8f4848b5></div></div></div><!----></header><div class="VPLocalNav has-sidebar empty" data-v-7e38a135 data-v-19dde0b7><div class="container" data-v-19dde0b7><button type="button" class="menu" aria-expanded="false" aria-controls="VPSidebarNav" data-v-19dde0b7><span class="vpi-align-left menu-icon" aria-hidden="true" data-v-19dde0b7></span><span class="menu-text" data-v-19dde0b7>Menu</span></button><div class="VPLocalNavOutlineDropdown" style="--vp-vh:0px;" data-allow-mismatch="style" data-v-19dde0b7 data-v-a9770819><button type="button" data-v-a9770819>Return to top</button><!----></div></div></div><aside class="VPSidebar" data-v-7e38a135 data-v-a61a820c><div class="curtain" data-v-a61a820c></div><nav class="nav" id="VPSidebarNav" aria-labelledby="sidebar-aria-label" tabindex="-1" data-v-a61a820c><span class="visually-hidden" id="sidebar-aria-label" data-v-a61a820c> Sidebar Navigation </span><!--[--><!--]--><!--[--><div class="no-transition group" data-v-bd6fbf8d><section class="VPSidebarItem level-0" data-v-bd6fbf8d data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><h2 class="text" data-v-508f7dbf>Introduction</h2><!----></div><ul class="items" data-v-508f7dbf><li data-v-508f7dbf><!--[--><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/getting-started" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Getting Started</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/why" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Why micro509</p><!--]--></a><!----></div><!----></div><!--]--></li></ul></section></div><div class="no-transition group" data-v-bd6fbf8d><section class="VPSidebarItem level-0 has-active" data-v-bd6fbf8d data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><h2 class="text" data-v-508f7dbf>Workflows</h2><!----></div><ul class="items" data-v-508f7dbf><li data-v-508f7dbf><!--[--><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/certificates" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Certificates</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/verification" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Verification</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link is-active has-active" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/keys" aria-current="page" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Keys</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/revocation" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Revocation</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.8.0/guide/pkcs" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>PKCS</p><!--]--></a><!----></div><!----></div><!--]--></li></ul></section></div><!--]--><!--[--><!--]--></nav></aside><div class="VPContent has-sidebar" id="VPContent" data-v-7e38a135 data-v-852b6936><div class="VPDoc has-sidebar has-aside" data-v-852b6936 data-v-8ba3d45b><!--[--><!--]--><div class="container" data-v-8ba3d45b><div class="aside" data-v-8ba3d45b><div class="aside-curtain" data-v-8ba3d45b></div><div class="aside-container" data-v-8ba3d45b><div class="aside-content" data-v-8ba3d45b><div class="VPDocAside" data-v-8ba3d45b data-v-5ef2eff3><!--[--><!--]--><!--[--><!--]--><nav aria-labelledby="doc-outline-aria-label" class="VPDocAsideOutline" data-v-5ef2eff3 data-v-df5b2de9><div class="content" data-v-df5b2de9><div class="outline-marker" data-v-df5b2de9></div><div aria-level="2" class="outline-title" id="doc-outline-aria-label" role="heading" data-v-df5b2de9>On this page</div><ul class="VPDocOutlineItem root" data-v-df5b2de9 data-v-36c863a6><!--[--><!--]--></ul></div></nav><!--[--><!--]--><div class="spacer" data-v-5ef2eff3></div><!--[--><!--]--><!----><!--[--><!--]--><!--[--><!--]--></div></div></div></div><div class="content" data-v-8ba3d45b><div class="content-container" data-v-8ba3d45b><!--[--><!--]--><main class="main" data-v-8ba3d45b><div style="position:relative;" class="vp-doc _v0_8_0_guide_keys" data-v-8ba3d45b><div><h1 id="keys" tabindex="-1">Keys <a class="header-anchor" href="#keys" aria-label="Permalink to “Keys”">​</a></h1><h2 id="generate-a-key-pair" tabindex="-1">Generate a key pair <a class="header-anchor" href="#generate-a-key-pair" aria-label="Permalink to “Generate a key pair”">​</a></h2><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair } from &#39;micro509&#39;;
+// Ed25519
+const ed = await generateKeyPair({ kind: &#39;ed25519&#39; });
+// ECDSA P-256
+const ec = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+// RSA 2048
+const rsa = await generateKeyPair({
+    kind: &#39;rsa&#39;,
+    modulusLength: 2048,
+});
+console.log(&#39;generated:&#39;, ed.publicKey.algorithm.name, ec.publicKey.algorithm.name, rsa.publicKey.algorithm.name);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Ed25519</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ed</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({ kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ed25519&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> });</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// ECDSA P-256</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ec</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// RSA 2048</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> rsa</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;rsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  modulusLength: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">2048</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">  &#39;generated:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ed.publicKey.algorithm.name,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ec.publicKey.algorithm.name,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  rsa.publicKey.algorithm.name,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h2 id="import-and-export" tabindex="-1">Import and export <a class="header-anchor" href="#import-and-export" aria-label="Permalink to “Import and export”">​</a></h2><h3 id="pkcs-8-private-keys" tabindex="-1">PKCS#8 (private keys) <a class="header-anchor" href="#pkcs-8-private-keys" aria-label="Permalink to “PKCS#8 (private keys)”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { exportPkcs8Pem, importPkcs8Pem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+const pem = await exportPkcs8Pem(keys.privateKey);
+const privateKey = unwrap(await importPkcs8Pem(pem, {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+}));
+const exported = await exportPkcs8Pem(privateKey);
+console.log(&#39;pkcs8 round-trip ok:&#39;, exported === pem);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportPkcs8Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importPkcs8Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pem</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privateKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pem, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> exported</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;pkcs8 round-trip ok:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, exported </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">===</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> pem);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="spki-public-keys" tabindex="-1">SPKI (public keys) <a class="header-anchor" href="#spki-public-keys" aria-label="Permalink to “SPKI (public keys)”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { exportSpkiPem, importSpkiPem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+const pem = await exportSpkiPem(keys.publicKey);
+const publicKey = unwrap(await importSpkiPem(pem, {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+}));
+const exported = await exportSpkiPem(publicKey);
+console.log(&#39;spki round-trip ok:&#39;, exported === pem);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportSpkiPem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importSpkiPem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pem</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportSpkiPem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.publicKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> publicKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importSpkiPem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pem, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> exported</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportSpkiPem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(publicKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;spki round-trip ok:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, exported </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">===</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> pem);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><p>The algorithm argument is optional for SPKI imports. A SubjectPublicKeyInfo already encodes its algorithm OID (and, for EC keys, the curve), so <code>importSpkiPem</code>, <code>importSpkiDer</code>, and <code>importSpkiBase64</code> infer it when no hint is given — handy when the key type isn&#39;t known ahead of time:</p><div data-js="&quot;use strict&quot;;
+// Inferred from the DER — no { kind, curve } needed.
+const publicKey = unwrap(await importSpkiPem(pem));
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Inferred from the DER — no { kind, curve } needed.</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> publicKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importSpkiPem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pem));</span></span></code></pre></div></div><p>Passing an explicit algorithm still works and additionally asserts that the key matches it, failing with a <code>&#39;malformed&#39;</code> result on a mismatch.</p><h3 id="derive-a-public-key-from-a-private-key" tabindex="-1">Derive a public key from a private key <a class="header-anchor" href="#derive-a-public-key-from-a-private-key" aria-label="Permalink to “Derive a public key from a private key”">​</a></h3><p>The <code>import*</code> functions for private keys hand back a bare <code>CryptoKey</code> with only <code>sign</code> usage — there is no matching public handle. <code>derivePublicKey</code> bridges that gap, so a private key loaded from disk can go straight to <code>exportSpkiPem</code>/<code>exportSpkiDer</code> (e.g. to rebuild a self-signed certificate or distribute the public key). It supports RSA, ECDSA, and Ed25519.</p><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { derivePublicKey, exportSpkiPem, importPkcs8Pem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+// Start from a private key that carries no public handle.
+const privateKey = unwrap(await importPkcs8Pem(await keys.exportPkcs8Pem(), {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+}));
+const publicKey = await derivePublicKey(privateKey);
+const spki = await exportSpkiPem(publicKey);
+console.log(&#39;derived spki matches:&#39;, spki === (await keys.exportSpkiPem()));
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  derivePublicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportSpkiPem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importPkcs8Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Start from a private key that carries no public handle.</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privateKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">await</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> keys.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">exportPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(), {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> publicKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> derivePublicKey</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(privateKey);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> spki</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportSpkiPem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(publicKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">  &#39;derived spki matches:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  spki </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">===</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">await</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> keys.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">exportSpkiPem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">()),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="jwk" tabindex="-1">JWK <a class="header-anchor" href="#jwk" aria-label="Permalink to “JWK”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { exportPrivateJwk, exportPublicJwk, importPrivateJwk, importPublicJwk, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+const pubJwk = await exportPublicJwk(keys.publicKey);
+const privJwk = await exportPrivateJwk(keys.privateKey);
+const publicKey = unwrap(await importPublicJwk(pubJwk, {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+}));
+const privateKey = unwrap(await importPrivateJwk(privJwk, {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+}));
+console.log(&#39;jwk round-trip:&#39;, publicKey.type, privateKey.type);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportPrivateJwk,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportPublicJwk,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importPrivateJwk,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importPublicJwk,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pubJwk</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportPublicJwk</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.publicKey);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privJwk</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportPrivateJwk</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> publicKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importPublicJwk</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pubJwk, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privateKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importPrivateJwk</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(privJwk, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">  &#39;jwk round-trip:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey.type,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  privateKey.type,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="pkcs-1-rsa-specific" tabindex="-1">PKCS#1 (RSA-specific) <a class="header-anchor" href="#pkcs-1-rsa-specific" aria-label="Permalink to “PKCS#1 (RSA-specific)”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { exportPkcs1Pem, importPkcs1Pem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;rsa&#39;,
+    modulusLength: 2048,
+});
+const pem = await exportPkcs1Pem(keys.privateKey);
+const privateKey = unwrap(await importPkcs1Pem(pem, {
+    kind: &#39;rsa&#39;,
+    scheme: &#39;pkcs1-v1_5&#39;,
+}));
+const exported = await exportPkcs1Pem(privateKey);
+console.log(&#39;pkcs1 round-trip ok:&#39;, exported === pem);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportPkcs1Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importPkcs1Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;rsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  modulusLength: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">2048</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pem</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportPkcs1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privateKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importPkcs1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pem, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;rsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    scheme: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;pkcs1-v1_5&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> exported</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportPkcs1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;pkcs1 round-trip ok:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, exported </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">===</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> pem);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="sec1-ec-specific" tabindex="-1">SEC1 (EC-specific) <a class="header-anchor" href="#sec1-ec-specific" aria-label="Permalink to “SEC1 (EC-specific)”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { exportSec1Pem, importSec1Pem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+const pem = await exportSec1Pem(keys.privateKey);
+const privateKey = unwrap(await importSec1Pem(pem, {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+}));
+const exported = await exportSec1Pem(privateKey);
+console.log(&#39;sec1 round-trip ok:&#39;, exported === pem);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportSec1Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importSec1Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pem</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportSec1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privateKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importSec1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pem, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> exported</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportSec1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(privateKey);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;sec1 round-trip ok:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, exported </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">===</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> pem);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h2 id="encrypted-keys" tabindex="-1">Encrypted keys <a class="header-anchor" href="#encrypted-keys" aria-label="Permalink to “Encrypted keys”">​</a></h2><h3 id="encrypted-pkcs-8" tabindex="-1">Encrypted PKCS#8 <a class="header-anchor" href="#encrypted-pkcs-8" aria-label="Permalink to “Encrypted PKCS#8”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair } from &#39;micro509&#39;;
+import { exportEncryptedPkcs8Pem, importEncryptedPkcs8Pem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+// Export with PBES2 encryption
+const pem = await exportEncryptedPkcs8Pem(keys.privateKey, {
+    password: &#39;password&#39;,
+});
+// Import with the same password — returns a Result
+const result = await importEncryptedPkcs8Pem(pem, &#39;password&#39;, {
+    kind: &#39;ecdsa&#39;,
+    curve: &#39;P-256&#39;,
+});
+if (!result.ok) {
+    // result.error.code is &#39;invalid_password&#39; on a wrong password,
+    // or &#39;malformed&#39; on structurally invalid input
+    throw new Error(result.error.code);
+}
+console.log(&#39;encrypted pkcs8 imported:&#39;, result.value.type);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportEncryptedPkcs8Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importEncryptedPkcs8Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Export with PBES2 encryption</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pem</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportEncryptedPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.privateKey, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  password: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;password&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Import with the same password — returns a Result</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importEncryptedPkcs8Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  pem,</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">  &#39;password&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ecdsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    curve: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;P-256&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // result.error.code is &#39;invalid_password&#39; on a wrong password,</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // or &#39;malformed&#39; on structurally invalid input</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  throw</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Error</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(result.error.code);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;encrypted pkcs8 imported:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, result.value.type);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="legacy-encrypted-pem-openssl-format" tabindex="-1">Legacy encrypted PEM (OpenSSL format) <a class="header-anchor" href="#legacy-encrypted-pem-openssl-format" aria-label="Permalink to “Legacy encrypted PEM (OpenSSL format)”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { generateKeyPair, unwrap } from &#39;micro509&#39;;
+import { exportEncryptedPkcs1Pem, importEncryptedPkcs1Pem, } from &#39;micro509/keys&#39;;
+const keys = await generateKeyPair({
+    kind: &#39;rsa&#39;,
+    modulusLength: 2048,
+});
+// Export RSA key with AES-256-CBC
+const pem = await exportEncryptedPkcs1Pem(keys.privateKey, {
+    password: &#39;password&#39;,
+    cipher: &#39;AES-256-CBC&#39;,
+});
+// Import with the same password
+const privateKey = unwrap(await importEncryptedPkcs1Pem(pem, &#39;password&#39;, {
+    kind: &#39;rsa&#39;,
+    scheme: &#39;pkcs1-v1_5&#39;,
+}));
+console.log(&#39;encrypted pkcs1 imported:&#39;, privateKey.type);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { generateKeyPair, unwrap } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  exportEncryptedPkcs1Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  importEncryptedPkcs1Pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/keys&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;rsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  modulusLength: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">2048</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Export RSA key with AES-256-CBC</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> pem</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> exportEncryptedPkcs1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(keys.privateKey, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  password: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;password&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  cipher: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;AES-256-CBC&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Import with the same password</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> privateKey</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> importEncryptedPkcs1Pem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(pem, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;password&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;rsa&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    scheme: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;pkcs1-v1_5&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  }),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;encrypted pkcs1 imported:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, privateKey.type);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div></div></div></main><footer class="VPDocFooter" data-v-8ba3d45b data-v-7b49853b><!--[--><!--]--><!----><nav class="prev-next" aria-labelledby="doc-footer-aria-label" data-v-7b49853b><span class="visually-hidden" id="doc-footer-aria-label" data-v-7b49853b>Pager</span><div class="pager" data-v-7b49853b><a class="VPLink link pager-link prev" href="/v0.8.0/guide/verification" data-v-7b49853b><!--[--><span class="desc" data-v-7b49853b>Previous page</span><span class="title" data-v-7b49853b>Verification</span><!--]--></a></div><div class="pager" data-v-7b49853b><a class="VPLink link pager-link next" href="/v0.8.0/guide/revocation" data-v-7b49853b><!--[--><span class="desc" data-v-7b49853b>Next page</span><span class="title" data-v-7b49853b>Revocation</span><!--]--></a></div></nav></footer><!--[--><!--]--></div></div></div><!--[--><!--]--></div></div><footer class="VPFooter has-sidebar" data-v-7e38a135 data-v-dd9e2ea5><div class="container" data-v-dd9e2ea5><p class="message" data-v-dd9e2ea5>Released under the MIT License.</p><p class="copyright" data-v-dd9e2ea5>Copyright © 2026-present Kaj Kowalski</p></div></footer><!--[--><!--]--></div></div>
+    
+    
+  </body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="ltr">
+  <head>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script type="importmap">{"imports":{"micro509":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/+esm","micro509/keys":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/keys/+esm","micro509/pem":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/pem/+esm","micro509/pkcs":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/pkcs/+esm","micro509/result":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/result/+esm","micro509/revocation":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/revocation/+esm","micro509/verify":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/verify/+esm","micro509/x509":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/x509/+esm"},"scopes":{"/v0.9.0/":{"micro509":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/+esm","micro509/keys":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/keys/+esm","micro509/pem":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/pem/+esm","micro509/pkcs":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/pkcs/+esm","micro509/result":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/result/+esm","micro509/revocation":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/revocation/+esm","micro509/verify":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/verify/+esm","micro509/x509":"https://cdn.jsdelivr.net/npm/micro509@0.9.0/x509/+esm"}}}</script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Verification | micro509</title>
+    <meta name="description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <meta name="generator" content="VitePress v2.0.0-alpha.20">
+    
+    <link rel="preload stylesheet" href="/v0.9.0/assets/style.CFzHlAyn.css" as="style">
+    <link rel="preload stylesheet" href="/v0.9.0/assets/vp-icons.882fcefa.css" as="style">
+    <script type="module" src="/v0.9.0/assets/chunks/metadata.1965c242.js"></script>
+    <script type="module" src="/v0.9.0/assets/app.CUmdTREN.js"></script>
+    <link rel="preload" href="/v0.9.0/assets/inter-roman-latin.q5rAVC0E.woff2" as="font" type="font/woff2" crossorigin="">
+    <link rel="modulepreload" href="/v0.9.0/assets/chunks/framework.DTuxy4X8.js">
+    <link rel="modulepreload" href="/v0.9.0/assets/chunks/theme.DIr2Uww7.js">
+    <link rel="modulepreload" href="/v0.9.0/assets/guide_verification.md.7kL-b9uz.lean.js">
+    <meta name="theme-color" content="#3c8772">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="micro509">
+    <meta property="og:description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <meta property="og:url" content="https://micro509.kjanat.dev">
+    <meta property="og:image" content="https://micro509.kjanat.dev/icon.svg">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="micro509">
+    <meta name="twitter:description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <script id="check-dark-mode">(()=>{let e=localStorage.getItem(`vitepress-theme-appearance`)||`auto`,t=window.matchMedia(`(prefers-color-scheme: dark)`).matches;(!e||e===`auto`?t:e===`dark`)&&document.documentElement.classList.add(`dark`)})();</script>
+    <script id="check-mac-os">document.documentElement.classList.toggle(`mac`,/Mac|iPhone|iPod|iPad/i.test(navigator.platform));</script>
+    <meta name="robots" content="noindex">
+  </head>
+  <body>
+    <div id="app"><div class="Layout" data-v-7e38a135><!--[--><!--]--><!--[--><span tabindex="-1" data-v-499bdcc5></span><a href="#VPContent" class="VPSkipLink visually-hidden" data-v-499bdcc5>Skip to content</a><!--]--><!----><header class="VPNav" data-v-7e38a135 data-v-21c0505c><div class="VPNavBar has-sidebar top" data-v-21c0505c data-v-8f4848b5><div class="wrapper" data-v-8f4848b5><div class="container" data-v-8f4848b5><div class="title" data-v-8f4848b5><div class="VPNavBarTitle has-sidebar" data-v-8f4848b5 data-v-c8132227><a class="title" href="/v0.9.0/" title="micro509" data-v-c8132227><!--[--><!--]--><!--[--><!--[--><!--[--><img class="VPImage dark logo" src="/v0.9.0/icon-light.svg" alt="micro509" data-v-b7995f32><!--]--><!--[--><img class="VPImage light logo" src="/v0.9.0/icon.svg" alt="micro509" data-v-b7995f32><!--]--><!--]--><!--]--><span data-v-c8132227>micro509</span><!--[--><!--]--></a></div></div><div class="content" data-v-8f4848b5><div class="content-body" data-v-8f4848b5><!--[--><!--]--><div class="VPNavBarSearch search" data-v-8f4848b5 data-v-23cefeba><!--[--><button type="button" class="VPNavBarSearchButton" aria-label="Search" aria-keyshortcuts="/ control+k meta+k" data-v-23cefeba data-v-74241663><span class="vpi-search" aria-hidden="true" data-v-74241663></span><span class="text" data-v-74241663>Search</span><span class="keys" aria-hidden="true" data-v-74241663><kbd class="key-mod" data-v-74241663></kbd><kbd class="key-k" data-v-74241663></kbd></span></button><!----><!--]--></div><nav aria-label="Main Navigation" class="VPNavMenu VPNavBarMenu menu" data-v-8f4848b5 data-v-7c501401><ul class="list" data-v-7c501401><!--[--><li class="" data-v-7c501401><div class="versioned-nav" data-v-7c501401 data-v-752d2563><!--[--><a class="active VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.9.0/guide/getting-started" data-v-752d2563>Guide</a><a class="VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.9.0/api/" data-v-752d2563>API</a><a class="VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.9.0/reference/standards" data-v-752d2563>Reference</a><!--]--></div></li><li class="" data-v-7c501401><div class="version-switcher" data-v-7c501401 data-v-83e6d7a8><button type="button" class="vs-button" aria-haspopup="true" aria-expanded="false" data-v-83e6d7a8>v0.9.0 <!----></button><!----></div></li><!--]--></ul></nav><!----><div class="VPNavAppearance VPNavBarAppearance appearance" data-v-8f4848b5 data-v-0526efd6><!----><button class="VPSwitch VPSwitchAppearance" type="button" role="switch" title aria-label="Appearance" aria-checked="false" data-v-0526efd6 data-v-2d2da833 data-v-a2ada4fc><span class="check" data-v-a2ada4fc><span class="icon" data-v-a2ada4fc><!--[--><span class="vpi-sun sun" aria-hidden="true" data-v-2d2da833></span><span class="vpi-moon moon" aria-hidden="true" data-v-2d2da833></span><!--]--></span></span></button></div><ul class="VPSocialLinks VPNavSocialLinks VPNavBarSocialLinks social-links" data-v-8f4848b5 data-v-07f6e6d5 data-v-c257d51e><!--[--><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://github.com/kjanat/micro509" aria-label="GitHub" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="vpi-simple-icons-github" data-v-b08e7265 data-v-890c5b71></span></a></li><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://npm.im/micro509" aria-label="NPM" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="vpi-simple-icons-npm" data-v-b08e7265 data-v-890c5b71></span></a></li><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://jsr.io/@kjanat/micro509" aria-label="JSR" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="VPIcon" data-v-b08e7265 data-v-890c5b71><svg role="img" viewBox="0 0 24 12.924" xmlns="http://www.w3.org/2000/svg"><title>JSR</title><path fill="#f7df1e" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Z"/><path fill="#083344" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Zm1.846 1.847h1.847v7.384H1.846v-3.692h1.846v1.846h1.846zm3.693 0h5.538V3.692h-3.692v1.846h3.692v5.538H9.231V9.232h3.692v-1.846H9.231Zm7.384 1.846h5.539v3.692h-1.846v-1.846h-1.846v5.538h-1.847z"/></svg></span></a></li><!--]--></ul><!----><!--[--><!--]--><button type="button" class="VPNavBarHamburger hamburger" aria-label="Menu" aria-expanded="false" data-v-8f4848b5 data-v-32c75667><span class="container" aria-hidden="true" data-v-32c75667><span class="top" data-v-32c75667></span><span class="middle" data-v-32c75667></span><span class="bottom" data-v-32c75667></span></span></button></div></div></div></div><div class="divider" data-v-8f4848b5><div class="divider-line" data-v-8f4848b5></div></div></div><!----></header><div class="VPLocalNav has-sidebar empty" data-v-7e38a135 data-v-19dde0b7><div class="container" data-v-19dde0b7><button type="button" class="menu" aria-expanded="false" aria-controls="VPSidebarNav" data-v-19dde0b7><span class="vpi-align-left menu-icon" aria-hidden="true" data-v-19dde0b7></span><span class="menu-text" data-v-19dde0b7>Menu</span></button><div class="VPLocalNavOutlineDropdown" style="--vp-vh:0px;" data-allow-mismatch="style" data-v-19dde0b7 data-v-a9770819><button type="button" data-v-a9770819>Return to top</button><!----></div></div></div><aside class="VPSidebar" data-v-7e38a135 data-v-a61a820c><div class="curtain" data-v-a61a820c></div><nav class="nav" id="VPSidebarNav" aria-labelledby="sidebar-aria-label" tabindex="-1" data-v-a61a820c><span class="visually-hidden" id="sidebar-aria-label" data-v-a61a820c> Sidebar Navigation </span><!--[--><!--]--><!--[--><div class="no-transition group" data-v-bd6fbf8d><section class="VPSidebarItem level-0" data-v-bd6fbf8d data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><h2 class="text" data-v-508f7dbf>Introduction</h2><!----></div><ul class="items" data-v-508f7dbf><li data-v-508f7dbf><!--[--><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/getting-started" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Getting Started</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/why" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Why micro509</p><!--]--></a><!----></div><!----></div><!--]--></li></ul></section></div><div class="no-transition group" data-v-bd6fbf8d><section class="VPSidebarItem level-0 has-active" data-v-bd6fbf8d data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><h2 class="text" data-v-508f7dbf>Workflows</h2><!----></div><ul class="items" data-v-508f7dbf><li data-v-508f7dbf><!--[--><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/certificates" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Certificates</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link is-active has-active" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/verification" aria-current="page" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Verification</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/keys" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Keys</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/revocation" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Revocation</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.9.0/guide/pkcs" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>PKCS</p><!--]--></a><!----></div><!----></div><!--]--></li></ul></section></div><!--]--><!--[--><!--]--></nav></aside><div class="VPContent has-sidebar" id="VPContent" data-v-7e38a135 data-v-852b6936><div class="VPDoc has-sidebar has-aside" data-v-852b6936 data-v-8ba3d45b><!--[--><!--]--><div class="container" data-v-8ba3d45b><div class="aside" data-v-8ba3d45b><div class="aside-curtain" data-v-8ba3d45b></div><div class="aside-container" data-v-8ba3d45b><div class="aside-content" data-v-8ba3d45b><div class="VPDocAside" data-v-8ba3d45b data-v-5ef2eff3><!--[--><!--]--><!--[--><!--]--><nav aria-labelledby="doc-outline-aria-label" class="VPDocAsideOutline" data-v-5ef2eff3 data-v-df5b2de9><div class="content" data-v-df5b2de9><div class="outline-marker" data-v-df5b2de9></div><div aria-level="2" class="outline-title" id="doc-outline-aria-label" role="heading" data-v-df5b2de9>On this page</div><ul class="VPDocOutlineItem root" data-v-df5b2de9 data-v-36c863a6><!--[--><!--]--></ul></div></nav><!--[--><!--]--><div class="spacer" data-v-5ef2eff3></div><!--[--><!--]--><!----><!--[--><!--]--><!--[--><!--]--></div></div></div></div><div class="content" data-v-8ba3d45b><div class="content-container" data-v-8ba3d45b><!--[--><!--]--><main class="main" data-v-8ba3d45b><div style="position:relative;" class="vp-doc _v0_9_0_guide_verification" data-v-8ba3d45b><div><h1 id="verification" tabindex="-1">Verification <a class="header-anchor" href="#verification" aria-label="Permalink to “Verification”">​</a></h1><h2 id="chain-verification" tabindex="-1">Chain verification <a class="header-anchor" href="#chain-verification" aria-label="Permalink to “Chain verification”">​</a></h2><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createSelfSignedCertificate, createCertificate, generateKeyPair, verifyCertificateChain, } from &#39;micro509&#39;;
+// Build a root CA
+const root = await createSelfSignedCertificate({
+    subject: { commonName: &#39;Demo Root CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+// Intermediate CA signed by the root
+const intKeys = await generateKeyPair();
+const intermediate = await createCertificate({
+    issuer: { commonName: &#39;Demo Root CA&#39; },
+    subject: { commonName: &#39;Demo Intermediate CA&#39; },
+    publicKey: intKeys.publicKey,
+    signerPrivateKey: root.keyPair.privateKey,
+    issuerPublicKey: root.keyPair.publicKey,
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+// Leaf signed by the intermediate
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+    issuer: { commonName: &#39;Demo Intermediate CA&#39; },
+    subject: { commonName: &#39;api.example.com&#39; },
+    publicKey: leafKeys.publicKey,
+    signerPrivateKey: intKeys.privateKey,
+    issuerPublicKey: intKeys.publicKey,
+    extensions: {
+        extendedKeyUsage: [&#39;serverAuth&#39;],
+        subjectAltNames: [
+            { type: &#39;dns&#39;, value: &#39;api.example.com&#39; },
+        ],
+    },
+});
+const result = await verifyCertificateChain({
+    leaf: leaf.pem,
+    intermediates: [intermediate.pem],
+    roots: [root.certificate.pem],
+    purpose: &#39;serverAuth&#39;,
+    serviceIdentity: {
+        type: &#39;dns&#39;,
+        value: &#39;api.example.com&#39;,
+    },
+});
+if (result.ok) {
+    console.log(`Valid chain: ${result.value.chain.length} certificates`);
+}
+else {
+    console.log(`\
+Failed: ${result.error.code}
+At index: ${result.error.index}`);
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  verifyCertificateChain,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Build a root CA</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> root</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Root CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Intermediate CA signed by the root</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> intKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> intermediate</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Root CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Intermediate CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: intKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: root.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerPublicKey: root.keyPair.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Leaf signed by the intermediate</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leafKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Intermediate CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;api.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: leafKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: intKeys.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerPublicKey: intKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    extendedKeyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;serverAuth&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    subjectAltNames: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      { type: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;dns&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, value: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;api.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> verifyCertificateChain</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  leaf: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  intermediates: [intermediate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  roots: [root.certificate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  purpose: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;serverAuth&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  serviceIdentity: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    type: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;dns&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    value: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;api.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (result.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">    `Valid chain: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">value</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">chain</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">length</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">} certificates`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  );</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">Failed: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">At index: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">index</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h2 id="verification-purposes" tabindex="-1">Verification purposes <a class="header-anchor" href="#verification-purposes" aria-label="Permalink to “Verification purposes”">​</a></h2><p>Four built-in validation profiles. <code>serverAuth</code>, <code>clientAuth</code>, and <code>ca</code> are passed as <code>purpose</code> to <code>verifyCertificateChain</code>; code signing has its own <code>validateForCodeSigning</code> profile:</p><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createSelfSignedCertificate, createCertificate, generateKeyPair, verifyCertificateChain, validateForCodeSigning, } from &#39;micro509&#39;;
+// Shared root CA
+const root = await createSelfSignedCertificate({
+    subject: { commonName: &#39;Demo Root CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+// Issue a leaf with a given EKU (&#39;serverAuth&#39; | &#39;clientAuth&#39; | &#39;codeSigning&#39;)
+async function issue(cn, eku) {
+    const keys = await generateKeyPair();
+    return createCertificate({
+        issuer: { commonName: &#39;Demo Root CA&#39; },
+        subject: { commonName: cn },
+        publicKey: keys.publicKey,
+        signerPrivateKey: root.keyPair.privateKey,
+        issuerPublicKey: root.keyPair.publicKey,
+        extensions: {
+            extendedKeyUsage: [eku],
+            subjectAltNames: [{ type: &#39;dns&#39;, value: cn }],
+        },
+    });
+}
+// TLS server (default)
+const server = await issue(&#39;srv.example&#39;, &#39;serverAuth&#39;);
+const r1 = await verifyCertificateChain({
+    leaf: server.pem,
+    roots: [root.certificate.pem],
+    purpose: &#39;serverAuth&#39;,
+});
+// TLS client
+const client = await issue(&#39;cli.example&#39;, &#39;clientAuth&#39;);
+const r2 = await verifyCertificateChain({
+    leaf: client.pem,
+    roots: [root.certificate.pem],
+    purpose: &#39;clientAuth&#39;,
+});
+// Code signing
+const signer = await issue(&#39;sign.example&#39;, &#39;codeSigning&#39;);
+const r3 = await validateForCodeSigning({
+    leaf: signer.pem,
+    roots: [root.certificate.pem],
+});
+// CA certificate (verify an intermediate as a CA)
+const caKeys = await generateKeyPair();
+const intermediate = await createCertificate({
+    issuer: { commonName: &#39;Demo Root CA&#39; },
+    subject: { commonName: &#39;Demo Intermediate CA&#39; },
+    publicKey: caKeys.publicKey,
+    signerPrivateKey: root.keyPair.privateKey,
+    issuerPublicKey: root.keyPair.publicKey,
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const r4 = await verifyCertificateChain({
+    leaf: intermediate.pem,
+    roots: [root.certificate.pem],
+    purpose: &#39;ca&#39;,
+});
+console.log(`\
+serverAuth:  ${r1.ok ? &#39;ok&#39; : `${r1.error.code}@${r1.error.index}`}
+clientAuth:  ${r2.ok ? &#39;ok&#39; : `${r2.error.code}@${r2.error.index}`}
+codeSigning: ${r3.ok ? &#39;ok&#39; : `${r3.error.code}@${r3.error.index}`}
+ca:          ${r4.ok ? &#39;ok&#39; : `${r4.error.code}@${r4.error.index}`}`);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  verifyCertificateChain,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  validateForCodeSigning,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Shared root CA</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> root</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Root CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Issue a leaf with a given EKU (&#39;serverAuth&#39; | &#39;clientAuth&#39; | &#39;codeSigning&#39;)</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">async</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> function</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> issue</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#c13617;--shiki-dark:#FFAB70;">cn</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#c13617;--shiki-dark:#FFAB70;">eku</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">) {</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  return</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Root CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    subject: { commonName: cn },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    publicKey: keys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    signerPrivateKey: root.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    issuerPublicKey: root.keyPair.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      extendedKeyUsage: [eku],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      subjectAltNames: [{ type: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;dns&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, value: cn }],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  });</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// TLS server (default)</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> server</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> issue</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;srv.example&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;serverAuth&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> r1</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> verifyCertificateChain</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  leaf: server.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  roots: [root.certificate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  purpose: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;serverAuth&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// TLS client</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> client</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> issue</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cli.example&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;clientAuth&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> r2</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> verifyCertificateChain</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  leaf: client.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  roots: [root.certificate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  purpose: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;clientAuth&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Code signing</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> signer</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> issue</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;sign.example&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;codeSigning&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> r3</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> validateForCodeSigning</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  leaf: signer.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  roots: [root.certificate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// CA certificate (verify an intermediate as a CA)</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> caKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> intermediate</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Root CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo Intermediate CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: caKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: root.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerPublicKey: root.keyPair.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> r4</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> verifyCertificateChain</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  leaf: intermediate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  roots: [root.certificate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  purpose: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ca&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">serverAuth:  ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">ok</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ?</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;ok&#39;</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> `${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}@${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">index</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">clientAuth:  ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">ok</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ?</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;ok&#39;</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> `${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}@${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">index</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">codeSigning: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">ok</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ?</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;ok&#39;</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> `${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}@${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">index</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">ca:          ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r4</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">ok</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ?</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;ok&#39;</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> `${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r4</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}@${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">r4</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">index</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h2 id="service-identity-matching" tabindex="-1">Service identity matching <a class="header-anchor" href="#service-identity-matching" aria-label="Permalink to “Service identity matching”">​</a></h2><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createSelfSignedCertificate, parseCertificatePem, unwrap, } from &#39;micro509&#39;;
+import { matchServiceIdentity } from &#39;micro509/verify&#39;;
+// Create and parse a certificate to match against
+const { certificate } = await createSelfSignedCertificate({
+    subject: { commonName: &#39;example.com&#39; },
+    extensions: {
+        subjectAltNames: [
+            { type: &#39;dns&#39;, value: &#39;example.com&#39; },
+        ],
+    },
+});
+const parsed = unwrap(parseCertificatePem(certificate.pem));
+const result = matchServiceIdentity({
+    certificate: parsed,
+    serviceIdentity: { type: &#39;dns&#39;, value: &#39;example.com&#39; },
+});
+if (result.ok) {
+    console.log(&#39;Identity matches the certificate SAN&#39;);
+}
+else {
+    console.log(result.error.code);
+    // &#39;subject_alt_name_mismatch&#39; | ...
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  parseCertificatePem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  unwrap,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { matchServiceIdentity } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/verify&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Create and parse a certificate to match against</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">certificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    subjectAltNames: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      { type: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;dns&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, value: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> parsed</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">parseCertificatePem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(certificate.pem));</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> matchServiceIdentity</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  certificate: parsed,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  serviceIdentity: { type: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;dns&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, value: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (result.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Identity matches the certificate SAN&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(result.error.code);</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // &#39;subject_alt_name_mismatch&#39; | ...</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><p>Supported identity types:</p><ul><li><strong>DNS-ID</strong> — with wildcard matching and case-insensitive comparison</li><li><strong>IP-ID</strong> — with IPv6 normalization</li><li><strong>URI-ID</strong> — scheme + host matching</li><li><strong>SRV-ID</strong> — service name matching via otherName SAN</li></ul><h2 id="error-codes" tabindex="-1">Error codes <a class="header-anchor" href="#error-codes" aria-label="Permalink to “Error codes”">​</a></h2><div class="info custom-block"><p class="custom-block-title">Stability</p><p>Error-code unions (<code>VerifyErrorCode</code> and every other <code>*ErrorCode</code> / <code>*ReasonCode</code> union) may <strong>gain new members in minor releases</strong> as functionality grows. Treat them as non-exhaustive: keep a <code>default</code> branch in <code>switch</code> statements over codes. Renaming or removing a code is a breaking change and only happens in a major release.</p></div><p>Every failure mode in the <code>VerifyErrorCode</code> type (the runtime list is exported as <code>VERIFY_ERROR_CODES</code>; this table is checked against it by a repo test):</p><table tabindex="0"><thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody><tr><td><code>no_trusted_root</code></td><td>No trust anchor matched the chain</td></tr><tr><td><code>issuer_not_found</code></td><td>Could not find issuer for a certificate</td></tr><tr><td><code>signature_invalid</code></td><td>Cryptographic signature check failed</td></tr><tr><td><code>certificate_expired</code></td><td>Certificate outside validity window</td></tr><tr><td><code>ca_required</code></td><td>Non-CA certificate used as issuer</td></tr><tr><td><code>key_cert_sign_required</code></td><td>Issuer missing <code>keyCertSign</code> key usage</td></tr><tr><td><code>path_length_exceeded</code></td><td>Chain exceeds <code>pathLenConstraint</code></td></tr><tr><td><code>authority_key_identifier_mismatch</code></td><td>AKI/SKI cross-check failed</td></tr><tr><td><code>extended_key_usage_invalid</code></td><td>EKU doesn&#39;t match requested purpose</td></tr><tr><td><code>subject_alt_name_mismatch</code></td><td>SAN doesn&#39;t match service identity</td></tr><tr><td><code>common_name_fallback_suppressed</code></td><td>CN match suppressed by presented identifiers</td></tr><tr><td><code>self_signed_leaf_not_allowed</code></td><td>Self-signed leaf without explicit opt-in</td></tr><tr><td><code>unrecognized_critical_extension</code></td><td>Unknown critical extension</td></tr><tr><td><code>intermediate_eku_constraint</code></td><td>Intermediate has restrictive EKU</td></tr><tr><td><code>explicit_policy_required</code></td><td>Policy required but not satisfied</td></tr><tr><td><code>initial_policy_set_not_satisfied</code></td><td>Initial policy set not met</td></tr><tr><td><code>unsupported_initial_name_constraints</code></td><td>Initial name constraints use unsupported forms</td></tr><tr><td><code>unsupported_name_constraints</code></td><td>Unsupported name constraint form</td></tr><tr><td><code>name_constraints_violated</code></td><td>Name constraints check failed</td></tr><tr><td><code>unsupported_signature_algorithm_parameters</code></td><td>Unknown signature algorithm</td></tr><tr><td><code>certificate_revoked</code></td><td>Revocation evidence confirms revocation</td></tr><tr><td><code>revocation_indeterminate</code></td><td>Revocation unknown under hard-fail policy</td></tr></tbody></table><h2 id="csr-verification" tabindex="-1">CSR verification <a class="header-anchor" href="#csr-verification" aria-label="Permalink to “CSR verification”">​</a></h2><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createCertificateSigningRequest, generateKeyPair, verifyCertificateSigningRequest, } from &#39;micro509&#39;;
+// Build a CSR to verify
+const keyPair = await generateKeyPair({ kind: &#39;ed25519&#39; });
+const csr = await createCertificateSigningRequest({
+    subject: { commonName: &#39;csr.example&#39; },
+    publicKey: keyPair.publicKey,
+    signerPrivateKey: keyPair.privateKey,
+    extensions: {
+        subjectAltNames: [
+            { type: &#39;dns&#39;, value: &#39;csr.example&#39; },
+        ],
+    },
+});
+const result = await verifyCertificateSigningRequest(csr.pem);
+if (result.ok) {
+    console.log(&#39;CSR signature valid&#39;);
+}
+else {
+    console.log(&#39;CSR invalid:&#39;, result.error.code);
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificateSigningRequest,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  verifyCertificateSigningRequest,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Build a CSR to verify</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> keyPair</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({ kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ed25519&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> });</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> csr</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificateSigningRequest</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;csr.example&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: keyPair.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    subjectAltNames: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      { type: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;dns&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, value: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;csr.example&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> verifyCertificateSigningRequest</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  csr.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (result.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;CSR signature valid&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;CSR invalid:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, result.error.code);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div></div></div></main><footer class="VPDocFooter" data-v-8ba3d45b data-v-7b49853b><!--[--><!--]--><!----><nav class="prev-next" aria-labelledby="doc-footer-aria-label" data-v-7b49853b><span class="visually-hidden" id="doc-footer-aria-label" data-v-7b49853b>Pager</span><div class="pager" data-v-7b49853b><a class="VPLink link pager-link prev" href="/v0.9.0/guide/certificates" data-v-7b49853b><!--[--><span class="desc" data-v-7b49853b>Previous page</span><span class="title" data-v-7b49853b>Certificates</span><!--]--></a></div><div class="pager" data-v-7b49853b><a class="VPLink link pager-link next" href="/v0.9.0/guide/keys" data-v-7b49853b><!--[--><span class="desc" data-v-7b49853b>Next page</span><span class="title" data-v-7b49853b>Keys</span><!--]--></a></div></nav></footer><!--[--><!--]--></div></div></div><!--[--><!--]--></div></div><footer class="VPFooter has-sidebar" data-v-7e38a135 data-v-dd9e2ea5><div class="container" data-v-dd9e2ea5><p class="message" data-v-dd9e2ea5>Released under the MIT License.</p><p class="copyright" data-v-dd9e2ea5>Copyright © 2026-present Kaj Kowalski</p></div></footer><!--[--><!--]--></div></div>
+    
+    
+  </body>
+</html>
