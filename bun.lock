@@ -156,7 +156,7 @@
       "@deno/doc": "npm:@jsr/deno__doc@0.210.0",
       "@types/deno": "^2.7.0",
       "deno": "^2.9.6",
-      "importmapify": "^1.7.0",
+      "importmapify": "^2.0.0",
     },
     "dprint": {
       "@dprint/biome": "^0.15.6",
@@ -813,7 +813,7 @@
 
     "import-without-cache": ["import-without-cache@0.4.1", "", {}, "sha512-vXoV9PjKHEednCUu01e98TkImxy67e3BJXbTIOmIq4Hyzw3IAwYRcuPkfeTzJzwyyts4kjuA73x+pWJLc4f86A=="],
 
-    "importmapify": ["importmapify@1.7.0", "", { "dependencies": { "dreamcli": "npm:@kjanat/dreamcli@^3.0.1" }, "bin": { "importmapify": "dist/mod.mjs" } }, "sha512-oAScmWPf0bZLwC1mzsH5hNZ7hV8f6JfcefnJR7ikrnlfkx3dzSnEjK4OWyiCs9eUdA8XLZQb1VF5brDjrTHTuQ=="],
+    "importmapify": ["importmapify@2.0.0", "", { "dependencies": { "dreamcli": "npm:@kjanat/dreamcli@^5.4.0" }, "bin": { "importmapify": "dist/mod.mjs" } }, "sha512-ZwCNIsoBui54kTJZZQQas3vD0tO/2l1f913+J0gLBbob4GL+QVIn+ZqKMQXJ3wHNMjK/Xcu3Q8KelYKIHcgRnQ=="],
 
     "jose": ["jose@6.2.17", "", {}, "sha512-wOuK9V1yujQFH5S0ZWmLcDZN7+IKh9bUCC2ZPCf2HDlol3WWHy+PPyNjEI75FXRLMp3vDKQcupP59xhVU95hcg=="],
 
@@ -1043,7 +1043,7 @@
 
     "@vue/devtools-kit/hookable": ["hookable@5.5.3", "", {}, "sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ=="],
 
-    "importmapify/dreamcli": ["@kjanat/dreamcli@3.0.1", "", { "dependencies": { "ansispeck": "^0.4.1" } }, "sha512-FY5uBPI7EQouhyUEpQdMEVew4jGEcshBZSSH6a8G47Bie+uBk1flLj8l2sJrVDOyd9lG1i1BaYyV0jmgdENp3A=="],
+    "importmapify/dreamcli": ["@kjanat/dreamcli@5.4.0", "", { "dependencies": { "ansispeck": "^0.4.3" } }, "sha512-LXJec9Ut82BoX8H9wWgQ/1ta0a5UDqJhd+HaiZEkn2AZWeu+cSvBPgFwyLf4YfZVI8u3Hi/oA3G6KoyZMocJzg=="],
 
     "miniflare/ws": ["ws@8.21.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g=="],
 
