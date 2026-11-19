@@ -232,7 +232,7 @@
 			"@deno/doc": "npm:@jsr/deno__doc@0.210.0",
 			"@types/deno": "^2.7.0",
 			"deno": "^2.9.6",
-			"importmapify": "^1.7.0"
+			"importmapify": "^2.0.0"
 		},
 		"dprint": {
 			"@dprint/biome": "^0.15.6",
