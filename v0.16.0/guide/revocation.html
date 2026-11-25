@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="ltr">
+  <head>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script type="importmap">{"imports":{"micro509":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/+esm","micro509/crypto":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/crypto/+esm","micro509/der":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/der/+esm","micro509/keys":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/keys/+esm","micro509/pem":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/pem/+esm","micro509/pkcs":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/pkcs/+esm","micro509/result":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/result/+esm","micro509/revocation":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/revocation/+esm","micro509/verify":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/verify/+esm","micro509/x509":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/x509/+esm"},"scopes":{"/v0.16.0/":{"micro509":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/+esm","micro509/crypto":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/crypto/+esm","micro509/der":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/der/+esm","micro509/keys":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/keys/+esm","micro509/pem":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/pem/+esm","micro509/pkcs":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/pkcs/+esm","micro509/result":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/result/+esm","micro509/revocation":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/revocation/+esm","micro509/verify":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/verify/+esm","micro509/x509":"https://cdn.jsdelivr.net/npm/micro509@0.16.0/x509/+esm"}}}</script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Revocation | micro509</title>
+    <meta name="description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <meta name="generator" content="VitePress v2.0.0-alpha.20">
+    
+    <link rel="preload stylesheet" href="/v0.16.0/assets/style.BokW5YTF.css" as="style">
+    <link rel="preload stylesheet" href="/v0.16.0/assets/vp-icons.882fcefa.css" as="style">
+    <script type="module" src="/v0.16.0/assets/chunks/metadata.9367d96b.js"></script>
+    <script type="module" src="/v0.16.0/assets/app.BZ74DFTx.js"></script>
+    <link rel="preload" href="/v0.16.0/assets/inter-roman-latin.q5rAVC0E.woff2" as="font" type="font/woff2" crossorigin="">
+    <link rel="modulepreload" href="/v0.16.0/assets/chunks/framework.CdvHacad.js">
+    <link rel="modulepreload" href="/v0.16.0/assets/chunks/theme.BBfvc7i6.js">
+    <link rel="modulepreload" href="/v0.16.0/assets/guide_revocation.md.CRsZU7qC.lean.js">
+    <meta name="theme-color" content="#3c8772">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="micro509">
+    <meta property="og:description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <meta property="og:url" content="https://micro509.kjanat.dev">
+    <meta property="og:image" content="https://micro509.kjanat.dev/icon.svg">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="micro509">
+    <meta name="twitter:description" content="The zero-dependency TypeScript PKI toolkit for real certificate workflows.">
+    <script id="check-dark-mode">(()=>{let e=localStorage.getItem(`vitepress-theme-appearance`)||`auto`,t=window.matchMedia(`(prefers-color-scheme: dark)`).matches;(!e||e===`auto`?t:e===`dark`)&&document.documentElement.classList.add(`dark`)})();</script>
+    <script id="check-mac-os">document.documentElement.classList.toggle(`mac`,/Mac|iPhone|iPod|iPad/i.test(navigator.platform));</script>
+    <meta name="robots" content="noindex">
+  </head>
+  <body>
+    <div id="app"><div class="Layout" data-v-7e38a135><!--[--><!--]--><!--[--><span tabindex="-1" data-v-499bdcc5></span><a href="#VPContent" class="VPSkipLink visually-hidden" data-v-499bdcc5>Skip to content</a><!--]--><!----><header class="VPNav" data-v-7e38a135 data-v-21c0505c><div class="VPNavBar has-sidebar top" data-v-21c0505c data-v-8f4848b5><div class="wrapper" data-v-8f4848b5><div class="container" data-v-8f4848b5><div class="title" data-v-8f4848b5><div class="VPNavBarTitle has-sidebar" data-v-8f4848b5 data-v-c8132227><a class="title" href="/v0.16.0/" title="micro509" data-v-c8132227><!--[--><!--]--><!--[--><!--[--><!--[--><img class="VPImage dark logo" src="/v0.16.0/icon-light.svg" alt="micro509" data-v-b7995f32><!--]--><!--[--><img class="VPImage light logo" src="/v0.16.0/icon.svg" alt="micro509" data-v-b7995f32><!--]--><!--]--><!--]--><span data-v-c8132227>micro509</span><!--[--><!--]--></a></div></div><div class="content" data-v-8f4848b5><div class="content-body" data-v-8f4848b5><!--[--><!--]--><div class="VPNavBarSearch search" data-v-8f4848b5 data-v-23cefeba><!--[--><button type="button" class="VPNavBarSearchButton" aria-label="Search" aria-keyshortcuts="/ control+k meta+k" data-v-23cefeba data-v-74241663><span class="vpi-search" aria-hidden="true" data-v-74241663></span><span class="text" data-v-74241663>Search</span><span class="keys" aria-hidden="true" data-v-74241663><kbd class="key-mod" data-v-74241663></kbd><kbd class="key-k" data-v-74241663></kbd></span></button><!----><!--]--></div><nav aria-label="Main Navigation" class="VPNavMenu VPNavBarMenu menu" data-v-8f4848b5 data-v-7c501401><ul class="list" data-v-7c501401><!--[--><li class="" data-v-7c501401><div class="versioned-nav" data-v-7c501401 data-v-752d2563><!--[--><a class="active VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.16.0/guide/getting-started" data-v-752d2563>Guide</a><a class="VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.16.0/api/" data-v-752d2563>API</a><a class="VPLink link vp-external-link-icon-none VPNavBarMenuLink" href="/v0.16.0/reference/standards" data-v-752d2563>Reference</a><!--]--></div></li><li class="" data-v-7c501401><div class="version-switcher" data-v-7c501401 data-v-83e6d7a8><button type="button" class="vs-button" aria-haspopup="true" aria-expanded="false" data-v-83e6d7a8>v0.16.0 <!----></button><!----></div></li><!--]--></ul></nav><!----><div class="VPNavAppearance VPNavBarAppearance appearance" data-v-8f4848b5 data-v-0526efd6><!----><button class="VPSwitch VPSwitchAppearance" type="button" role="switch" title aria-label="Appearance" aria-checked="false" data-v-0526efd6 data-v-2d2da833 data-v-a2ada4fc><span class="check" data-v-a2ada4fc><span class="icon" data-v-a2ada4fc><!--[--><span class="vpi-sun sun" aria-hidden="true" data-v-2d2da833></span><span class="vpi-moon moon" aria-hidden="true" data-v-2d2da833></span><!--]--></span></span></button></div><ul class="VPSocialLinks VPNavSocialLinks VPNavBarSocialLinks social-links" data-v-8f4848b5 data-v-07f6e6d5 data-v-c257d51e><!--[--><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://github.com/kjanat/micro509" aria-label="GitHub" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="vpi-simple-icons-github" data-v-b08e7265 data-v-890c5b71></span></a></li><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://npm.im/micro509" aria-label="NPM" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="vpi-simple-icons-npm" data-v-b08e7265 data-v-890c5b71></span></a></li><li data-v-c257d51e><a class="VPSocialLink no-icon" href="https://jsr.io/@kjanat/micro509" aria-label="JSR" target="_blank" rel="me noopener" data-v-c257d51e data-v-b08e7265><span class="VPIcon" data-v-b08e7265 data-v-890c5b71><svg role="img" viewBox="0 0 24 12.924" xmlns="http://www.w3.org/2000/svg"><title>JSR</title><path fill="#f7df1e" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Z"/><path fill="#083344" d="M3.692 0v3.693H0v7.384h7.385v1.847h12.923v-3.693H24V1.847h-7.385V0Zm1.846 1.847h1.847v7.384H1.846v-3.692h1.846v1.846h1.846zm3.693 0h5.538V3.692h-3.692v1.846h3.692v5.538H9.231V9.232h3.692v-1.846H9.231Zm7.384 1.846h5.539v3.692h-1.846v-1.846h-1.846v5.538h-1.847z"/></svg></span></a></li><!--]--></ul><!----><!--[--><!--]--><button type="button" class="VPNavBarHamburger hamburger" aria-label="Menu" aria-expanded="false" data-v-8f4848b5 data-v-32c75667><span class="container" aria-hidden="true" data-v-32c75667><span class="top" data-v-32c75667></span><span class="middle" data-v-32c75667></span><span class="bottom" data-v-32c75667></span></span></button></div></div></div></div><div class="divider" data-v-8f4848b5><div class="divider-line" data-v-8f4848b5></div></div></div><!----></header><div class="VPLocalNav has-sidebar empty" data-v-7e38a135 data-v-19dde0b7><div class="container" data-v-19dde0b7><button type="button" class="menu" aria-expanded="false" aria-controls="VPSidebarNav" data-v-19dde0b7><span class="vpi-align-left menu-icon" aria-hidden="true" data-v-19dde0b7></span><span class="menu-text" data-v-19dde0b7>Menu</span></button><div class="VPLocalNavOutlineDropdown" style="--vp-vh:0px;" data-allow-mismatch="style" data-v-19dde0b7 data-v-a9770819><button type="button" data-v-a9770819>Return to top</button><!----></div></div></div><aside class="VPSidebar" data-v-7e38a135 data-v-a61a820c><div class="curtain" data-v-a61a820c></div><nav class="nav" id="VPSidebarNav" aria-labelledby="sidebar-aria-label" tabindex="-1" data-v-a61a820c><span class="visually-hidden" id="sidebar-aria-label" data-v-a61a820c> Sidebar Navigation </span><!--[--><!--]--><!--[--><div class="no-transition group" data-v-bd6fbf8d><section class="VPSidebarItem level-0" data-v-bd6fbf8d data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><h2 class="text" data-v-508f7dbf>Introduction</h2><!----></div><ul class="items" data-v-508f7dbf><li data-v-508f7dbf><!--[--><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/getting-started" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Getting Started</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/why" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Why micro509</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/migration" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Migration guide</p><!--]--></a><!----></div><!----></div><!--]--></li></ul></section></div><div class="no-transition group" data-v-bd6fbf8d><section class="VPSidebarItem level-0 has-active" data-v-bd6fbf8d data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><h2 class="text" data-v-508f7dbf>Workflows</h2><!----></div><ul class="items" data-v-508f7dbf><li data-v-508f7dbf><!--[--><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/recipes" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Recipes</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/certificates" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Certificates</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/verification" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Verification</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/keys" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Keys</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link is-active has-active" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/revocation" aria-current="page" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Revocation</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/pkcs" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>PKCS</p><!--]--></a><!----></div><!----></div><div class="VPSidebarItem level-1 is-link" data-v-508f7dbf><div class="item" data-v-508f7dbf><div class="indicator" data-v-508f7dbf></div><a class="VPLink link link" href="/v0.16.0/guide/extensions" data-v-508f7dbf><!--[--><p class="text" data-v-508f7dbf>Extensions</p><!--]--></a><!----></div><!----></div><!--]--></li></ul></section></div><!--]--><!--[--><!--]--></nav></aside><div class="VPContent has-sidebar" id="VPContent" data-v-7e38a135 data-v-852b6936><div class="VPDoc has-sidebar has-aside" data-v-852b6936 data-v-8ba3d45b><!--[--><!--]--><div class="container" data-v-8ba3d45b><div class="aside" data-v-8ba3d45b><div class="aside-curtain" data-v-8ba3d45b></div><div class="aside-container" data-v-8ba3d45b><div class="aside-content" data-v-8ba3d45b><div class="VPDocAside" data-v-8ba3d45b data-v-5ef2eff3><!--[--><!--]--><!--[--><!--]--><nav aria-labelledby="doc-outline-aria-label" class="VPDocAsideOutline" data-v-5ef2eff3 data-v-df5b2de9><div class="content" data-v-df5b2de9><div class="outline-marker" data-v-df5b2de9></div><div aria-level="2" class="outline-title" id="doc-outline-aria-label" role="heading" data-v-df5b2de9>On this page</div><ul class="VPDocOutlineItem root" data-v-df5b2de9 data-v-36c863a6><!--[--><!--]--></ul></div></nav><!--[--><!--]--><div class="spacer" data-v-5ef2eff3></div><!--[--><!--]--><!----><!--[--><!--]--><!--[--><!--]--></div></div></div></div><div class="content" data-v-8ba3d45b><div class="content-container" data-v-8ba3d45b><!--[--><!--]--><main class="main" data-v-8ba3d45b><div style="position:relative;" class="vp-doc _v0_16_0_guide_revocation" data-v-8ba3d45b><div><h1 id="revocation" tabindex="-1">Revocation <a class="header-anchor" href="#revocation" aria-label="Permalink to “Revocation”">​</a></h1><p>The examples below build their own <code>ca</code>, <code>leaf</code>, CRL, and OCSP material inline so each one runs on its own.</p><p>Revocation checking is opt-in. Pass CRLs or OCSP responses in the <code>revocation</code> input to <code>verifyCertificateChain</code>. micro509 does not retrieve evidence from certificate URLs or contact responders. Your application is responsible for obtaining evidence and supplying it for evaluation. Omitting <code>revocation</code> skips this step. Passing <code>revocation: {}</code> enables it with no evidence, so certificates that need evidence receive an indeterminate status.</p><div class="warning custom-block"><p class="custom-block-title">Revocation checking defaults to hard-fail</p><p>When chain-level revocation checking is enabled, <code>RevocationPolicy.mode</code> defaults to <code>&#39;hard-fail&#39;</code>: certificates whose revocation status is <strong>indeterminate</strong> (no applicable CRL/OCSP evidence, expired evidence, untrusted signer) are <strong>denied</strong>. If availability matters more than strictness — partial evidence is normal in your setup — opt out explicitly with <code>policy: { mode: &#39;soft-fail&#39; }</code>, which allows indeterminate status and denies only on a confirmed <code>revoked</code> verdict.</p></div><h2 id="crl-lifecycle" tabindex="-1">CRL lifecycle <a class="header-anchor" href="#crl-lifecycle" aria-label="Permalink to “CRL lifecycle”">​</a></h2><h3 id="create-a-crl" tabindex="-1">Create a CRL <a class="header-anchor" href="#create-a-crl" aria-label="Permalink to “Create a CRL”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createSelfSignedCertificate, createCertificateRevocationList, } from &#39;micro509&#39;;
+const ca = await createSelfSignedCertificate({
+    subject: { commonName: &#39;My CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const crl = await createCertificateRevocationList({
+    issuer: { commonName: &#39;My CA&#39; },
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+    crlNumber: 1,
+    thisUpdate: new Date(),
+    nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    revokedCertificates: [
+        {
+            serialNumber: Uint8Array.of(0x01),
+            revocationDate: new Date(),
+            reasonCode: &#39;keyCompromise&#39;,
+        },
+    ],
+});
+console.log(crl.pem);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificateRevocationList,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ca</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;My CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> crl</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificateRevocationList</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;My CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  crlNumber: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  thisUpdate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  nextUpdate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(Date.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">now</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">() </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 7</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 24</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 1000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  revokedCertificates: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      serialNumber: Uint8Array.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">0x01</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      revocationDate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      reasonCode: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCompromise&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(crl.pem);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="crl-location-and-issuer-identity" tabindex="-1">CRL location and issuer identity <a class="header-anchor" href="#crl-location-and-issuer-identity" aria-label="Permalink to “CRL location and issuer identity”">​</a></h3><p>A URI in <code>distributionPoint.fullName</code> identifies where a CRL can be retrieved. The separate <code>cRLIssuer</code> field identifies its signer. Under RFC 5280 §4.2.1.13, that field may contain only the CRL issuer&#39;s <code>directoryName</code>, encoded exactly as the CRL&#39;s issuer Name. A semantically equivalent name with different DER encoding, or a list mixing a directory name with a URI, cannot authorize the CRL.</p><h3 id="parse-and-validate-a-crl" tabindex="-1">Parse and validate a CRL <a class="header-anchor" href="#parse-and-validate-a-crl" aria-label="Permalink to “Parse and validate a CRL”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createSelfSignedCertificate } from &#39;micro509&#39;;
+import { createCertificateRevocationList, isCertificateRevoked, validateCertificateRevocationList, } from &#39;micro509/revocation&#39;;
+const ca = await createSelfSignedCertificate({
+    subject: { commonName: &#39;My CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const crl = await createCertificateRevocationList({
+    issuer: { commonName: &#39;My CA&#39; },
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+    crlNumber: 1,
+    nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    revokedCertificates: [
+        {
+            serialNumber: Uint8Array.of(0x01),
+            reasonCode: &#39;keyCompromise&#39;,
+        },
+    ],
+});
+const validationResult = await validateCertificateRevocationList({
+    crl: crl.pem,
+    issuerCertificate: ca.certificate.pem,
+});
+if (!validationResult.ok) {
+    console.log(`validation failed: ${validationResult.code}`);
+}
+else {
+    const parsed = validationResult.value;
+    const entry = parsed.revokedCertificates[0];
+    const body = crl.pem.trimEnd().split(&#39;\n&#39;).slice(1, -1).join(&#39;&#39;);
+    console.log(`\
+validated:  true
+sig algo:   ${parsed.signatureAlgorithmName}
+signature:  …${body.slice(-44)}
+thisUpdate: ${parsed.thisUpdate.toISOString()}
+entry 01:   revoked ${entry?.revocationDate.toISOString().slice(0, 10)}, reason ${entry?.reasonCode}
+revoked 01: ${isCertificateRevoked(&#39;01&#39;, parsed)}
+revoked 02: ${isCertificateRevoked(&#39;02&#39;, parsed)}`);
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> { createSelfSignedCertificate } </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificateRevocationList,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  isCertificateRevoked,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  validateCertificateRevocationList,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/revocation&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ca</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;My CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> crl</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificateRevocationList</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;My CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  crlNumber: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  nextUpdate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(Date.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">now</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">() </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 7</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 24</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 1000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  revokedCertificates: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      serialNumber: Uint8Array.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">of</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">0x01</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      reasonCode: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCompromise&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> validationResult</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> validateCertificateRevocationList</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  crl: crl.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">validationResult.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`validation failed: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">validationResult</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> parsed</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> validationResult.value;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> entry</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> parsed.revokedCertificates[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">];</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> body</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> crl.pem.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">trimEnd</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">().</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">split</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\n</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">join</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">validated:  true</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">sig algo:   ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">parsed</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">signatureAlgorithmName</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">signature:  …${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">body</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">slice</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">(</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">44</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">)</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">thisUpdate: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">parsed</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">thisUpdate</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toISOString</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">()</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">entry 01:   revoked ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">revocationDate</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toISOString</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">().</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">slice</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">0</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">10</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">)</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}, reason ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">reasonCode</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">revoked 01: ${</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">isCertificateRevoked</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;01&#39;</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">, </span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">parsed</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">)</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">revoked 02: ${</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">isCertificateRevoked</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;02&#39;</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">, </span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">parsed</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">)</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><p><a href="https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5" target="_blank" rel="noreferrer">RFC 5280 §5.1.2.5</a> requires conforming CRL issuers to include <code>nextUpdate</code>, so <code>createCertificateRevocationList</code> requires it. The builder also throws <code>next_update_not_after_this_update</code> unless <code>nextUpdate</code> is at least one second after <code>thisUpdate</code>. That ordering is a micro509 invariant, and <a href="https://www.rfc-editor.org/rfc/rfc5280.html" target="_blank" rel="noreferrer">RFC 5280</a> and X.509 do not specify it. <a href="https://www.rfc-editor.org/rfc/rfc5280.html#section-5.2" target="_blank" rel="noreferrer">RFC 5280 §5.2</a> requires the Authority Key Identifier and CRL Number extensions in every CRL, so <code>issuerCertificate</code> and <code>crlNumber</code> are required too.</p><p><a href="https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5" target="_blank" rel="noreferrer">RFC 5280 §5.1.2.5</a> does not specify how a client handles a received CRL without <code>nextUpdate</code>, and <a href="https://www.rfc-editor.org/rfc/rfc5280.html#section-3.3" target="_blank" rel="noreferrer">§3.3</a> leaves the required recency of revocation data to local policy. micro509 fails such a CRL with <code>stale_crl</code> unless you set a maximum age, which then governs it.</p><p>Bound the age of <code>thisUpdate</code> with these options. A CRL older than the bound fails with <code>stale_crl</code>, and the chain reports it as <code>crl_expired</code>.</p><table tabindex="0"><thead><tr><th>Option</th><th>Where</th></tr></thead><tbody><tr><td><code>maxAgeMs</code></td><td><code>validateCertificateRevocationList</code>, <code>checkCertificateRevocationAgainstCrl</code></td></tr><tr><td><code>crlMaxAgeMs</code></td><td><code>checkCertificateRevocation</code></td></tr><tr><td><code>crlMaxAgeMs</code></td><td><code>policy</code> of <code>checkChainRevocation</code> and <code>verifyCertificateChain({ revocation })</code></td></tr><tr><td><code>responderRevocationCrlMaxAgeMs</code></td><td><code>validateOcspResponse</code>, for the <code>responderRevocationCrls</code> of delegated responders</td></tr></tbody></table><p>The chain-level <code>crlMaxAgeMs</code> also applies to CRLs for CRL signers and delegated OCSP responders. <code>clockSkewMs</code>, on the same input or on the chain <code>policy</code>, widens the bound by the same amount and also applies to the <code>thisUpdate</code> and <code>nextUpdate</code> checks.</p><h3 id="unrecognized-reason-codes" tabindex="-1">Unrecognized reason codes <a class="header-anchor" href="#unrecognized-reason-codes" aria-label="Permalink to “Unrecognized reason codes”">​</a></h3><p><a href="https://www.rfc-editor.org/rfc/rfc5280.html#section-5.3.1" target="_blank" rel="noreferrer">RFC 5280 §5.3.1</a> lists CRLReason values 0 to 10, with 7 unused, and X.509 adds <code>weakAlgorithmOrKey (11)</code>. Neither says what a relying party does with a code outside its list. Parsing keeps such a code as <code>{ type: &#39;unrecognized&#39;, code }</code>, and the <code>unrecognizedReasonCode</code> option picks the treatment of evidence that revokes a certificate with it.</p><table tabindex="0"><thead><tr><th>Value</th><th>Effect</th></tr></thead><tbody><tr><td><code>&#39;revoked&#39;</code> (default)</td><td>The certificate is revoked, and the code is reported</td></tr><tr><td><code>&#39;reject&#39;</code></td><td>The evidence cannot settle the status and fails with <code>reason_code_unrecognized</code>. Other evidence then cannot settle it as <code>good</code> either</td></tr></tbody></table><table tabindex="0"><thead><tr><th>Option</th><th>Where</th></tr></thead><tbody><tr><td><code>unrecognizedReasonCode</code></td><td><code>checkCertificateRevocationAgainstCrl</code>, <code>checkCertificateRevocation</code></td></tr><tr><td><code>unrecognizedReasonCode</code></td><td><code>policy</code> of <code>checkChainRevocation</code> and <code>verifyCertificateChain({ revocation })</code></td></tr><tr><td><code>responderRevocationUnrecognizedReasonCode</code></td><td><code>validateOcspResponse</code>, for the <code>responderRevocationCrls</code> of delegated responders</td></tr></tbody></table><p>The chain reports a rejected code as <code>crl_reason_code_unrecognized</code> or <code>ocsp_reason_code_unrecognized</code>. A CRL signer listed with a rejected code makes the CRLs it signs unusable, reported as <code>crl_signer_indeterminate</code>. A delegated OCSP responder listed with one fails <code>validateOcspResponse</code> with <code>responder_revocation_unknown</code>, even when another CRL reports the responder good. Codes are <code>bigint</code>, so a code of any length is kept exactly.</p><p>A CRL whose entry marks its cRLReason critical and holds an unrecognized code is malformed, since <a href="https://www.rfc-editor.org/rfc/rfc5280.html#appendix-B" target="_blank" rel="noreferrer">RFC 5280 Appendix B</a> requires rejecting a critical extension with values the implementation does not recognize.</p><h2 id="ocsp" tabindex="-1">OCSP <a class="header-anchor" href="#ocsp" aria-label="Permalink to “OCSP”">​</a></h2><h3 id="build-a-request" tabindex="-1">Build a request <a class="header-anchor" href="#build-a-request" aria-label="Permalink to “Build a request”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createCertificate, createSelfSignedCertificate, generateKeyPair, } from &#39;micro509&#39;;
+import { createOcspRequest, parseOcspRequestDerOrThrow, } from &#39;micro509/revocation&#39;;
+const ca = await createSelfSignedCertificate({
+    subject: { commonName: &#39;Demo CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+    issuer: { commonName: &#39;Demo CA&#39; },
+    subject: { commonName: &#39;app.example.com&#39; },
+    publicKey: leafKeys.publicKey,
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+});
+const request = await createOcspRequest({
+    requests: [
+        {
+            certificate: leaf.pem,
+            issuerCertificate: ca.certificate.pem,
+        },
+    ],
+});
+// Parse it back to see the CertID the responder will look up
+const certId = parseOcspRequestDerOrThrow(request.der).requests[0];
+console.log(`\
+serial:   ${certId?.serialNumberHex}
+hashed:   with ${certId?.hashAlgorithmName} (RFC 9919 default)
+key hash: ${certId?.issuerKeyHashHex}`);
+console.log(request.pem);
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createOcspRequest,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  parseOcspRequestDerOrThrow,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/revocation&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ca</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leafKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;app.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: leafKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> request</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createOcspRequest</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  requests: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certificate: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Parse it back to see the CertID the responder will look up</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> certId</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> parseOcspRequestDerOrThrow</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(request.der).requests[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">];</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">serial:   ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">certId</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">serialNumberHex</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">hashed:   with ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">certId</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">hashAlgorithmName</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">} (RFC 9919 default)</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">key hash: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">certId</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">issuerKeyHashHex</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(request.pem);</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="parse-and-validate-a-response" tabindex="-1">Parse and validate a response <a class="header-anchor" href="#parse-and-validate-a-response" aria-label="Permalink to “Parse and validate a response”">​</a></h3><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createCertificate, createSelfSignedCertificate, generateKeyPair, } from &#39;micro509&#39;;
+import { createOcspRequest, createOcspResponse, parseOcspResponseDerOrThrow, validateOcspResponse, } from &#39;micro509/revocation&#39;;
+const ca = await createSelfSignedCertificate({
+    subject: { commonName: &#39;Demo CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+    issuer: { commonName: &#39;Demo CA&#39; },
+    subject: { commonName: &#39;app.example.com&#39; },
+    publicKey: leafKeys.publicKey,
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+});
+const nonce = crypto.getRandomValues(new Uint8Array(16));
+const nonceHex = Array.from(nonce, (byte) =&gt; byte.toString(16).padStart(2, &#39;0&#39;)).join(&#39;&#39;);
+const request = await createOcspRequest({
+    nonce,
+    requests: [
+        {
+            certificate: leaf.pem,
+            issuerCertificate: ca.certificate.pem,
+        },
+    ],
+});
+// Responder signs an OCSP response for the leaf
+const ocsp = await createOcspResponse({
+    signerPrivateKey: ca.keyPair.privateKey,
+    signerCertificate: ca.certificate.pem,
+    nonce,
+    responses: [
+        {
+            certificate: leaf.pem,
+            issuerCertificate: ca.certificate.pem,
+            certStatus: &#39;good&#39;,
+        },
+    ],
+});
+const response = parseOcspResponseDerOrThrow(ocsp.der);
+// Verifies the signature, binds and authorizes the
+// responder against the issuer, matches the nonce and
+// every requested CertID, and checks freshness
+const result = await validateOcspResponse({
+    response,
+    request: request.der,
+    issuerCertificate: ca.certificate.pem,
+});
+if (result.ok) {
+    const entry = result.value.responses?.[0];
+    const responder = response.responderId;
+    console.log(`\
+status:     ${response.responseStatus}, ${entry?.certStatus}
+serial:     ${entry?.certId.serialNumberHex}
+certId:     hashed with ${entry?.certId.hashAlgorithmName} (RFC 9919 default)
+responder:  ${responder?.type === &#39;byKeyHash&#39; ? `key hash ${responder.keyHashHex}` : &#39;by name&#39;}
+signature:  ${response.signatureAlgorithmName}, verified
+nonce:      ${response.nonce === nonceHex ? &#39;echoed&#39; : response.nonce}
+window:     ${entry?.thisUpdate.toISOString()} → ${entry?.nextUpdate?.toISOString() ?? &#39;no nextUpdate&#39;}
+producedAt: ${response.producedAt?.toISOString()}`);
+}
+else {
+    console.log(`invalid: ${result.error.code}`);
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createOcspRequest,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createOcspResponse,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  parseOcspResponseDerOrThrow,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  validateOcspResponse,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/revocation&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ca</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leafKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;app.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: leafKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> nonce</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> crypto.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">getRandomValues</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Uint8Array</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">));</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> nonceHex</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> Array.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">from</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(nonce, (</span><span style="--shiki-light:#c13617;--shiki-dark:#FFAB70;">byte</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">) </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  byte.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toString</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">padStart</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;0&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">).</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">join</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> request</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createOcspRequest</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  nonce,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  requests: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certificate: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Responder signs an OCSP response for the leaf</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ocsp</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createOcspResponse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  nonce,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  responses: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certificate: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certStatus: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;good&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> response</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> parseOcspResponseDerOrThrow</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(ocsp.der);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Verifies the signature, binds and authorizes the</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// responder against the issuer, matches the nonce and</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// every requested CertID, and checks freshness</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> validateOcspResponse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  response,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  request: request.der,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (result.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> entry</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> result.value.responses?.[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">];</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> responder</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> response.responderId;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">status:     ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">response</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">responseStatus</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}, ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">certStatus</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">serial:     ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">certId</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">serialNumberHex</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">certId:     hashed with ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">certId</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">hashAlgorithmName</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">} (RFC 9919 default)</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">responder:  ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">responder</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">type</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ===</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;byKeyHash&#39;</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ?</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> `key hash ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">responder</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">keyHashHex</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;by name&#39;}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">signature:  ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">response</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">signatureAlgorithmName</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}, verified</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">nonce:      ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">response</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">nonce</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ===</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> nonceHex</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> ?</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;echoed&#39;</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> :</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> response</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">nonce</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">window:     ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">thisUpdate</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toISOString</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">()</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">} → ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">entry</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">nextUpdate</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toISOString</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">() </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">??</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;no nextUpdate&#39;}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">producedAt: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">response</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">producedAt</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toISOString</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">()</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`invalid: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div><h3 id="require-nextupdate-rfc-9919" tabindex="-1">Require nextUpdate (RFC 9919) <a class="header-anchor" href="#require-nextupdate-rfc-9919" aria-label="Permalink to “Require nextUpdate (RFC 9919)”">​</a></h3><p><a href="https://www.rfc-editor.org/rfc/rfc6960.html#section-4.2.2.1" target="_blank" rel="noreferrer">RFC 6960 §4.2.2.1</a> lets a response omit <code>nextUpdate</code>, meaning newer information is always available, and <code>validateOcspResponse</code> accepts such a response by default. <a href="https://www.rfc-editor.org/rfc/rfc9919.html" target="_blank" rel="noreferrer">RFC 9919</a> is a profile for lightweight, high-volume environments, and its <a href="https://www.rfc-editor.org/rfc/rfc9919.html#section-5" target="_blank" rel="noreferrer">§5</a> requires a client that follows it to reject a response without <code>nextUpdate</code>. Opt in with <code>profile: &#39;rfc9919&#39;</code> on <code>validateOcspResponse</code>, or <code>ocspProfile: &#39;rfc9919&#39;</code> on <code>checkCertificateRevocation</code> and the chain-level revocation <code>policy</code>. <code>validateOcspResponse</code> then fails with <code>next_update_missing</code>, <code>checkCertificateRevocation</code> reports <code>next_update_missing</code> as the indeterminate reason, and the chain reports <code>ocsp_next_update_missing</code>.</p><div data-js="&quot;use strict&quot;;
+const result = await validateOcspResponse({
+    response,
+    issuerCertificate: ca.certificate.pem,
+    profile: &#39;rfc9919&#39;,
+});
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> validateOcspResponse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  response,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  profile: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;rfc9919&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span></code></pre></div></div><h2 id="orchestrated-revocation-check" tabindex="-1">Orchestrated revocation check <a class="header-anchor" href="#orchestrated-revocation-check" aria-label="Permalink to “Orchestrated revocation check”">​</a></h2><p><code>checkCertificateRevocation</code> accepts a certificate, its issuer, and an array of CRL or OCSP evidence. Use <code>unwrap(result).status</code> to decide what to do:</p><table tabindex="0"><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody><tr><td><code>good</code></td><td>Applicable evidence reports the certificate as not revoked.</td></tr><tr><td><code>revoked</code></td><td>Evidence identifies the certificate as revoked. Inspect the revocation time and reason.</td></tr><tr><td><code>indeterminate</code></td><td>The supplied evidence cannot establish a status. Inspect the reason before deciding how to proceed.</td></tr></tbody></table><p>This API represents unusable evidence as an <code>indeterminate</code> status inside an <code>ok</code> result. An <code>ok</code> result alone does not mean the certificate is good. Chain verification applies your revocation policy to that status. The example below creates both a CRL and an OCSP response that report the leaf as revoked.</p><details><summary>Generate a certificate and evaluate CRL and OCSP evidence</summary><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createCertificate, createSelfSignedCertificate, generateKeyPair, parseCertificatePem, unwrap, } from &#39;micro509&#39;;
+import { checkCertificateRevocation, createCertificateRevocationList, createOcspResponse, revocationReasonFromCode, } from &#39;micro509/revocation&#39;;
+const ca = await createSelfSignedCertificate({
+    subject: { commonName: &#39;Demo CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+    issuer: { commonName: &#39;Demo CA&#39; },
+    subject: { commonName: &#39;app.example.com&#39; },
+    publicKey: leafKeys.publicKey,
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+});
+// Leaf serial as bytes for the CRL entry
+const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
+const serialHex = parsedLeaf.serialNumberHex;
+const leafSerial = Uint8Array.from(serialHex.match(/.{2}/g) ?? [], (byte) =&gt; parseInt(byte, 16));
+// CRL evidence that revokes the leaf
+const crl = await createCertificateRevocationList({
+    issuer: { commonName: &#39;Demo CA&#39; },
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+    crlNumber: 1,
+    nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    revokedCertificates: [
+        {
+            serialNumber: leafSerial,
+            revocationDate: new Date(),
+            reasonCode: &#39;keyCompromise&#39;,
+        },
+    ],
+});
+// OCSP evidence that also reports revoked
+const ocsp = await createOcspResponse({
+    signerPrivateKey: ca.keyPair.privateKey,
+    signerCertificate: ca.certificate.pem,
+    responses: [
+        {
+            certificate: leaf.pem,
+            issuerCertificate: ca.certificate.pem,
+            certStatus: &#39;revoked&#39;,
+            revokedAt: new Date(),
+            revocationReasonCode: 1,
+        },
+    ],
+});
+const result = await checkCertificateRevocation({
+    certificate: leaf.pem,
+    issuerCertificate: ca.certificate.pem,
+    evidence: [
+        { kind: &#39;crl&#39;, crl: crl.pem },
+        { kind: &#39;ocsp&#39;, response: ocsp.der },
+    ],
+});
+// Evidence failures are represented by an indeterminate status.
+const status = unwrap(result);
+if (status.status === &#39;revoked&#39;) {
+    // CRL evidence reports a RevocationReason name,
+    // OCSP a raw CRLReason integer;
+    // revocationReasonFromCode() maps the integer to
+    // the same name so either path yields one answer
+    const reason = status.revocationReason ??
+        revocationReasonFromCode(status.revocationReasonCode);
+    console.log(`\
+status:     revoked
+serial:     ${serialHex}
+revoked at: ${status.revokedAt?.toISOString()}
+reason:     ${reason}`);
+}
+else {
+    console.log(&#39;status:&#39;, status.status);
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  parseCertificatePem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  unwrap,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  checkCertificateRevocation,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificateRevocationList,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createOcspResponse,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  revocationReasonFromCode,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509/revocation&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ca</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leafKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;app.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: leafKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Leaf serial as bytes for the CRL entry</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> parsedLeaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">parseCertificatePem</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(leaf.pem));</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> serialHex</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> parsedLeaf.serialNumberHex;</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leafSerial</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> Uint8Array.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">from</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(serialHex.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">match</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">/</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">.</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">{2}</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">/</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">g</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">) </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">??</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> [], (</span><span style="--shiki-light:#c13617;--shiki-dark:#FFAB70;">byte</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">) </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">=&gt;</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">  parseInt</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(byte, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// CRL evidence that revokes the leaf</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> crl</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificateRevocationList</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  crlNumber: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  nextUpdate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(Date.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">now</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">() </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 7</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 24</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 1000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  revokedCertificates: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      serialNumber: leafSerial,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      revocationDate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      reasonCode: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCompromise&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// OCSP evidence that also reports revoked</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ocsp</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createOcspResponse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  responses: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certificate: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certStatus: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;revoked&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      revokedAt: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      revocationReasonCode: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> checkCertificateRevocation</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  certificate: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  evidence: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    { kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;crl&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, crl: crl.pem },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    { kind: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;ocsp&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, response: ocsp.der },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">// Evidence failures are represented by an indeterminate status.</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> status</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> unwrap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(result);</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (status.status </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">===</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;revoked&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">) {</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // CRL evidence reports a RevocationReason name,</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // OCSP a raw CRLReason integer;</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // revocationReasonFromCode() maps the integer to</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">  // the same name so either path yields one answer</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> reason</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    status.revocationReason </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">??</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">    revocationReasonFromCode</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(status.revocationReasonCode);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">status:     revoked</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">serial:     ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">serialHex</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">revoked at: ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">status</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">revokedAt</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">?.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">toISOString</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">()</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">reason:     ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">reason</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;status:&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, status.status);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div></details><h2 id="chain-level-revocation" tabindex="-1">Chain-level revocation <a class="header-anchor" href="#chain-level-revocation" aria-label="Permalink to “Chain-level revocation”">​</a></h2><p><code>checkChainRevocation()</code> evaluates CRL <strong>and</strong> OCSP evidence for every certificate in a validated chain (the trust anchor is never checked). Each OCSP response is fully validated — signature, responder binding and authorization, freshness — before its verdict is trusted, and a validated <code>revoked</code> verdict from either evidence kind always wins, regardless of <code>policy.prefer</code>.</p><p>When both sources yield a validated <code>good</code> verdict, <code>policy.prefer</code> decides which one is reported: the default <code>&#39;best-available&#39;</code> picks the source with the fresher evidence (later <code>thisUpdate</code>, ties favoring OCSP), while <code>&#39;ocsp&#39;</code> and <code>&#39;crl&#39;</code> pin the reported source unconditionally. The winning evidence&#39;s timestamp is reported as <code>source.thisUpdate</code> on each certificate&#39;s status, so callers can enforce their own maximum evidence age.</p><p>The same inputs are available on <code>verifyCertificateChain()</code> via the <code>revocation</code> option:</p><div class="live-code" data-v-438d19ac><!--[--><div data-js="import { createCertificate, createOcspResponse, createSelfSignedCertificate, generateKeyPair, verifyCertificateChain, } from &#39;micro509&#39;;
+const ca = await createSelfSignedCertificate({
+    subject: { commonName: &#39;Demo CA&#39; },
+    extensions: {
+        basicConstraints: { ca: true },
+        keyUsage: [&#39;keyCertSign&#39;, &#39;cRLSign&#39;],
+    },
+});
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+    issuer: { commonName: &#39;Demo CA&#39; },
+    subject: { commonName: &#39;app.example.com&#39; },
+    publicKey: leafKeys.publicKey,
+    signerPrivateKey: ca.keyPair.privateKey,
+    issuerCertificate: ca.certificate.pem,
+});
+const ocsp = await createOcspResponse({
+    signerPrivateKey: ca.keyPair.privateKey,
+    signerCertificate: ca.certificate.pem,
+    responses: [
+        {
+            certificate: leaf.pem,
+            issuerCertificate: ca.certificate.pem,
+            certStatus: &#39;good&#39;,
+            thisUpdate: new Date(Date.now() - 60_000),
+            nextUpdate: new Date(Date.now() + 3_600_000),
+        },
+    ],
+});
+const result = await verifyCertificateChain({
+    leaf: leaf.pem,
+    roots: [ca.certificate.pem],
+    revocation: {
+        // hard-fail is the default: indeterminate status ⇒ verification fails
+        ocspResponses: [ocsp.der],
+    },
+});
+if (result.ok) {
+    const parsedLeaf = result.value.leaf;
+    console.log(`\
+verified: true
+leaf:     ${parsedLeaf.subject.values.commonName}
+serial:   ${parsedLeaf.serialNumberHex}
+chain:    ${result.value.chain.length} certificates`);
+}
+else {
+    console.log(`verified: false (${result.error.code})`);
+}
+"><div class="language-ts"><button title="Copy code" data-copied="Copied" class="copy"></button><span class="lang">ts</span><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr"><code><span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">import</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createOcspResponse,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  createSelfSignedCertificate,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  generateKeyPair,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  verifyCertificateChain,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &#39;micro509&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ca</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createSelfSignedCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  extensions: {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    basicConstraints: { ca: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    keyUsage: [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;keyCertSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;cRLSign&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leafKeys</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> generateKeyPair</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">();</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> leaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createCertificate</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuer: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;Demo CA&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  subject: { commonName: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;app.example.com&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  publicKey: leafKeys.publicKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ocsp</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> createOcspResponse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerPrivateKey: ca.keyPair.privateKey,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  signerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  responses: [</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certificate: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      issuerCertificate: ca.certificate.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      certStatus: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&#39;good&#39;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      thisUpdate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(Date.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">now</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">() </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 60_000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">      nextUpdate: </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">new</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> Date</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(Date.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">now</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">() </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> 3_600_000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">),</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  ],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> result</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> await</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;"> verifyCertificateChain</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">({</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  leaf: leaf.pem,</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  roots: [ca.certificate.pem],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  revocation: {</span></span>
+<span class="line"><span style="--shiki-light:#62687b;--shiki-dark:#818e99;">    // hard-fail is the default: indeterminate status ⇒ verification fails</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    ocspResponses: [ocsp.der],</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  },</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">});</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> (result.ok) {</span></span>
+<span class="line"><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">  const</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> parsedLeaf</span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> result.value.leaf;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">\</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">verified: true</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">leaf:     ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">parsedLeaf</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">subject</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">values</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">commonName</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">serial:   ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">parsedLeaf</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">serialNumberHex</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">}</span></span>
+<span class="line"><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">chain:    ${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">value</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">chain</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">length</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">} certificates`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">} </span><span style="--shiki-light:#c62739;--shiki-dark:#F97583;">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">  console.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0;">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">`verified: false (${</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">result</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">.</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">})`</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">}</span></span></code></pre></div></div><!--]--><div class="live-code-bar" data-v-438d19ac><button class="live-code-btn" data-v-438d19ac>▶ Run</button></div><!----></div></div></div></main><footer class="VPDocFooter" data-v-8ba3d45b data-v-7b49853b><!--[--><!--]--><div class="edit-info" data-v-7b49853b><!----><div class="last-updated" data-v-7b49853b><p class="VPLastUpdated" data-v-7b49853b data-v-ec392945>Last updated: <time datetime="2026-10-24T14:33:48.000Z" data-v-ec392945></time></p></div></div><nav class="prev-next" aria-labelledby="doc-footer-aria-label" data-v-7b49853b><span class="visually-hidden" id="doc-footer-aria-label" data-v-7b49853b>Pager</span><div class="pager" data-v-7b49853b><a class="VPLink link pager-link prev" href="/v0.16.0/guide/keys" data-v-7b49853b><!--[--><span class="desc" data-v-7b49853b>Previous page</span><span class="title" data-v-7b49853b>Keys</span><!--]--></a></div><div class="pager" data-v-7b49853b><a class="VPLink link pager-link next" href="/v0.16.0/guide/pkcs" data-v-7b49853b><!--[--><span class="desc" data-v-7b49853b>Next page</span><span class="title" data-v-7b49853b>PKCS</span><!--]--></a></div></nav></footer><!--[--><!--]--></div></div></div><!--[--><!--]--></div></div><footer class="VPFooter has-sidebar" data-v-7e38a135 data-v-dd9e2ea5><div class="container" data-v-dd9e2ea5><p class="message" data-v-dd9e2ea5>Released under the MIT License.</p><p class="copyright" data-v-dd9e2ea5>Copyright © 2026-present Kaj Kowalski</p></div></footer><!--[--><!--]--></div></div>
+    
+    
+  </body>
+</html>
